@@ -12,7 +12,6 @@ dependencies = [
 ]
 
 [project.scripts]
-new_run_dir = "prosapia.new_run_dir:main"
 sapia = "prosapia.cli:main"
 
 [build-system]
@@ -28,4 +27,5 @@ select = ["E4", "E7", "E9", "F"]
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "ruff>=0.16.4",
 ]

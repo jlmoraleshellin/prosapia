@@ -9,22 +9,17 @@ everything downstream.
 
 The created path is printed to stdout (and only that), so it can be captured:
 
-    RUN_DIR=$(new_run_dir --label grow_hairpin)
+    RUN_DIR=$(sapia new_run --label grow_hairpin)
 
 Usage:
-    new_run_dir
-    new_run_dir --label grow_hairpin
-    new_run_dir --label grow_hairpin --base runs
+    sapia new_run
+    sapia new_run --label grow_hairpin
+    sapia new_run --label grow_hairpin --base runs
 """
 
 import argparse
 from datetime import datetime
 from pathlib import Path
-
-
-class Args(argparse.Namespace):
-    label: str
-    base: str
 
 
 def new_run_dir(base: str = "outputs", label: str = "") -> Path:
@@ -33,18 +28,12 @@ def new_run_dir(base: str = "outputs", label: str = "") -> Path:
     name = f"{timestamp}_{label}" if label else timestamp
     run_dir = Path(base) / name
     run_dir.mkdir(parents=True, exist_ok=True)
-
-    # Convenience pointer to the most recent run dir (read by nobody; handy for
-    # eyeballing / shell aliases).
-    (Path(base) / ".last_run").write_text(str(run_dir))
-
     return run_dir
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Create a fresh run_dir for a pipeline workflow.",
-    )
+def build_new_run_parser() -> argparse.ArgumentParser:
+    """Parent parser for the ``new_run`` verb (``--label`` / ``--base``)."""
+    parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument(
         "--label",
         type=str,
@@ -57,11 +46,22 @@ def main() -> None:
         default="outputs",
         help="Parent directory for the timestamped run directory. Defaults to 'outputs'.",
     )
-    args = parser.parse_args(namespace=Args())
+    return parser
 
+
+def new_run_from_args(args: argparse.Namespace) -> None:
+    """Dispatch for ``sapia new_run``: create the dir and print its path."""
     run_dir = new_run_dir(base=args.base, label=args.label)
     # Sole stdout line: the path, so it can be captured by command substitution.
     print(run_dir)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Create a fresh run_dir for a pipeline workflow.",
+        parents=[build_new_run_parser()],
+    )
+    new_run_from_args(parser.parse_args())
 
 
 if __name__ == "__main__":

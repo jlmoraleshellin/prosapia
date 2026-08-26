@@ -7,7 +7,7 @@ completes verbs, tool names, and each tool's own flags. No ``sys.argv`` rewritin
 each tool subparser reuses the tool's ``build_run_parser`` / ``build_collect_parser``
 as a parent and dispatches to ``run_from_args`` / ``collect_from_args``.
 
-Enable shell completion with:  ``eval "$(register-python-argcomplete sapia)"``
+Enable shell completion once with:  ``sapia init``
 """
 
 import os
@@ -16,12 +16,15 @@ from pathlib import Path
 
 import argcomplete
 
+from .completion import build_init_parser, init_from_args
 from .core.base_collect import build_collect_parser, collect_from_args
 from .core.base_sbatch import build_run_parser, run_from_args
 from .core.tool import Tool
 from .core.tool_registry import discover
+from .new_run_dir import build_new_run_parser, new_run_from_args
 
 _BUILTIN_TOOLS_DIR = Path(__file__).parent / "tools"
+
 
 def _tools_dirs() -> list[Path]:
     """Built-in tools first, then user dirs from $PROSAPIA_TOOLS_DIR
@@ -31,13 +34,28 @@ def _tools_dirs() -> list[Path]:
         dirs += [Path(p) for p in env.split(os.pathsep) if p]
     return dirs
 
+
 def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
     top = ArgumentParser(prog="sapia", description="Protein-design pipeline CLI.")
     verbs = top.add_subparsers(dest="verb", required=True)
 
-    run_tools = verbs.add_parser("run", help="Submit a tool's SLURM array.").add_subparsers(
-        dest="tool", required=True
+    new_run_p = verbs.add_parser(
+        "new_run",
+        parents=[build_new_run_parser()],
+        help="Create a fresh run_dir for a workflow.",
     )
+    new_run_p.set_defaults(_dispatch=new_run_from_args)
+
+    init_p = verbs.add_parser(
+        "init",
+        parents=[build_init_parser()],
+        help="Set up shell tab-completion for sapia.",
+    )
+    init_p.set_defaults(_dispatch=init_from_args)
+
+    run_tools = verbs.add_parser(
+        "run", help="Submit a tool's SLURM array."
+    ).add_subparsers(dest="tool", required=True)
     collect_tools = verbs.add_parser(
         "collect", help="Collect a tool's outputs into its database."
     ).add_subparsers(dest="tool", required=True)
