@@ -1,0 +1,16 @@
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+
+# output files
+/outputs
+
+# Data files, not necessary to commit
+/data
+
+.vscode
+
+/__pycache__/*
+*.pyc
+.env
+.claude

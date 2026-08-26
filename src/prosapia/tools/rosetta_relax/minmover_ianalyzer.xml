@@ -1,0 +1,62 @@
+<ROSETTASCRIPTS>
+    <SCOREFXNS>
+        <ScoreFunction name="sfxn_cen" weights="score3" symmetric="1"/>
+        <ScoreFunction name="sfxn" weights="ref2015" symmetric="1"/>
+    </SCOREFXNS>
+
+    <RESIDUE_SELECTORS>
+        <Index name="TMD" resnums="%%tmd_range%%"/>
+        <Not name="not_TMD" selector="TMD"/>
+    </RESIDUE_SELECTORS>
+
+    <MOVE_MAP_FACTORIES>
+        <MoveMapFactory name="mm_free_nonTMD" bb="false" chi="false">
+            <Backbone residue_selector="not_TMD" enable="true"/>
+        </MoveMapFactory>
+    </MOVE_MAP_FACTORIES>
+
+    <MOVERS>
+        <SetupForSymmetry name="setup_symm"
+                          definition="%%symmfile%%"/>
+
+        <SwitchResidueTypeSetMover name="to_centroid" set="centroid"/>
+        <SwitchResidueTypeSetMover name="to_fullatom" set="fa_standard"/>
+
+        <AddConstraintsToCurrentConformationMover
+            name="add_coord_cst"
+            use_distance_cst="0"
+            coord_dev="0.5"
+            CA_only="1"
+            residue_selector="TMD"/>
+
+        <MinMover name="min_cen"
+                  scorefxn="sfxn_cen"
+                  movemap_factory="mm_free_nonTMD"
+                  type="lbfgs_armijo_nonmonotone"
+                  tolerance="0.01"
+                  max_iter="500"/>
+
+        <ClearConstraintsMover name="clear_cst"/>
+
+        <InterfaceAnalyzerMover name="analyze"
+                                scorefxn="sfxn"
+                                pack_separated="0"
+                                pack_input="0"
+                                packstat="0"
+                                interface_sc="0"
+                                tracer="0"
+                                interface="A_B"/>
+    </MOVERS>
+
+    <PROTOCOLS>
+        <Add mover="setup_symm"/>
+        <Add mover="to_centroid"/>
+        <Add mover="add_coord_cst"/>
+        <Add mover="min_cen"/>
+        <Add mover="clear_cst"/>
+        <Add mover="to_fullatom"/>
+        <Add mover="analyze"/>
+    </PROTOCOLS>
+
+    <OUTPUT scorefxn="sfxn"/>
+</ROSETTASCRIPTS>

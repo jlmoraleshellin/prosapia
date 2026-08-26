@@ -1,0 +1,26 @@
+<ROSETTASCRIPTS>
+    <SCOREFXNS>
+        <ScoreFunction name="sfxn" weights="ref2015" symmetric="1"/>
+    </SCOREFXNS>
+
+    <MOVERS>
+        <SetupForSymmetry name="setup_symm"
+                          definition="%%symmfile%%"/>
+
+        <InterfaceAnalyzerMover name="analyze"
+                                scorefxn="sfxn"
+                                pack_separated="0"
+                                pack_input="0"
+                                packstat="0"
+                                interface_sc="0"
+                                tracer="0"
+                                interface="A_B"/>
+    </MOVERS>
+
+    <PROTOCOLS>
+        <Add mover="setup_symm"/>
+        <Add mover="analyze"/>
+    </PROTOCOLS>
+
+    <OUTPUT scorefxn="sfxn"/>
+</ROSETTASCRIPTS>

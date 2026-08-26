@@ -1,0 +1,52 @@
+<ROSETTASCRIPTS>
+    <SCOREFXNS>
+        <ScoreFunction name="sfxn" weights="ref2015" symmetric="1"/>
+        <ScoreFunction name="sfxn_cst" weights="ref2015" symmetric="1">
+            <Reweight scoretype="coordinate_constraint" weight="1.0"/>
+        </ScoreFunction>
+    </SCOREFXNS>
+
+    <TASKOPERATIONS>
+        <RestrictToRepacking name="no_design"/>
+        <IncludeCurrent name="incl_curr"/>
+    </TASKOPERATIONS>
+
+    <MOVERS>
+        <SetupForSymmetry name="setup_symm"
+                          definition="%%symmfile%%"/>
+
+        <AddConstraintsToCurrentConformationMover
+            name="add_coord_cst"
+            use_distance_cst="0"
+            coord_dev="1.0"
+            CA_only="1"/>
+
+        <SymPackRotamersMover name="pack" scorefxn="sfxn"
+                              task_operations="no_design,incl_curr"/>
+
+        <FastRelax name="relax" scorefxn="sfxn_cst"
+                   task_operations="no_design,incl_curr"/>
+
+        <ClearConstraintsMover name="clear_cst"/>
+
+        <InterfaceAnalyzerMover name="analyze"
+                                scorefxn="sfxn"
+                                pack_separated="0"
+                                pack_input="0"
+                                packstat="1"
+                                interface_sc="1"
+                                tracer="0"
+                                interface="A_B"/>
+    </MOVERS>
+
+    <PROTOCOLS>
+        <Add mover="setup_symm"/>
+        <Add mover="add_coord_cst"/>
+        <Add mover="pack"/>
+        <Add mover="relax"/>
+        <Add mover="clear_cst"/>
+        <Add mover="analyze"/>
+    </PROTOCOLS>
+
+    <OUTPUT scorefxn="sfxn"/>
+</ROSETTASCRIPTS>
