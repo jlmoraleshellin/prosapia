@@ -52,9 +52,17 @@ def run_usalign(path_a: Path, path_b: Path, sup_prefix: Path) -> dict[str, float
     sup_prefix.parent.mkdir(parents=True, exist_ok=True)
     result = subprocess.run(
         [
-            USALIGN_BIN, str(path_a), str(path_b),
-            "-mm", "1", "-ter", "0", "-outfmt", "2",
-            "-o", str(sup_prefix),
+            USALIGN_BIN,
+            str(path_a),
+            str(path_b),
+            "-mm",
+            "1",
+            "-ter",
+            "0",
+            "-outfmt",
+            "2",
+            "-o",
+            str(sup_prefix),
         ],
         capture_output=True,
         text=True,
@@ -153,8 +161,10 @@ def main():
                 raise RuntimeError(f"Column {col!r} not found in {db_name!r}.")
 
         ready = df[
-            df[col_a].notna() & (df[col_a] != "")
-            & df[col_b].notna() & (df[col_b] != "")
+            df[col_a].notna()
+            & (df[col_a] != "")
+            & df[col_b].notna()
+            & (df[col_b] != "")
         ]
 
         print(f"Comparing {len(ready)} designs ({col_a} vs {col_b})")

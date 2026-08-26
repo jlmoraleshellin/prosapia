@@ -55,7 +55,9 @@ def test_sequence_collision_guard(tmp_path):
 def _build_chain(tmp_path):
     dm = DataManager(tmp_path)
     dm.rm.register_database(DATABASE0)
-    df0 = dm.update(dm.read_frame("db0_worms"), "S0", {"n_subunits": 11, "sequence": "AAA"})
+    df0 = dm.update(
+        dm.read_frame("db0_worms"), "S0", {"n_subunits": 11, "sequence": "AAA"}
+    )
     dm.write_frame("db0_worms", df0)
     dm.rm.register_database(DATABASE1)
     df1 = dm.update(
@@ -110,7 +112,9 @@ def test_derive_child_optional_label(tmp_path):
     dm = DataManager(tmp_path)
     root = dm.rm.derive_new_db(None, "")
     assert (root.db_name, root.gen, root.db_label) == ("db0", 0, "")
-    dm.rm.register_database(Database(db_name="db0", gen=0, db_label="", tool_name="worms"))
+    dm.rm.register_database(
+        Database(db_name="db0", gen=0, db_label="", tool_name="worms")
+    )
     child = dm.rm.derive_new_db("db0", "")
     assert (child.db_name, child.gen, child.db_label) == ("db1", 1, "")
     # A label on an unlabelled parent starts the breadcrumb cleanly (no leading _).

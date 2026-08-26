@@ -100,7 +100,9 @@ def _rotation_to_z(axis: np.ndarray) -> np.ndarray:
     return np.eye(3) + vx + vx @ vx * ((1.0 - c) / (s * s))
 
 
-def align_pdb(pdb_in: Path, pdb_out: Path, axis: np.ndarray, origin: np.ndarray) -> None:
+def align_pdb(
+    pdb_in: Path, pdb_out: Path, axis: np.ndarray, origin: np.ndarray
+) -> None:
     """Write ``pdb_in`` to ``pdb_out`` rigidly moved so ``axis`` -> +Z, ``origin`` -> 0.
 
     The transform is ``x -> R * (x - origin)`` with ``R`` mapping the axis onto Z,
@@ -120,7 +122,9 @@ def align_pdb(pdb_in: Path, pdb_out: Path, axis: np.ndarray, origin: np.ndarray)
     structure.write_pdb(str(pdb_out))
 
 
-def _write_result(result_tsv: Path, name: str, status: str, aligned_path: str, max_dev: str) -> None:
+def _write_result(
+    result_tsv: Path, name: str, status: str, aligned_path: str, max_dev: str
+) -> None:
     result_tsv.parent.mkdir(parents=True, exist_ok=True)
     with open(result_tsv, "w", newline="") as f:
         writer = csv.writer(f, delimiter="\t")
@@ -141,10 +145,16 @@ def main() -> None:
         description="Align one symmetric assembly onto RFdiffusion's +Z symmetry axis."
     )
     ap.add_argument("--name", required=True)
-    ap.add_argument("--symm-pdb", type=Path, required=True, help="Symmetric assembly PDB to align.")
-    ap.add_argument("--symm-def", type=Path, required=True, help="Rosetta .symm file (axis source).")
+    ap.add_argument(
+        "--symm-pdb", type=Path, required=True, help="Symmetric assembly PDB to align."
+    )
+    ap.add_argument(
+        "--symm-def", type=Path, required=True, help="Rosetta .symm file (axis source)."
+    )
     ap.add_argument("--out-pdb", type=Path, required=True, help="Aligned PDB to write.")
-    ap.add_argument("--result-tsv", type=Path, required=True, help="Per-design result TSV to write.")
+    ap.add_argument(
+        "--result-tsv", type=Path, required=True, help="Per-design result TSV to write."
+    )
     args = ap.parse_args(namespace=Args())
 
     try:
@@ -159,7 +169,9 @@ def main() -> None:
             f"{args.name}: aligned ({n_frames} VRT frames, axis agreement "
             f"max dev {max_dev:.4f} deg) -> {args.out_pdb}"
         )
-        _write_result(args.result_tsv, args.name, "OK", str(args.out_pdb), f"{max_dev:.6f}")
+        _write_result(
+            args.result_tsv, args.name, "OK", str(args.out_pdb), f"{max_dev:.6f}"
+        )
     except Exception as e:
         print(f"{args.name}: ERROR {e}")
         _write_result(args.result_tsv, args.name, f"error: {e}", "", "")

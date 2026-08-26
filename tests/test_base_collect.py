@@ -52,7 +52,9 @@ def test_collect_update_in_place(tmp_path, monkeypatch):
     def collect_fn(ctx: CollectCtx):
         assert ctx.parent_db is None  # not registered -> no parent edge
         assert ctx.parent_df.empty
-        return {name: {"alphafold3_status": "OK", "score": 1.5} for name in ctx.df.index}
+        return {
+            name: {"alphafold3_status": "OK", "score": 1.5} for name in ctx.df.index
+        }
 
     monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-d", "db0"])
     collect(metadata=UPDATE, collect_fn=collect_fn)
@@ -141,7 +143,9 @@ def test_collect_update_warns_on_new_row(tmp_path, monkeypatch, capsys):
 
     assert "WARNING" in capsys.readouterr().out
     # the row is still written (warn, not fail)
-    assert DataManager(tmp_path).read_frame("db0").at["rNEW", "alphafold3_status"] == "OK"
+    assert (
+        DataManager(tmp_path).read_frame("db0").at["rNEW", "alphafold3_status"] == "OK"
+    )
 
 
 def test_collect_requires_output_dir(tmp_path, monkeypatch):

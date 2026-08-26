@@ -52,17 +52,16 @@ def test_template_resolves_only_braced_islands():
     # RFdiffusion contig: braces carve expressions out of native syntax; the
     # chain letters, '/', '-' outside braces are left verbatim.
     assert (
-        resolve_template("[20/A1-{prebundle_length}/0]", _lookup, "d")
-        == "[20/A1-12/0]"
+        resolve_template("[20/A1-{prebundle_length}/0]", _lookup, "d") == "[20/A1-12/0]"
     )
     # ProteinMPNN position list: same mechanism, different surrounding grammar.
-    assert (
-        resolve_template("24:{hairpin_length - 1}/10", _lookup, "d") == "24:29/10"
-    )
+    assert resolve_template("24:{hairpin_length - 1}/10", _lookup, "d") == "24:29/10"
 
 
 def test_template_without_braces_is_passthrough():
-    assert resolve_template("9:23/10,11,18:20,22", _lookup, "d") == "9:23/10,11,18:20,22"
+    assert (
+        resolve_template("9:23/10,11,18:20,22", _lookup, "d") == "9:23/10,11,18:20,22"
+    )
 
 
 def test_template_bad_island_raises():

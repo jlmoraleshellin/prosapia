@@ -23,7 +23,9 @@ def test_resolve_dir_name_update(tmp_path):
     d = tmp_path / "db2_worms" / "alphafold3"
     d.mkdir(parents=True)
     db = Database(db_name="db2_worms", tool_name="worms")  # creator != running tool
-    assert resolve_dir_name(_args(tmp_path), db, ToolMetadata("alphafold3", "update")) == d
+    assert (
+        resolve_dir_name(_args(tmp_path), db, ToolMetadata("alphafold3", "update")) == d
+    )
 
 
 def test_resolve_dir_name_with_label(tmp_path):
@@ -53,5 +55,7 @@ def test_resolve_dir_name_must_exist_false(tmp_path):
     # The run script computes the path before creating it -> no existence guard.
     db = Database(db_name="db2_worms")
     expected = tmp_path / "db2_worms" / "alphafold3"
-    got = resolve_dir_name(_args(tmp_path), db, ToolMetadata("alphafold3", "update"), must_exist=False)
+    got = resolve_dir_name(
+        _args(tmp_path), db, ToolMetadata("alphafold3", "update"), must_exist=False
+    )
     assert got == expected

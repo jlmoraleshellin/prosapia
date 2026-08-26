@@ -40,7 +40,9 @@ def resolve_dir_name(
     ``must_exist`` raises ``FileNotFoundError`` when the dir is absent.
     """
     src_dir = (
-        args.run_dir / database.db_name / build_tool_leaf(tool_metadata.name, args.dir_label)
+        args.run_dir
+        / database.db_name
+        / build_tool_leaf(tool_metadata.name, args.dir_label)
     )
     if must_exist and not src_dir.is_dir():
         raise FileNotFoundError(f"Output dir not found: {src_dir}")
