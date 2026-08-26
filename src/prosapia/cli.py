@@ -27,7 +27,7 @@ def _tools_dirs() -> list[Path]:
     """Built-in tools first, then user dirs from $PROSAPIA_TOOLS_DIR
     (os.pathsep-separated). Later dirs win, so user tools shadow built-ins."""
     dirs = [_BUILTIN_TOOLS_DIR]
-    if env := os.environ.get("PROSAPIA_TOOLS_DIR"):
+    if env := os.environ.get("PROSAPIA_TOOLS_DIR", "tools"):
         dirs += [Path(p) for p in env.split(os.pathsep) if p]
     return dirs
 
