@@ -1,13 +1,13 @@
 # PYTHON_ARGCOMPLETE_OK
-"""The ``ppl`` console-script dispatcher.
+"""The ``sapia`` console-script dispatcher.
 
 Builds ONE argparse tree spanning every discovered tool
-(``ppl {run,collect} <tool> [tool args...]``) so a single ``argcomplete`` call
+(``sapia {run,collect} <tool> [tool args...]``) so a single ``argcomplete`` call
 completes verbs, tool names, and each tool's own flags. No ``sys.argv`` rewriting:
 each tool subparser reuses the tool's ``build_run_parser`` / ``build_collect_parser``
 as a parent and dispatches to ``run_from_args`` / ``collect_from_args``.
 
-Enable shell completion with:  ``eval "$(register-python-argcomplete ppl)"``
+Enable shell completion with:  ``eval "$(register-python-argcomplete sapia)"``
 """
 
 import os
@@ -32,7 +32,7 @@ def _tools_dirs() -> list[Path]:
     return dirs
 
 def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
-    top = ArgumentParser(prog="ppl", description="Protein-design pipeline CLI.")
+    top = ArgumentParser(prog="sapia", description="Protein-design pipeline CLI.")
     verbs = top.add_subparsers(dest="verb", required=True)
 
     run_tools = verbs.add_parser("run", help="Submit a tool's SLURM array.").add_subparsers(
