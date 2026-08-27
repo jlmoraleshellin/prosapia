@@ -7,7 +7,7 @@ Each array task runs Rosetta's make_symmdef_file.pl on one input PDB (read from
 merge the results (symm status + path) back into the database.
 
 Usage:
-    python run_make_symmdef_sbatch.py outputs/20260416_155345_grow_hairpin \
+    sapia run make_symmdef outputs/20260416_155345_grow_hairpin \
         --database db1_..._assembled \
         --input-column assembled_path
 """

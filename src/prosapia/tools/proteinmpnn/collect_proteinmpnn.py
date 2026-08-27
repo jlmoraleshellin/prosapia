@@ -15,8 +15,8 @@ Lineage is derived from the directory structure:
     symlinks each input as ``<design_name>.pdb``, so the stem IS the immediate
     parent-db row -- stamped as ``parent_name``.
 
-Each row carries only ``parent_name``; ancestor values (worms parent, diffused
-parent, boltz metrics) are resolved on demand by walking the lineage with
+Each row carries only ``parent_name``; ancestor values (diffused parent,
+boltz metrics) are resolved on demand by walking the lineage with
 ``DataManager.lookup`` / ``trace_lineage``, so nothing is propagated here.
 
 The db was reserved by the run script (``run_proteinmpnn_sbatch.py --db-label``),
@@ -25,11 +25,11 @@ to resolve lineage) comes from the registry, so there is no ``--parent-db`` flag
 
 Usage:
     # Round 1 (after diffusion -> mpnn); db reserved as e.g. db1_<label>_mpnn_seqs:
-    python collect_proteinmpnn2.py outputs/20260430_170523_grow_hairpin_nofilter \\
+    sapia collect mpnn_seqs outputs/20260430_170523_grow_hairpin_nofilter \\
         --database db1_<label>_mpnn_seqs
 
     # Round 2 (after boltz -> mpnn):
-    python collect_proteinmpnn2.py outputs/20260430_170523_grow_hairpin_nofilter \\
+    sapia collect mpnn_seqs outputs/20260430_170523_grow_hairpin_nofilter \\
         --database db2_<label>_mpnn_seqs_r2
 """
 

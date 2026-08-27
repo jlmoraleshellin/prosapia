@@ -4,25 +4,25 @@ Submit a SLURM array to compare two predicted structures per design using USalig
 
 Both structures are converted to PDB (via gemmi) here at manifest-build time and
 cached under <run_dir>/.cif_to_pdb/; each array task then just runs USalign and
-writes per-design metrics to a TSV file. Use collect_usalign.py to merge results
-back into the database.
+writes per-design metrics to a TSV file. Use ``sapia collect USalign`` to merge
+results back into the database.
 
 --col-b is resolved per design by lineage (the row's own value if set, else the
 nearest ancestor db's value), so a child db's structure can be compared against
 its parent's (e.g. boltz_path vs the parent's diffused_path).
 
 Usage:
-    python run_usalign_sbatch.py outputs/20260420_123035_grow_hairpin \
-        --database-name mpnn_seqs_db \
+    sapia run USalign outputs/20260420_123035_grow_hairpin \
+        --database mpnn_seqs_db \
         --col-a boltz_path --col-b openfold3_path
 
     # Compare each child's boltz_path against its parent's diffused_path:
-    python run_usalign_sbatch.py outputs/20260420_123035_grow_hairpin \
+    sapia run USalign outputs/20260420_123035_grow_hairpin \
         --database db2_child \
         --col-a boltz_path --col-b diffused_path
 
-    python run_usalign_sbatch.py outputs/20260420_123035_grow_hairpin \
-        --database-name mpnn_seqs_db \
+    sapia run USalign outputs/20260420_123035_grow_hairpin \
+        --database mpnn_seqs_db \
         --col-a boltz_path --col-b openfold3_path \
         --output-prefix boltz_vs_openfold3
 """

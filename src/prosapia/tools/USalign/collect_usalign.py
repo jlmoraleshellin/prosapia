@@ -6,11 +6,11 @@ Scans <run_dir>/USalign/<prefix>_results/ for per-design TSV files written
 by usalign.sbatch, and merges the metrics back into the specified database.
 
 Usage:
-    python collect_usalign.py outputs/RUN \
+    sapia collect USalign outputs/RUN \
         --database db1_..._mpnn_seqs \
         --col-a boltz_path --col-b openfold3_path
 
-    python collect_usalign.py outputs/RUN \
+    sapia collect USalign outputs/RUN \
         --database db1_..._mpnn_seqs \
         --output-prefix boltz_vs_openfold3
 """

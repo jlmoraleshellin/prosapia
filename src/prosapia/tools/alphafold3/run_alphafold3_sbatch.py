@@ -6,12 +6,12 @@ Creates individual AF3 JSON input files, groups them into shard directories,
 and submits a sbatch array where each task runs AF3 on a whole shard
 (via --input_dir inside a singularity container).
 
-Requires ``n_subunits`` column in the input database.  Run
-``collect_worms_metadata.py`` first to propagate it from the worms database.
+Requires ``n_subunits`` column available up the input db's lineage
+(resolved via ``DataManager.lookup``).
 
 Usage:
-    python run_alphafold3_batch.py outputs/20260420_123035_grow_hairpin
-    python run_alphafold3_batch.py outputs/20260420_123035_grow_hairpin --shard-size 20
+    sapia run alphafold3 outputs/20260420_123035_grow_hairpin --database db1_..._mpnn_seqs
+    sapia run alphafold3 outputs/20260420_123035_grow_hairpin --database db1_..._mpnn_seqs --shard-size 20
 """
 
 import json

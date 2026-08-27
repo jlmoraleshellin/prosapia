@@ -12,7 +12,7 @@ Run this after the rfdiffusion SLURM array; it (re)builds the diffusion db by
 scanning the outputs, so it is safe to re-run to rebuild a corrupted db.
 
 Usage:
-    python collect_diffusion.py outputs/RUN --database db1
+    sapia collect rfdiffusion outputs/RUN --database db1
 """
 
 import re

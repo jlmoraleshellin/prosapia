@@ -15,7 +15,7 @@ output as ``<name>_<i>`` carrying ``parent_name`` for lineage.
 Safe to re-run: rows are rebuilt from the outputs on disk.
 
 Usage:
-    python collect_rfdiffusion3.py outputs/RUN --database db2_worms
+    sapia collect rfdiffusion3 outputs/RUN --database db2
 """
 
 import json

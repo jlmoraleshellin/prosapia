@@ -3,7 +3,7 @@
 Parse Rosetta score files and append metrics to the run database.
 
 Usage:
-    python collect_relax.py --run-dir outputs/20260416_155345_grow_hairpin
+    sapia collect relaxed outputs/20260416_155345_grow_hairpin --database db1_...
 """
 
 from pathlib import Path

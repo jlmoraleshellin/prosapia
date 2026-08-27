@@ -12,8 +12,8 @@ Supports both per-design results (boltz_results_<row>/) and shard results
 (boltz_results_shard_i/). Writes the metrics + path into the row.
 
 Usage:
-    python collect_boltz.py outputs/RUN --database db1_..._mpnn_seqs
-    python collect_boltz.py outputs/RUN --database db1_..._mpnn_seqs --force
+    sapia collect boltz outputs/RUN --database db1_..._mpnn_seqs
+    sapia collect boltz outputs/RUN --database db1_..._mpnn_seqs --force
 """
 
 import json
@@ -165,8 +165,8 @@ def collect_boltz(ctx: CollectCtx) -> CollectResult:
             n_missing += 1
             continue
 
-        # n_subunits / hairpin_length originate in worms_db and are inherited
-        # down the lineage -> resolve via lookup, not a local column.
+        # n_subunits / hairpin_length are inherited down the lineage
+        # -> resolve via lookup, not a local column.
         hairpin_length = ctx.lookup(design_name, "hairpin_length")
         n_subunits = ctx.lookup(design_name, "n_subunits")
         if plddt_path is not None and pd.notna(hairpin_length) and pd.notna(n_subunits):

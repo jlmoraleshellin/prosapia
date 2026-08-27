@@ -8,16 +8,15 @@ and submits an sbatch array.
 
 ColabFold dumps all outputs flat into a single directory, so each SLURM task
 gets its own ``task_<i>`` output directory.  The companion
-``collect_colabfold.py`` scans these task directories to match results back
+``sapia collect colabfold`` scans these task directories to match results back
 to design names.
 
-Requires ``n_subunits`` and (optionally) ``prebundle_length`` columns in the
-input database. Run ``collect_worms_metadata.py`` first to propagate them
-from the worms database.
+Requires ``n_subunits`` and (optionally) ``prebundle_length`` columns available
+up the input db's lineage (resolved via ``DataManager.lookup``).
 
 Usage:
-    python run_colabfold_batch.py outputs/20260420_123035_grow_hairpin
-    python run_colabfold_batch.py outputs/20260420_123035_grow_hairpin --queries-per-task 20 --devices 4
+    sapia run colabfold outputs/20260420_123035_grow_hairpin --database db1_..._mpnn_seqs
+    sapia run colabfold outputs/20260420_123035_grow_hairpin --database db1_..._mpnn_seqs --queries-per-task 20 --devices 4
 """
 
 from argparse import ArgumentParser

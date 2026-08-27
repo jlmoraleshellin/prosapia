@@ -8,7 +8,7 @@ axis-quality metric back into the database as <prefix>_status / <prefix>_path /
 <prefix>_max_dev_deg columns.
 
 Usage:
-    python collect_align_symm_axis.py outputs/RUN --database db
+    sapia collect align_symm_axis outputs/RUN --database db
 """
 
 import pandas as pd

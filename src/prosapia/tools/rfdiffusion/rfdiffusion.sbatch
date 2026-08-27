@@ -50,7 +50,7 @@ run_one() {
     "${cmd[@]}"
     local rc=$?
 
-    # Plain-text marker read by collect_diffusion.py to confirm the task ran
+    # Plain-text marker read by `sapia collect rfdiffusion` to confirm the task ran
     # (and record the exact command). Written whether or not diffusion succeeded.
     printf '%s\n' "${cmd[*]}" >"$design_dir/command.txt"
 

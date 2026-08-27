@@ -32,11 +32,11 @@ each array task runs its N diffusions concurrently on a single GPU.
 
 Usage:
     # general run, config-driven
-    python run_rfdiffusion_sbatch.py outputs/RUN --database db \\
+    sapia run rfdiffusion outputs/RUN --database db \\
         --contigs '[A1-{prebundle_length}/0]' --config-name base
 
     # reproduce the old partial-symmetric behavior
-    python run_rfdiffusion_sbatch.py outputs/RUN --database db \\
+    sapia run rfdiffusion outputs/RUN --database db \\
         --contigs '[A1-{prebundle_length}/0 B1-{prebundle_length}/0]' \\
         --symmetry auto --partial-T 20 --num-designs 10 \\
         --ckpt "$RFDIFFUSION/models/Complex_base_ckpt.pt"

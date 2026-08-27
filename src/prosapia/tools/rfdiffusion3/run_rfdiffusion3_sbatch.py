@@ -22,8 +22,8 @@ are derived automatically by reading the input PDB (chain-A residue range, polym
 count); the user only supplies the prepend length.
 
 Usage:
-    python run_rfdiffusion3_sbatch.py outputs/RUN -d db1_worms --prepend-length 20
-    python run_rfdiffusion3_sbatch.py outputs/RUN -d db1_worms --symmetry D4 --num-designs 4
+    sapia run rfdiffusion3 outputs/RUN -d db1 --prepend-length 20
+    sapia run rfdiffusion3 outputs/RUN -d db1 --symmetry D4 --num-designs 4
 """
 
 import json

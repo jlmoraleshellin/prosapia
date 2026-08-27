@@ -7,7 +7,7 @@ by make_symmdef.sbatch, and merges the symm status + path back into the
 specified database as <prefix>_status / <prefix>_path columns.
 
 Usage:
-    python collect_make_symmdef.py outputs/RUN \
+    sapia collect make_symmdef outputs/RUN \
         --database db1_..._assembled
 """
 

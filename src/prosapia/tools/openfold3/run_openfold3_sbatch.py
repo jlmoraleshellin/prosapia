@@ -6,13 +6,12 @@ Reads sequences from an MPNN database, trims N-terminal residues based on
 --start-at-column, groups them into JSON query files (one per SLURM task),
 generates a shared runner YAML for device config, and submits an sbatch array.
 
-Requires ``n_subunits`` and (optionally) ``prebundle_length`` columns in the
-input database. Run ``collect_worms_metadata.py`` first to propagate them
-from the worms database.
+Requires ``n_subunits`` and (optionally) ``prebundle_length`` columns available
+up the input db's lineage (resolved via ``DataManager.lookup``).
 
 Usage:
-    python run_openfold3_batch.py outputs/20260420_123035_grow_hairpin
-    python run_openfold3_batch.py outputs/20260420_123035_grow_hairpin --queries-per-task 20 --devices 4
+    sapia run openfold3 outputs/20260420_123035_grow_hairpin --database db1_..._mpnn_seqs
+    sapia run openfold3 outputs/20260420_123035_grow_hairpin --database db1_..._mpnn_seqs --queries-per-task 20 --devices 4
 """
 
 import json

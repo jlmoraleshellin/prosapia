@@ -55,11 +55,11 @@ Other generalized knobs:
 
 Usage:
     # after diffusion, an explicit per-chain design (reproduces upstream example 5)
-    python run_proteinmpnn_sbatch.py outputs/<run> --database diffusion_db --db-label mpnn_seqs \\
+    sapia run mpnn_seqs outputs/<run> --database diffusion_db --db-label mpnn_seqs \\
         --chains-to-design A,C --fixed-positions 9:23/10,11,18:20,22 --tied-positions 1:8/1:8
 
     # after boltz, a homo-oligomer (reproduces upstream example 6), larger tasks
-    python run_proteinmpnn_sbatch.py outputs/<run> --database mpnn_seqs_db --db-label mpnn_seqs_r2 \\
+    sapia run mpnn_seqs outputs/<run> --database mpnn_seqs_db --db-label mpnn_seqs_r2 \\
         --input-column boltz_path --filter filters/filter1_after_boltz.py \\
         --symmetry --designs-per-task 20 --num-seq-per-target 10
 """

@@ -12,7 +12,7 @@ The .symm file is derived by name from the symmetric-PDB column, the same way
 run_relax_sbatch.py does it (<stem without _symm>.symm next to it).
 
 Usage:
-    python run_align_symm_axis_sbatch.py outputs/RUN --database db \
+    sapia run align_symm_axis outputs/RUN --database db \
         --input-column make_symmdef_path
 """
 

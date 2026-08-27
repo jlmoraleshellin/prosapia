@@ -10,8 +10,8 @@ The template CIF, chain layout, and number of subunits are hardcoded at the
 top of this file -- edit them there.
 
 Usage:
-    python run_boltz_batch.py outputs/20260420_123035_grow_hairpin
-    python run_boltz_batch.py outputs/20260420_123035_grow_hairpin --shard-size 20 --devices 4
+    sapia run boltz outputs/20260420_123035_grow_hairpin --database db1_..._mpnn_seqs
+    sapia run boltz outputs/20260420_123035_grow_hairpin --database db1_..._mpnn_seqs --shard-size 20 --devices 4
 """
 
 import os

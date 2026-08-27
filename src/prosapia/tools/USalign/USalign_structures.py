@@ -5,7 +5,10 @@ For each row with both structure paths set, converts both to PDB via gemmi, runs
 USalign in multi-chain mode, and writes the metrics plus the superposed-structure
 path back to the db under ``<prefix>_*`` columns.
 
-Usage:
+This is the per-design worker; the USalign tool drives it. Normally you run
+``sapia run USalign`` (which submits the array) rather than calling this directly.
+
+Usage (standalone, one db):
     pixi run python USalign_structures.py outputs/20260420_123035_grow_hairpin \
         --database mpnn_seqs_db --col-a boltz_path --col-b openfold3_path \
         [--output-prefix boltz_vs_openfold3]
