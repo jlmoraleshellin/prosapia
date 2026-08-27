@@ -12,7 +12,7 @@ def _load(spec_py: Path) -> Tool:
     ...``) without polluting ``sys.path`` or colliding with other tools' modules.
     """
     tool_dir = spec_py.parent
-    pkg_name = f"_pipeline_tool_{tool_dir.name}"
+    pkg_name = f"_sapia_tool_{tool_dir.name}"
 
     # Register the tool folder as a package whose ``__path__`` is the folder, so
     # its files resolve as namespaced submodules (``<pkg>.run``, ``<pkg>.collect``).
