@@ -1,4 +1,4 @@
-from .base_cli import base_parser  # noqa: F401
+from .base_parser import base_parser  # noqa: F401
 from .base_collect import (  # noqa: F401
     CollectArgs,
     CollectCtx,

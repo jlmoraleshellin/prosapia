@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any, Callable, Generic, TypeVar
 import pandas as pd
 from dotenv import load_dotenv
 
-from .base_cli import base_parser
+from .base_parser import base_parser
 from .data_manager import Database, DataManager
 from .naming import GEN, PARENT_DB, PARENT_NAME, resolve_dir_name
 

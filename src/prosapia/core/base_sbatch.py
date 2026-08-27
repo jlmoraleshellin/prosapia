@@ -22,7 +22,7 @@ import pandas as pd
 from dotenv import load_dotenv
 from pandas import DataFrame
 
-from .base_cli import base_parser
+from .base_parser import base_parser
 from .data_manager import Database, DataManager, RegistryManager
 from .naming import resolve_dir_name
 
