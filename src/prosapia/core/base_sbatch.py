@@ -55,7 +55,7 @@ def _add_sbatch_args(
     default_sbatch: str,
     default_input_column: str,
 ) -> None:
-    """Add the SLURM-array flags shared by every run parser (standalone or ``ppl``)."""
+    """Add the SLURM-array flags shared by every run parser (standalone or ``sapia``)."""
     parser.add_argument(
         "-s",
         "--sbatch-script",
@@ -153,12 +153,12 @@ def build_run_parser(
     a tool: base args + batch flags + ``--db-label`` (create tools) + tool extras.
 
     Used both by ``submit_sbatch_array`` (as the sole parent of a standalone parser)
-    and by the ``ppl`` CLI (as ``parents=[...]`` of each ``run <tool>`` subparser), so
+    and by the ``sapia`` CLI (as ``parents=[...]`` of each ``run <tool>`` subparser), so
     a single ``argcomplete`` call at the top sees the full argument tree.
     """
     parser = ArgumentParser(
         add_help=False,
-        parents=[base_parser(require_database=not metadata.is_root)],
+        parents=[base_parser(require_database=not metadata.creates_db)],
     )
     _add_sbatch_args(parser, default_sbatch, default_input_column)
     if metadata.creates_db:
@@ -182,7 +182,7 @@ def resolve_output_db(
     src_db: str | None,
     db_label: str = "",
 ) -> Database:
-    """Resolve the db a run writes to: reserve a child/root for create/root, else return ``src_db``."""
+    """Resolve the db a run writes to: reserve a child/root for create, else return ``src_db``."""
     if not tool.creates_db:
         if src_db is None:
             raise ValueError(
@@ -190,12 +190,6 @@ def resolve_output_db(
                 f"requires --database; none was given."
             )
         return registry.get_database(src_db)
-    if tool.is_root and src_db is not None:
-        raise ValueError(
-            f"Root tool {tool.name!r} creates a root database and takes no "
-            f"parent; got --database {src_db!r}. Drop --database, or declare the "
-            f"tool action='create' if it should build on an existing db."
-        )
     output_db = registry.derive_new_db(src_db, db_label)
     output_db.tool_name = tool.name  # provenance: the tool that creates this db
     registry.register_database(output_db)
@@ -406,22 +400,23 @@ def run_from_args(
     build_manifest_fn: BuildManifestFn[ArgsT],
     args: ArgsT,
 ) -> None:
-    """Execute a run from already-parsed args (shared by standalone and ``ppl``)."""
+    """Execute a run from already-parsed args (shared by standalone and ``sapia``)."""
     # Only new_run_dir mints run dirs. Guard here because resolve_output_db writes
     # the registry TSV before any dir is created, so a missing run_dir would
     # otherwise fail cryptically deep inside the backend write.
     if not args.run_dir.is_dir():
         raise FileNotFoundError(
             f"run_dir {args.run_dir} does not exist. Create one first: "
-            f"new_run_dir --label <label>"
+            f"sapia new_run --label <label>"
         )
 
-    # Source database (the source rows the manifest iterates over). None for an
-    # root tool, which has no input db.
+    # Source database (the source rows the manifest iterates over). None for a create
+    # tool that starts a new lineage
     src_db = args.database
 
     with DataManager(args.run_dir) as (dm, (read_frame, save_frame), registry):
-        # CREATE/ROOT reserve a new db in the registry; UPDATE writes back to src_db.
+        # CREATE reserves a new db in the registry that gets created when collect is called;
+        # UPDATE writes back to src_db.
         output_db = resolve_output_db(
             registry, metadata, src_db or None, getattr(args, "db_label", "")
         )

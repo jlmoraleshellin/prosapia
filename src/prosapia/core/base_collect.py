@@ -91,7 +91,7 @@ def build_collect_parser(
     add_extra_args_fn: AddArgsFn | None = None,
 ) -> ArgumentParser:
     """Build a reusable (``add_help=False``) parent parser holding every collect flag
-    for a tool. Used by ``collect`` (standalone) and by the ``ppl`` CLI as
+    for a tool. Used by ``collect`` (standalone) and by the ``sapia`` CLI as
     ``parents=[...]`` of each ``collect <tool>`` subparser.
     """
     parser = ArgumentParser(add_help=False, parents=[base_parser()])
@@ -146,20 +146,13 @@ def collect_from_args(
     collect_fn: CollectFn[ArgsT],
     args: ArgsT,
 ) -> None:
-    """Execute a collect from already-parsed args (shared by standalone and ``ppl``)."""
+    """Execute a collect from already-parsed args (shared by standalone and ``sapia``)."""
     db_name = args.database
 
     with DataManager(args.run_dir) as (dm, (read_frame, save_frame), registry):
         # Get database and output directory name
         output_db = registry.get_database(db_name)
         out_dir = resolve_dir_name(args, output_db, metadata)
-
-        if metadata.is_root and output_db.parent_db_name is not None:
-            raise ValueError(
-                f"Root tool {metadata.name!r} expects a root db, but {db_name!r} has "
-                f"parent {output_db.parent_db_name!r} in the registry. Pass the root db reserved by "
-                f"run_{metadata.name}.py as --database."
-            )
 
         # Read parent DataFrame or create one
         parent_df = (

@@ -14,10 +14,10 @@ from .run_rfdiffusion_sbatch import (
 )
 
 TOOL = Tool(
-    name="diffused",
+    name="rfdiffusion",
     action="create",
     run_description="Submit a SLURM array to run RFdiffusion.",
-    collect_description="Collect RFdiffusion partial-diffusion outputs into the diffusion db.",
+    collect_description="Collect RFdiffusion outputs into the diffusion db.",
     # NOTE: preserves the current __main__ default; see migration flag re: partialdiffusion.sbatch
     default_sbatch=str(Path(__file__).parent / "partialdiffusion.sbatch"),
     default_input_column="relaxed_symm_path",

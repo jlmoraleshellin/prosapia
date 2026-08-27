@@ -4,7 +4,7 @@ from typing import Callable, Literal
 from .base_collect import CollectArgs
 from .base_sbatch import CommonArgs
 
-Action = Literal["create", "update", "root"]
+Action = Literal["create", "update"]
 
 
 @dataclass(frozen=True)
@@ -17,12 +17,7 @@ class ToolMetadata:
     @property
     def creates_db(self) -> bool:
         """True when the tool reserves a new db (a child *or* a root)."""
-        return self.action in ("create", "root")
-
-    @property
-    def is_root(self) -> bool:
-        """True for a root-creating tool that takes no parent db."""
-        return self.action == "root"
+        return self.action == "create"
 
 
 @dataclass(frozen=True)

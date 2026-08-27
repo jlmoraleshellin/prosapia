@@ -13,7 +13,7 @@ This project is a monorepo that uses pixi as a package manager for tasks and scr
     - `base_sbatch.py`
         - `run_from_args(metadata, build_manifest_fn, args)` is the submit-phase driver, shared by all tools. A tool customizes it by passing its `ToolMetadata` and its `BuildManifestFn` hook. On each invocation it:
             1. opens a `DataManager` to load the input db;
-            2. calls `resolve_output_db` to reserve the destination db (a new child for `create`, a new root for `root`, or the source db for `update`);
+            2. calls `resolve_output_db` to reserve the destination db (a new child/root for `create`, or the source db for `update`);
             3. invokes the tool's `build_manifest` hook to write the manifest `.txt`;
             4. submits the SLURM array job, whose `.sbatch` consumes that manifest.
         - Defines the `BuildManifestFn` hook contract that tools implement.
@@ -21,7 +21,7 @@ This project is a monorepo that uses pixi as a package manager for tasks and scr
         - `collect_from_args(metadata, collect_fn, args)` is the collect-phase driver, shared by all tools. Customized by passing `ToolMetadata` and the `CollectFn` hook. On each invocation it:
             1. opens a `DataManager`;
             2. invokes the tool's `collect` hook to turn on-disk output into `CollectResult` rows;
-            3. writes those rows into the destination db (creating it for `create`/`root`, annotating it in place for `update`) and updates the registry.
+            3. writes those rows into the destination db (creating it for `create`, annotating it in place for `update`) and updates the registry.
         - Defines the `CollectFn` hook contract that tools implement.
     - `data_manager.py`
         - `DataManager` is a context manager that owns the run's databases and registry, both handled uniformly as DataFrames through a pluggable I/O backend (TSV default). It:
