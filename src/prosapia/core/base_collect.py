@@ -123,6 +123,10 @@ def _finalize_create(
             )
         for row in updates.values():
             row[PARENT_DB] = database.parent_db_name
+    else:
+        # Root db (no parent): overwrite any PARENT_NAME with pd.NA
+        for row in updates.values():
+            row[PARENT_NAME] = pd.NA
     for row in updates.values():
         row.setdefault(GEN, database.gen)
 

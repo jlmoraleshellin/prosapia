@@ -3,7 +3,7 @@
 Rebuild the diffusion database from a run directory's diffused/ outputs.
 
 For each parent design folder under <run_dir>/<diffused-dir-name>/, this looks
-for a command.txt marker file (written by partialdiffusion.sbatch once a task has
+for a command.txt marker file (written by rfdiffusion.sbatch once a task has
 run) and, if present, registers every <name>_<i>.pdb it finds as an OK row in the
 diffusion DB. Parents missing the marker file get an "error: no marker" row per
 expected iteration.
@@ -12,7 +12,7 @@ Run this after the rfdiffusion SLURM array; it (re)builds the diffusion db by
 scanning the outputs, so it is safe to re-run to rebuild a corrupted db.
 
 Usage:
-    python collect_diffusion.py outputs/RUN --database db1_worms
+    python collect_diffusion.py outputs/RUN --database db1
 """
 
 import re
@@ -75,7 +75,9 @@ def collect_diffusion(ctx: CollectCtx) -> CollectResult:
         name = parent_dir.name  # the parent row (a design in the input db)
         marker = parent_dir / MARKER_FILENAME
 
-        if name == "partialdiffusion_logs" or name == "diffusion_tasks":
+        # Skip the driver's own scratch dirs: the SLURM log dir (named
+        # "<sbatch_stem>_logs") and the sub-manifest task dir.
+        if name.endswith("_logs") or name == "diffusion_tasks":
             continue
 
         if not marker.exists():

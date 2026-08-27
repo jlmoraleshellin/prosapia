@@ -37,7 +37,11 @@ run_one() {
     # contigmap.contigs stays a single token (it may contain spaces).
     local cmd=(
         "$RFDIFFUSION_ENV" "$RUN_INFERENCE" $global_extra
-        inference.input_pdb="$staged"
+    )
+    # A root de-novo row carries an empty $staged: omit inference.input_pdb so
+    # RFdiffusion generates from scratch. When set, keep it a single quoted token.
+    [ -n "$staged" ] && cmd+=(inference.input_pdb="$staged")
+    cmd+=(
         inference.output_prefix="$prefix"
         contigmap.contigs="$contig"
         $symmetry_token

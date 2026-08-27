@@ -45,7 +45,7 @@ Usage:
 import re
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import cast
+from typing import Callable, cast
 
 import gemmi
 
@@ -57,9 +57,14 @@ from prosapia.core import CommonArgs, ManifestCtx, resolve_template
 # don't match and are copied verbatim during replication.
 _CHAIN_REF = re.compile(r"\b([A-Z])(\d)")
 
+# A {expr} placeholder island in the contig template, resolved per-design up the
+# db lineage. Meaningless in a root run (no db), so we reject it there explicitly.
+_HAS_PLACEHOLDER = re.compile(r"\{[^}]*\}")
+
 
 class RFDiffArgs(CommonArgs):
     contigs: str
+    input_pdb: Path | None
     replicate: str | int | None
     per_card: int
     symmetry: str | None
@@ -93,6 +98,16 @@ def add_extra_args_rfdiffusion(parser: ArgumentParser):
         "With --replicate, author a single chain's unit and mark its fixed "
         "segment with the input chain letter A; diffused segments and chain "
         "breaks stay letterless (e.g. '[20/A1-{prebundle_length}/0]').",
+    )
+    parser.add_argument(
+        "--input-pdb",
+        type=Path,
+        default=None,
+        help="Single input structure to diffuse when starting a ROOT run (no "
+        "--database): motif/partial diffusion of one PDB that isn't in any db yet. "
+        "Only valid without --database (with a db, inputs come from --input-column). "
+        "Omit for pure de-novo generation. The design group is named after this "
+        "file's stem.",
     )
     parser.add_argument(
         "--replicate",
@@ -243,12 +258,63 @@ def _global_extra(args: RFDiffArgs) -> str:
     return " ".join(parts)
 
 
-def build_rfdiff_manifest(ctx: ManifestCtx[RFDiffArgs]) -> list[tuple[str, ...]]:
+def _assemble_design(
+    name: str,
+    staged_input: Path | None,
+    args: RFDiffArgs,
+    out_dir: Path,
+    lookup: Callable[[str, str], object],
+    global_extra: str,
+) -> tuple[str, ...]:
+    """Resolve one design's contig/symmetry/replicate and return its manifest tuple.
+
+    ``staged_input`` is the already-renumbered input PDB, or ``None`` for a de-novo
+    design (the sbatch then omits ``inference.input_pdb``, leaving the field empty).
+    Raises ValueError on an unresolvable contig, or on an auto symmetry/replicate that
+    needs a chain count but has no input structure to read one from.
+    """
+    contig = resolve_template(args.contigs, lookup, name)
+
+    needs_chains = args.symmetry == "auto" or args.replicate == "auto"
+    if not needs_chains:
+        n_chains = None
+    elif staged_input is None:
+        raise ValueError(
+            "--symmetry auto / --replicate auto need an input structure to count "
+            "chains, but this design has none. Pass an explicit symmetry "
+            "(e.g. c3) / replicate count, or provide --input-pdb."
+        )
+    else:
+        n_chains = _count_chains(staged_input)
+
+    if args.replicate is not None:
+        n_rep = n_chains if args.replicate == "auto" else args.replicate
+        contig = _replicate_contig(contig, cast(int, n_rep))
+
+    symmetry_token = _symmetry_token(args, n_chains)
+    output_prefix = out_dir / name / name
+
+    return tuple(
+        map(
+            str,
+            (
+                name,
+                staged_input or "",
+                output_prefix,
+                contig,
+                symmetry_token,
+                global_extra,
+            ),
+        )
+    )
+
+
+def _build_create_designs(
+    ctx: ManifestCtx[RFDiffArgs], global_extra: str
+) -> list[tuple[str, ...]]:
+    """Iterate the input db's --input-column: one diffusion per ready design row."""
     df, args, out_dir = ctx.df, ctx.args, ctx.out_dir
-
     ready = df[df[args.input_column].notna() & (df[args.input_column] != "")]
-
-    global_extra = _global_extra(args)
 
     designs: list[tuple[str, ...]] = []
     for name in ready.index:
@@ -259,46 +325,75 @@ def build_rfdiff_manifest(ctx: ManifestCtx[RFDiffArgs]) -> list[tuple[str, ...]]
             continue
 
         # Prep (deterministic, input-derived): renumber the input per-chain into a
-        # staged PDB, resolve the contig's {expr} placeholders up the lineage, and
-        # derive the (optional) symmetry token, so the sbatch only launches the binary.
-        design_dir = out_dir / name
-        staged_input = design_dir / "_diffusion_input" / f"{name}_renumbered.pdb"
+        # staged PDB so the sbatch only launches the binary.
+        staged_input = out_dir / name / "_diffusion_input" / f"{name}_renumbered.pdb"
         renumber_chains_independently(input_path, staged_input)
 
         try:
-            contig = resolve_template(args.contigs, ctx.lookup, name)
-        except ValueError as e:
-            print(f"{name}: {e} (skipping)")
-            continue
-
-        # Chain count is read once, only when auto symmetry or auto replication needs it.
-        n_chains = (
-            _count_chains(staged_input)
-            if args.symmetry == "auto" or args.replicate == "auto"
-            else None
-        )
-        if args.replicate is not None:
-            n_rep = n_chains if args.replicate == "auto" else args.replicate
-            contig = _replicate_contig(contig, cast(int, n_rep))
-
-        symmetry_token = _symmetry_token(args, n_chains)
-        output_prefix = design_dir / name
-
-        designs.append(
-            tuple(
-                map(
-                    str,
-                    (
-                        name,
-                        staged_input,
-                        output_prefix,
-                        contig,
-                        symmetry_token,
-                        global_extra,
-                    ),
+            designs.append(
+                _assemble_design(
+                    name, staged_input, args, out_dir, ctx.lookup, global_extra
                 )
             )
+        except ValueError as e:
+            # One bad row shouldn't sink the whole array: warn and skip it.
+            print(f"{name}: {e} (skipping)")
+    return designs
+
+
+def _build_root_designs(
+    ctx: ManifestCtx[RFDiffArgs], global_extra: str
+) -> list[tuple[str, ...]]:
+    """Root run (no --database): a single design group, from --input-pdb or de-novo.
+
+    Root means "start a fresh lineage without iterating a db column" -- NOT
+    necessarily de-novo. With --input-pdb we diffuse that one structure (motif /
+    partial diffusion of a PDB not yet in any db); without it we generate de-novo.
+    Either way it's one group -> one SLURM task.
+    """
+    args, out_dir = ctx.args, ctx.out_dir
+
+    # {expr} placeholders resolve up the db lineage, which a root run doesn't have.
+    if _HAS_PLACEHOLDER.search(args.contigs):
+        raise ValueError(
+            "--contigs contains a {expr} placeholder, but this is a root run "
+            "(no --database) with no db lineage to resolve it against. Use literal "
+            "contigs, or run with --database to diffuse existing db rows."
         )
+
+    if args.input_pdb is not None:
+        input_path = Path(args.input_pdb)
+        if not input_path.exists():
+            raise FileNotFoundError(f"--input-pdb {input_path} does not exist.")
+        name = input_path.stem
+        staged_input: Path | None = (
+            out_dir / name / "_diffusion_input" / f"{name}_renumbered.pdb"
+        )
+        renumber_chains_independently(input_path, staged_input)
+    else:
+        name = "denovo"
+        staged_input = None
+
+    return [
+        _assemble_design(name, staged_input, args, out_dir, ctx.lookup, global_extra)
+    ]
+
+
+def build_rfdiff_manifest(ctx: ManifestCtx[RFDiffArgs]) -> list[tuple[str, ...]]:
+    args, out_dir = ctx.args, ctx.out_dir
+    global_extra = _global_extra(args)
+
+    # Root == no --database: start a fresh lineage from --input-pdb (or de-novo)
+    # instead of iterating an input db column.
+    if args.database is None:
+        designs = _build_root_designs(ctx, global_extra)
+    else:
+        if args.input_pdb is not None:
+            raise ValueError(
+                "--input-pdb is only valid for a root run (no --database); with "
+                "--database, inputs come from the db's --input-column. Drop one of them."
+            )
+        designs = _build_create_designs(ctx, global_extra)
 
     # One sub-manifest per task; the sbatch script launches its rows
     # concurrently on the task's single allocated GPU.

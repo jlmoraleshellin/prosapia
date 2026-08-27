@@ -18,8 +18,7 @@ TOOL = Tool(
     action="create",
     run_description="Submit a SLURM array to run RFdiffusion.",
     collect_description="Collect RFdiffusion outputs into the diffusion db.",
-    # NOTE: preserves the current __main__ default; see migration flag re: partialdiffusion.sbatch
-    default_sbatch=str(Path(__file__).parent / "partialdiffusion.sbatch"),
+    default_sbatch=str(Path(__file__).parent / "rfdiffusion.sbatch"),
     default_input_column="relaxed_symm_path",
     build_fn=build_rfdiff_manifest,
     add_run_args_fn=add_extra_args_rfdiffusion,
