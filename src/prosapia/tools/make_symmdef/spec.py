@@ -10,11 +10,11 @@ from .run_make_symmdef_sbatch import (
 )
 
 TOOL = Tool(
-    name="make_symmdef",
+    name="symmdef",
     action="update",
     run_description="Submit a SLURM array to make symmetry definitions.",
-    collect_description="Collect make_symmdef results into the database.",
-    default_sbatch=str(Path(__file__).parent / "make_symmdef.sbatch"),
+    collect_description="Collect symmdef files into the database.",
+    default_sbatch=str(Path(__file__).parent / "symmdef.sbatch"),
     default_input_column="assembled_path",
     build_fn=build_make_symmdef_manifest,
     add_run_args_fn=_add_make_symmdef_args,

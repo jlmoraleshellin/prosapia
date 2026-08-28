@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --cpus-per-task=24
 #SBATCH --mem=64G
-#SBATCH --time=04:00:00
+#SBATCH --time=08:00:00
 #SBATCH --job-name=boltz
 
 set -euo pipefail

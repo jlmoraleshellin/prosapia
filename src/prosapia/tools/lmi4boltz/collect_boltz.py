@@ -20,7 +20,6 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, cast
 
-import numpy as np
 import pandas as pd
 
 from prosapia.core import CollectCtx, CollectResult
@@ -77,21 +76,6 @@ def load_metrics(json_path: Path) -> Dict[str, Any]:
     with open(json_path) as f:
         data = json.load(f)
     return {f"boltz_{k}": data.get(k, pd.NA) for k in BOLTZ_METRICS}
-
-
-def compute_redesigned_plddt(
-    plddt_path: Path,
-    hairpin_length: int,
-    n_subunits: int,
-) -> float:
-    """Mean pLDDT of the redesigned region (from hairpin_length onward) across all chains."""
-    plddt = np.load(plddt_path)["plddt"]
-    chain_len = len(plddt) // n_subunits
-    slices = [
-        plddt[i * chain_len + hairpin_length : (i + 1) * chain_len]
-        for i in range(n_subunits)
-    ]
-    return float(np.concatenate(slices).mean())
 
 
 def collect_boltz(ctx: CollectCtx) -> CollectResult:
@@ -164,20 +148,6 @@ def collect_boltz(ctx: CollectCtx) -> CollectResult:
             updates[design_name] = row
             n_missing += 1
             continue
-
-        # n_subunits / hairpin_length are inherited down the lineage
-        # -> resolve via lookup, not a local column.
-        hairpin_length = ctx.lookup(design_name, "hairpin_length")
-        n_subunits = ctx.lookup(design_name, "n_subunits")
-        if plddt_path is not None and pd.notna(hairpin_length) and pd.notna(n_subunits):
-            try:
-                metrics["boltz_redesigned_plddt"] = compute_redesigned_plddt(
-                    plddt_path,
-                    int(hairpin_length),
-                    int(n_subunits),
-                )
-            except Exception:
-                metrics["boltz_redesigned_plddt"] = pd.NA
 
         row = {status_col: "OK", path_col: str(cif_path)}
         row.update(metrics)
