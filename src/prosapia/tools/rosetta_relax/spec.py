@@ -13,6 +13,6 @@ TOOL = Tool(
     # NOTE: preserves the current __main__ default; see migration flag re: relax_array.sbatch
     default_sbatch=str(Path(__file__).parent / "relax_array.sbatch"),
     default_input_column="symm_path",
-    build_fn=build_relax_manifest,
+    build_manifest_fn=build_relax_manifest,
     collect_fn=collect_relax,
 )

@@ -28,3 +28,4 @@ from .naming import (  # noqa: F401
     resolve_dir_name,
 )
 from .tool import ToolMetadata, Tool  # noqa: F401
+from .tool_registry import get_builtin  # noqa: F401

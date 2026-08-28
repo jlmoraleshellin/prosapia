@@ -20,16 +20,14 @@ from .completion import build_init_parser, init_from_args
 from ..core.base_collect import build_collect_parser, collect_from_args
 from ..core.base_sbatch import build_run_parser, run_from_args
 from ..core.tool import Tool
-from ..core.tool_registry import discover
+from ..core.tool_registry import discover, BUILTIN_TOOLS_DIR
 from .new_run_dir import build_new_run_parser, new_run_from_args
-
-_BUILTIN_TOOLS_DIR = Path(__file__).parent.parent / "tools"
 
 
 def _tools_dirs() -> list[Path]:
     """Built-in tools first, then user dirs from $PROSAPIA_TOOLS_DIR
     (os.pathsep-separated). Later dirs win, so user tools shadow built-ins."""
-    dirs = [_BUILTIN_TOOLS_DIR]
+    dirs = [BUILTIN_TOOLS_DIR]
     if env := os.environ.get("PROSAPIA_TOOLS_DIR", "tools"):
         dirs += [Path(p) for p in env.split(os.pathsep) if p]
     return dirs
@@ -74,7 +72,7 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
             ],
         )
         run_p.set_defaults(
-            _dispatch=lambda args, t=tool: run_from_args(t.metadata, t.build_fn, args)
+            _dispatch=lambda args, t=tool: run_from_args(t.metadata, t.build_manifest_fn, args)
         )
 
         collect_p = collect_tools.add_parser(
