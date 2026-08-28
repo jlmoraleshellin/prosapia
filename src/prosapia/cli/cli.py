@@ -21,6 +21,7 @@ from ..core.base_collect import build_collect_parser, collect_from_args
 from ..core.base_sbatch import build_run_parser, run_from_args
 from ..core.tool import Tool
 from ..core.tool_registry import discover, BUILTIN_TOOLS_DIR
+from .fork_tool import build_fork_parser, fork_from_args
 from .new_run_dir import build_new_run_parser, new_run_from_args
 
 
@@ -50,6 +51,13 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
         help="Set up shell tab-completion for sapia.",
     )
     init_p.set_defaults(_dispatch=init_from_args)
+
+    fork_p = verbs.add_parser(
+        "fork-tool",
+        parents=[build_fork_parser()],
+        help="Copy a built-in tool into your tools dir to customize it.",
+    )
+    fork_p.set_defaults(_dispatch=fork_from_args)
 
     run_tools = verbs.add_parser(
         "run", help="Submit a tool's SLURM array."
