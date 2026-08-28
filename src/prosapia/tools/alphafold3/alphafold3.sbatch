@@ -9,14 +9,10 @@ set -a
 source .env
 set +a
 
-# Positional args from submit_sbatch_array:
-#   $1 = manifest file (tab-separated: shard_dir)
-#   $2 = output dir (e.g. <run_dir>/alphafold3)
-MANIFEST=$1
-OUT_DIR=$2
-
-LINE=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$MANIFEST")
-SHARD_DIR=$(echo "$LINE" | cut -f1)
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
+# Manifest line is tab-separated: shard_dir.
+source "${SAPIA_PRELUDE:?}"
+SHARD_DIR=$(echo "$SAPIA_LINE" | cut -f1)
 SHARD_OUT_DIR=$OUT_DIR/results_$(basename "$SHARD_DIR")
 mkdir -p "$SHARD_OUT_DIR"
 

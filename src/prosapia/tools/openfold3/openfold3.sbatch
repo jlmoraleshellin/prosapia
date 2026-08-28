@@ -10,15 +10,11 @@ set +a
 
 set -euo pipefail
 
-# Positional args from submit_sbatch_array:
-#   $1 = manifest file (tab-separated: query_json, runner_yaml)
-#   $2 = output dir (e.g. <run_dir>/openfold3)
-MANIFEST=$1
-OUT_DIR=$2
-
-LINE=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$MANIFEST")
-QUERY_JSON=$(echo "$LINE" | cut -f1)
-RUNNER_YAML=$(echo "$LINE" | cut -f2)
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
+# Manifest line is tab-separated: query_json, runner_yaml.
+source "${SAPIA_PRELUDE:?}"
+QUERY_JSON=$(echo "$SAPIA_LINE" | cut -f1)
+RUNNER_YAML=$(echo "$SAPIA_LINE" | cut -f2)
 
 set +u
 source $OPENFOLD_ACTIVATE

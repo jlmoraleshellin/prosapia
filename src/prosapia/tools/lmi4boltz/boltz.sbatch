@@ -10,15 +10,11 @@ set -a
 source .env # Load CONDA_PREFIX and BOLTZ_ENV_NAME
 set +a
 
-# Positional args from submit_sbatch_array:
-#   $1 = manifest file (tab-separated: shard_dir, devices)
-#   $2 = output dir (e.g. <run_dir>/boltz)
-MANIFEST=$1
-OUT_DIR=$2
-
-LINE=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$MANIFEST")
-SHARD_DIR=$(echo "$LINE" | cut -f1)
-DEVICES=$(echo "$LINE" | cut -f2)
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
+# Manifest line is tab-separated: shard_dir, devices.
+source "${SAPIA_PRELUDE:?}"
+SHARD_DIR=$(echo "$SAPIA_LINE" | cut -f1)
+DEVICES=$(echo "$SAPIA_LINE" | cut -f2)
 
 source "$CONDA_PREFIX/etc/profile.d/conda.sh"
 conda activate "$BOLTZ_ENV_NAME"

@@ -33,6 +33,9 @@ load_dotenv()
 
 SLURM_MAX_ARRAY_SIZE = int(os.getenv("SLURM_MAX_ARRAY_SIZE", 1000))
 
+# Sourced by every tool's .sbatch (via $SAPIA_PRELUDE) for shared task scaffolding. See core/sbatch/sapia_task_prelude.sh.
+PRELUDE_PATH = Path(__file__).parent / "sbatch" / "sapia_task_prelude.sh"
+
 
 ## ARGPARSER
 class CommonArgs(Namespace):
@@ -295,7 +298,10 @@ def _submit_array(
     ]
     cmd = [c for c in cmd if c]  # Remove empty arguments
     print("Submitting:", " ".join(cmd))
-    result = subprocess.run(cmd)
+    result = subprocess.run(
+        cmd,
+        env={**os.environ, "SAPIA_PRELUDE": str(PRELUDE_PATH)},
+    )
     if result.returncode != 0:
         raise RuntimeError(f"sbatch exited {result.returncode}")
 

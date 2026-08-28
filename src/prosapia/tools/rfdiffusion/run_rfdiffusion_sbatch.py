@@ -383,8 +383,6 @@ def build_rfdiff_manifest(ctx: ManifestCtx[RFDiffArgs]) -> list[tuple[str, ...]]
     args, out_dir = ctx.args, ctx.out_dir
     global_extra = _global_extra(args)
 
-    # Root == no --database: start a fresh lineage from --input-pdb (or de-novo)
-    # instead of iterating an input db column.
     if args.database is None:
         designs = _build_root_designs(ctx, global_extra)
     else:

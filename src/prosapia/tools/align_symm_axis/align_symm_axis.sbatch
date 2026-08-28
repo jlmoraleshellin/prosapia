@@ -18,13 +18,11 @@ set +a
 # carries pipeline_core + gemmi + numpy. Override via PIPELINE_PYTHON in .env.
 PY=${PIPELINE_PYTHON:-.pixi/envs/default/bin/python}
 
-MANIFEST=$1
-OUT_DIR=$2
-
-LINE=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$MANIFEST")
-NAME=$(echo "$LINE" | cut -f1)
-SYMM_PDB=$(echo "$LINE" | cut -f2)
-SYMM_DEF=$(echo "$LINE" | cut -f3)
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
+source "${SAPIA_PRELUDE:?}"
+NAME=$(echo "$SAPIA_LINE" | cut -f1)
+SYMM_PDB=$(echo "$SAPIA_LINE" | cut -f2)
+SYMM_DEF=$(echo "$SAPIA_LINE" | cut -f3)
 
 RESULT_TSV="$OUT_DIR/${NAME}.tsv"
 OUT_PDB="$OUT_DIR/${NAME}_aligned.pdb"

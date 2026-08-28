@@ -12,15 +12,11 @@ set -a
 source .env # Load CONDA_PREFIX and FOUNDRY_ENV_NAME
 set +a
 
-# Positional args from submit_sbatch_array:
-#   $1 = manifest file (tab-separated: shard_json \t rfd3_overrides)
-#   $2 = output dir (e.g. <run_dir>/<db>/rfdiffusion3)
-MANIFEST=$1
-OUT_DIR=$2
-
-LINE=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$MANIFEST")
-SHARD_JSON=$(echo "$LINE" | cut -f1)
-OVERRIDES=$(echo "$LINE" | cut -f2)
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
+# Manifest line is tab-separated: shard_json, rfd3_overrides.
+source "${SAPIA_PRELUDE:?}"
+SHARD_JSON=$(echo "$SAPIA_LINE" | cut -f1)
+OVERRIDES=$(echo "$SAPIA_LINE" | cut -f2)
 
 source "$CONDA_PREFIX/etc/profile.d/conda.sh"
 conda activate "$FOUNDRY_ENV_NAME"

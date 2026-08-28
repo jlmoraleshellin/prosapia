@@ -10,14 +10,10 @@ set +a
 
 set -euo pipefail
 
-# Positional args from submit_sbatch_array:
-#   $1 = manifest file (one column: fasta_path)
-#   $2 = output dir (e.g. <run_dir>/colabfold)
-MANIFEST=$1
-OUT_DIR=$2
-
-LINE=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$MANIFEST")
-FASTA_PATH=$(echo "$LINE" | cut -f1)
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
+# Manifest line is one column: fasta_path.
+source "${SAPIA_PRELUDE:?}"
+FASTA_PATH=$(echo "$SAPIA_LINE" | cut -f1)
 
 set +u
 source $COLABFOLD_ACTIVATE

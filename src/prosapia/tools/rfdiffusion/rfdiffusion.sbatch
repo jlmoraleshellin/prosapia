@@ -12,8 +12,10 @@ set -a
 source .env # RFDIFFUSION_ENV, RUN_INFERENCE
 set +a
 
-MANIFEST=$1
-OUTDIR=$2
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE. Our manifest line is a
+# path to this task's sub-manifest (one row per design); output locations are
+# baked into each design's output_prefix, so we never need OUT_DIR here.
+source "${SAPIA_PRELUDE:?}"
 
 # Each array task gets its own sub-manifest (one row per design). With
 # --per-card N these N diffusions are launched together and time-share the
@@ -21,7 +23,6 @@ OUTDIR=$2
 #   name  staged_input  output_prefix  contig  symmetry_token  global_extra
 # symmetry_token and global_extra may be empty and may contain spaces, so fields
 # are pulled with `cut` (which preserves empty fields, unlike `IFS=$'\t' read`).
-SUBMANIFEST=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$MANIFEST")
 
 export HYDRA_FULL_ERROR=1
 
@@ -57,7 +58,7 @@ run_one() {
     return $rc
 }
 
-echo "Task ${SLURM_ARRAY_TASK_ID}: $(wc -l < "$SUBMANIFEST") diffusion(s) on one GPU"
+echo "Task ${SLURM_ARRAY_TASK_ID}: $(wc -l < "$SAPIA_LINE") diffusion(s) on one GPU"
 
 pids=()
 while IFS= read -r line || [ -n "$line" ]; do
@@ -71,7 +72,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     echo "Launching $name"
     run_one "$name" "$staged" "$prefix" "$contig" "$symmetry_token" "$global_extra" &
     pids+=($!)
-done < "$SUBMANIFEST"
+done < "$SAPIA_LINE"
 
 fail=0
 for pid in "${pids[@]}"; do
