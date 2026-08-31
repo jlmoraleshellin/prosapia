@@ -67,24 +67,15 @@ def load_metrics(prefix: str, json_path: Path) -> Dict[str, Any]:
 
 
 def collect_af3(ctx: CollectCtx) -> CollectResult:
-    df, args, af3_dir = ctx.df, ctx.args, ctx.out_dir
-
-    path_col = f"{af3_dir.name}_path"
-    status_col = f"{af3_dir.name}_status"
-
-    if df.empty:
+    if ctx.df.empty:
         raise RuntimeError(
-            f"Database {args.database!r} is empty or missing in {args.run_dir}."
+            f"Database {ctx.args.database!r} is empty or missing in {ctx.args.run_dir}."
         )
 
-    ready = df[
-        df["sequence"].notna()
-        & (df["sequence"] != "")
-        & ~df.index.astype(str).str.endswith("_f0")
-    ]
+    ready = ctx.ready
 
-    if not args.force and path_col in df.columns:
-        existing = df.loc[ready.index, path_col]
+    if not ctx.args.force and ctx.path_col in ctx.df.columns:
+        existing = ctx.df.loc[ready.index, ctx.path_col]
         already_done = ready.index[existing.notna() & (existing != "")]
         if len(already_done) > 0:
             print(
@@ -94,7 +85,7 @@ def collect_af3(ctx: CollectCtx) -> CollectResult:
             ready = ready.drop(already_done)
 
     design_dirs: dict[str, Path] = {}
-    for shard_dir in sorted(af3_dir.glob("results_shard_*")):
+    for shard_dir in sorted(ctx.out_dir.glob("results_shard_*")):
         if not shard_dir.is_dir():
             continue
         for design_dir in shard_dir.iterdir():
@@ -110,10 +101,10 @@ def collect_af3(ctx: CollectCtx) -> CollectResult:
 
         if design_dir is None:
             row: Dict[str, Any] = {
-                status_col: f"missing: no output dir for {design_name}",
-                path_col: pd.NA,
+                ctx.status_col: f"missing: no output dir for {design_name}",
+                ctx.path_col: pd.NA,
             }
-            row.update({k: pd.NA for k in _get_af3_metrics(af3_dir.name)})
+            row.update({k: pd.NA for k in _get_af3_metrics(ctx.out_dir.name)})
             updates[design_name] = row
             n_missing += 1
             continue
@@ -122,29 +113,29 @@ def collect_af3(ctx: CollectCtx) -> CollectResult:
 
         if summary_path is None or cif_path is None:
             row = {
-                status_col: f"missing: no models in {design_dir}",
-                path_col: pd.NA,
+                ctx.status_col: f"missing: no models in {design_dir}",
+                ctx.path_col: pd.NA,
             }
-            row.update({k: pd.NA for k in _get_af3_metrics(af3_dir.name)})
+            row.update({k: pd.NA for k in _get_af3_metrics(ctx.out_dir.name)})
             updates[design_name] = row
             n_missing += 1
             continue
 
         try:
-            metrics = load_metrics(af3_dir.name, summary_path)
+            metrics = load_metrics(ctx.out_dir.name, summary_path)
         except (OSError, json.JSONDecodeError) as exc:
             row = {
-                status_col: f"error: {exc.__class__.__name__}: {exc}",
-                path_col: pd.NA,
+                ctx.status_col: f"error: {exc.__class__.__name__}: {exc}",
+                ctx.path_col: pd.NA,
             }
-            row.update({k: pd.NA for k in _get_af3_metrics(af3_dir.name)})
+            row.update({k: pd.NA for k in _get_af3_metrics(ctx.out_dir.name)})
             updates[design_name] = row
             n_missing += 1
             continue
 
         row = {
-            status_col: "OK",
-            path_col: str(cif_path),
+            ctx.status_col: "OK",
+            ctx.path_col: str(cif_path),
         }
         row.update(metrics)
         updates[design_name] = row

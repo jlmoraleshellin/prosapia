@@ -70,18 +70,13 @@ def parse_score_file(score_file: Path) -> Optional[Dict[str, float]]:
 
 
 def collect_relax(ctx: CollectCtx) -> CollectResult:
-    df, scores_dir = ctx.df, ctx.out_dir
-    prefix = scores_dir.name
-    status_col = f"{prefix}_status"
-    path_col = f"{prefix}_path"
-
-    all_score_files = sorted(scores_dir.glob("*_scores.sc"))
-    all_pdb_files = sorted(scores_dir.glob("*_0001.pdb"))
+    all_score_files = sorted(ctx.out_dir.glob("*_scores.sc"))
+    all_pdb_files = sorted(ctx.out_dir.glob("*_0001.pdb"))
     print(f"Found {len(all_score_files)} score files, {len(all_pdb_files)} PDB files")
 
     score_by_name: Dict[str, Path] = {}
     pdb_by_name: Dict[str, Path] = {}
-    candidate_names = [cast(str, name) for name in df.index]
+    candidate_names = [cast(str, name) for name in ctx.df.index]
 
     for name in candidate_names:
         for f in all_score_files:
@@ -96,22 +91,24 @@ def collect_relax(ctx: CollectCtx) -> CollectResult:
     for name in candidate_names:
         if name not in score_by_name:
             print(f"{name}: no score file")
-            updates[name] = {status_col: "missing"}
+            updates[name] = {ctx.status_col: "missing"}
             continue
 
         metrics = parse_score_file(score_by_name[name])
         if metrics is None:
             print(f"{name}: empty score file")
-            updates[name] = {status_col: "empty"}
+            updates[name] = {ctx.status_col: "empty"}
             continue
 
         relaxed_path = str(pdb_by_name[name]) if name in pdb_by_name else pd.NA
 
-        update: Dict[str, Any] = {f"{prefix}_{k}": v for k, v in metrics.items()}
-        update[status_col] = "OK"
-        update[path_col] = relaxed_path
+        update: Dict[str, Any] = {
+            f"{ctx.out_dir.name}_{k}": v for k, v in metrics.items()
+        }
+        update[ctx.status_col] = "OK"
+        update[ctx.path_col] = relaxed_path
         if not relaxed_path:
-            update[status_col] = "OK_no_pdb"
+            update[ctx.status_col] = "OK_no_pdb"
             print(f"{name}: scores parsed but no relaxed PDB found")
 
         updates[name] = update

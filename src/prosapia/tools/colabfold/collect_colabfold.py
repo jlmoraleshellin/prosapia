@@ -82,28 +82,19 @@ def load_metrics(prefix: str, json_path: Path) -> Dict[str, Any]:
 
 
 def collect_colabfold(ctx: CollectCtx) -> CollectResult:
-    df, args, cf_dir = ctx.df, ctx.args, ctx.out_dir
-
-    prefix = cf_dir.name
-    path_col = f"{prefix}_path"
-    status_col = f"{prefix}_status"
     metrics_cols: List[str] = [
-        f"{prefix}_{m}" for m in ("avg_plddt", "ptm", "iptm", "max_pae")
+        f"{ctx.out_dir.name}_{m}" for m in ("avg_plddt", "ptm", "iptm", "max_pae")
     ]
 
-    if df.empty:
+    if ctx.df.empty:
         raise RuntimeError(
-            f"Database {args.database!r} is empty or missing in {args.run_dir}."
+            f"Database {ctx.args.database!r} is empty or missing in {ctx.args.run_dir}."
         )
 
-    ready = df[
-        df["sequence"].notna()
-        & (df["sequence"] != "")
-        & ~df.index.astype(str).str.endswith("_f0")
-    ]
+    ready = ctx.ready
 
-    if not args.force and path_col in df.columns:
-        existing = df.loc[ready.index, path_col]
+    if not ctx.args.force and ctx.path_col in ctx.df.columns:
+        existing = ctx.df.loc[ready.index, ctx.path_col]
         already_done = ready.index[existing.notna() & (existing != "")]
         if len(already_done) > 0:
             print(
@@ -112,7 +103,7 @@ def collect_colabfold(ctx: CollectCtx) -> CollectResult:
             )
             ready = ready.drop(already_done)
 
-    design_files = _build_design_file_map(cf_dir)
+    design_files = _build_design_file_map(ctx.out_dir)
 
     updates: CollectResult = {}
     n_filled = 0
@@ -122,7 +113,7 @@ def collect_colabfold(ctx: CollectCtx) -> CollectResult:
         files = design_files.get(design_name)
 
         if files is None:
-            row: Dict[str, Any] = {status_col: "missing", path_col: pd.NA}
+            row: Dict[str, Any] = {ctx.status_col: "missing", ctx.path_col: pd.NA}
             row.update({k: pd.NA for k in metrics_cols})
             updates[design_name] = row
             n_missing += 1
@@ -130,18 +121,18 @@ def collect_colabfold(ctx: CollectCtx) -> CollectResult:
 
         scores_path, model_path = files
         try:
-            metrics = load_metrics(prefix, scores_path)
+            metrics = load_metrics(ctx.out_dir.name, scores_path)
         except (OSError, json.JSONDecodeError) as exc:
             row = {
-                status_col: f"error: {exc.__class__.__name__}: {exc}",
-                path_col: pd.NA,
+                ctx.status_col: f"error: {exc.__class__.__name__}: {exc}",
+                ctx.path_col: pd.NA,
             }
             row.update({k: pd.NA for k in metrics_cols})
             updates[design_name] = row
             n_missing += 1
             continue
 
-        row = {status_col: "OK", path_col: str(model_path)}
+        row = {ctx.status_col: "OK", ctx.path_col: str(model_path)}
         row.update(metrics)
         updates[design_name] = row
         n_filled += 1

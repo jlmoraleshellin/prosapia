@@ -85,41 +85,32 @@ def _add_colabfold_args(parser: ArgumentParser) -> None:
 
 
 def build_colabfold_manifest(ctx: ManifestCtx[ColabFoldArgs]):
-    df, args, out_dir, lookup = ctx.df, ctx.args, ctx.out_dir, ctx.lookup
-    if args.devices > 1:
-        args.gpus_per_task = args.devices
+    if ctx.args.devices > 1:
+        ctx.args.gpus_per_task = ctx.args.devices
 
-    fasta_dir = out_dir / "colabfold_queries"
+    fasta_dir = ctx.out_dir / "colabfold_queries"
     fasta_dir.mkdir(parents=True, exist_ok=True)
 
-    ready = df[
-        df[args.input_column].notna()
-        & (df[args.input_column] != "")
-        & ~df.index.astype(str).str.endswith("_f0")
-    ]
+    ready = ctx.ready
 
-    output_status_col = f"{out_dir.name}_status"
-    if output_status_col in ready.columns:
-        ready = ready[ready[output_status_col] != "OK"]
-
-    start_at_col: str | None = args.start_at_column
+    start_at_col: str | None = ctx.args.start_at_column
     if start_at_col and start_at_col.lower() == "none":
         start_at_col = None
 
     queries: list[tuple[str, str, int]] = []
     for name in ready.index:
         name = cast(str, name)
-        sequence = str(ready.at[name, args.input_column]).split("/", 1)[0]
+        sequence = str(ready.at[name, ctx.args.input_column]).split("/", 1)[0]
         if start_at_col:
             start_at = int(ready.at[name, start_at_col])  # type: ignore
             sequence = sequence[start_at:]
-        n_subunits = args.n_subunits or int(lookup(name, "n_subunits"))
+        n_subunits = ctx.args.n_subunits or int(ctx.lookup(name, "n_subunits"))
         queries.append((name, sequence, n_subunits))
 
     manifest_rows: list[tuple[str, ...]] = []
-    for i in range(0, len(queries), args.queries_per_task):
-        batch = queries[i : i + args.queries_per_task]
-        task_idx = i // args.queries_per_task
+    for i in range(0, len(queries), ctx.args.queries_per_task):
+        batch = queries[i : i + ctx.args.queries_per_task]
+        task_idx = i // ctx.args.queries_per_task
         fasta_path = write_colabfold_fasta(fasta_dir, task_idx, batch)
         manifest_rows.append((str(fasta_path),))
 

@@ -97,45 +97,36 @@ def _add_openfold3_args(parser: ArgumentParser) -> None:
 
 
 def build_openfold3_manifest(ctx: ManifestCtx[OpenFold3Args]) -> list[tuple[str, ...]]:
-    df, args, out_dir, lookup = ctx.df, ctx.args, ctx.out_dir, ctx.lookup
-    if args.devices > 1:
-        args.gpus_per_task = args.devices
+    if ctx.args.devices > 1:
+        ctx.args.gpus_per_task = ctx.args.devices
 
-    json_dir = out_dir / "openfold3_queries"
+    json_dir = ctx.out_dir / "openfold3_queries"
     json_dir.mkdir(parents=True, exist_ok=True)
 
-    ready = df[
-        df[args.input_column].notna()
-        & (df[args.input_column] != "")
-        & ~df.index.astype(str).str.endswith("_f0")
-    ]
+    ready = ctx.ready
 
-    output_status_col = f"{out_dir.name}_status"
-    if output_status_col in ready.columns:
-        ready = ready[ready[output_status_col] != "OK"]
-
-    start_at_col: str | None = args.start_at_column
+    start_at_col: str | None = ctx.args.start_at_column
     if start_at_col and start_at_col.lower() == "none":
         start_at_col = None
 
     queries: list[tuple[str, str, list[str]]] = []
     for name in ready.index:
         name = cast(str, name)
-        sequence = str(ready.at[name, args.input_column]).split("/", 1)[0]
+        sequence = str(ready.at[name, ctx.args.input_column]).split("/", 1)[0]
         if start_at_col:
             start_at = int(ready.at[name, start_at_col])  # type: ignore
             sequence = sequence[start_at:]
-        n_subunits = args.n_subunits or int(lookup(name, "n_subunits"))
+        n_subunits = ctx.args.n_subunits or int(ctx.lookup(name, "n_subunits"))
         chain_ids = list(string.ascii_uppercase[:n_subunits])
         queries.append((name, sequence, chain_ids))
 
-    runner_path = out_dir / "runner.yml"
-    write_runner_yaml(runner_path, args.devices)
+    runner_path = ctx.out_dir / "runner.yml"
+    write_runner_yaml(runner_path, ctx.args.devices)
 
     manifest_rows: list[tuple[str, ...]] = []
-    for i in range(0, len(queries), args.queries_per_task):
-        batch = queries[i : i + args.queries_per_task]
-        task_idx = i // args.queries_per_task
+    for i in range(0, len(queries), ctx.args.queries_per_task):
+        batch = queries[i : i + ctx.args.queries_per_task]
+        task_idx = i // ctx.args.queries_per_task
         json_path = json_dir / f"query_{task_idx}.json"
         write_openfold_json_query(json_path, batch)
         manifest_rows.append(tuple(map(str, (json_path, runner_path))))

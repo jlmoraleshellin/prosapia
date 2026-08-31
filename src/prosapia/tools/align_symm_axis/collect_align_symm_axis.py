@@ -17,13 +17,8 @@ from prosapia.core import CollectCtx, CollectResult
 
 
 def collect_align_symm_axis(ctx: CollectCtx) -> CollectResult:
-    df, args, out_dir = ctx.df, ctx.args, ctx.out_dir
-
     # Columns are keyed by the tool leaf (output dir name)
-    prefix = out_dir.name
-    status_col = f"{prefix}_status"
-    path_col = f"{prefix}_path"
-    max_dev_col = f"{prefix}_max_dev_deg"
+    max_dev_col = f"{ctx.out_dir.name}_max_dev_deg"
 
     tsvs = sorted(ctx.out_dir.glob("*.tsv"))
     print(f"Found {len(tsvs)} result file(s) in {ctx.out_dir}")
@@ -44,11 +39,11 @@ def collect_align_symm_axis(ctx: CollectCtx) -> CollectResult:
         status = str(row_data["status"])
 
         if (
-            not args.force
-            and status_col in df.columns
-            and name in df.index
-            and not pd.isna(df.at[name, status_col])
-            and df.at[name, status_col] == "OK"
+            not ctx.args.force
+            and ctx.status_col in ctx.df.columns
+            and name in ctx.df.index
+            and not pd.isna(ctx.df.at[name, ctx.status_col])
+            and ctx.df.at[name, ctx.status_col] == "OK"
         ):
             n_skipped += 1
             continue
@@ -57,13 +52,17 @@ def collect_align_symm_axis(ctx: CollectCtx) -> CollectResult:
             aligned_path = row_data["aligned_path"]
             max_dev = row_data["max_dev_deg"]
             updates[name] = {
-                status_col: status,
-                path_col: "" if pd.isna(aligned_path) else str(aligned_path),
+                ctx.status_col: status,
+                ctx.path_col: "" if pd.isna(aligned_path) else str(aligned_path),
                 max_dev_col: None if pd.isna(max_dev) else float(max_dev),
             }
             n_ok += 1
         else:
-            updates[name] = {status_col: status, path_col: "", max_dev_col: None}
+            updates[name] = {
+                ctx.status_col: status,
+                ctx.path_col: "",
+                max_dev_col: None,
+            }
             n_err += 1
 
     skipped_msg = f", skipped={n_skipped}" if n_skipped else ""

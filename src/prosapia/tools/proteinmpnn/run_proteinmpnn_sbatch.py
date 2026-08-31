@@ -274,25 +274,24 @@ def _symlink_member(pdb_src: Path, inputs_dir: Path, name: str) -> None:
 def build_proteinmpnn_manifest(
     ctx: ManifestCtx[ProteinMPNNArgs],
 ) -> list[tuple[str, ...]]:
-    df, args, out_dir, lookup = ctx.df, ctx.args, ctx.out_dir, ctx.lookup
-
-    input_status_col = args.input_column.replace("_path", "_status")
-    ready = df[df[input_status_col] == "OK"] if input_status_col in df.columns else df
-    ready = ready[ready[args.input_column].notna() & (ready[args.input_column] != "")]
+    # A present input --input-column (ctx.ready) already implies the upstream
+    # diffusion succeeded (collect writes a _path only on status OK), so no extra
+    # input-status prefilter is needed here.
+    ready = ctx.ready
 
     # Run-wide pieces (all structure-independent): argv tail and the chain list.
-    bias_path = _write_bias_jsonl(args.bias_aa, out_dir)
-    mpnn_extra = _mpnn_extra(args, bias_path)
-    chains = _parse_chains(args.chains_to_design)
+    bias_path = _write_bias_jsonl(ctx.args.bias_aa, ctx.out_dir)
+    mpnn_extra = _mpnn_extra(ctx.args, bias_path)
+    chains = _parse_chains(ctx.args.chains_to_design)
 
     # Guardrails: tying is either the homo-oligomer shortcut or explicit, not both;
     # per-chain positions need a chain list to map their groups onto.
-    if args.symmetry and args.tied_positions:
+    if ctx.args.symmetry and ctx.args.tied_positions:
         raise ValueError(
             "--symmetry (homo-oligomer tie) and --tied-positions (explicit tie) are "
             "mutually exclusive"
         )
-    if (args.fixed_positions or args.tied_positions) and not chains:
+    if (ctx.args.fixed_positions or ctx.args.tied_positions) and not chains:
         raise ValueError(
             "--fixed-positions/--tied-positions require --chains-to-design (their "
             "groups map one-to-one onto those chains)"
@@ -303,15 +302,15 @@ def build_proteinmpnn_manifest(
     # by signature lets same-param designs share one batched protein_mpnn_run call.
     groups: dict[Signature, list[Member]] = defaultdict(list)
     for design_name in sorted(cast(str, n) for n in ready.index):
-        input_path = Path(str(ready.at[design_name, args.input_column]))
-        pdb_src = ensure_pdb(input_path, args.run_dir).resolve()
-        fixed_pl = _parse_positions(args.fixed_positions, lookup, design_name)
-        if args.symmetry:
+        input_path = Path(str(ready.at[design_name, ctx.args.input_column]))
+        pdb_src = ensure_pdb(input_path, ctx.args.run_dir).resolve()
+        fixed_pl = _parse_positions(ctx.args.fixed_positions, ctx.lookup, design_name)
+        if ctx.args.symmetry:
             tie_mode, tied_pl = "homo", ""
-        elif args.tied_positions:
+        elif ctx.args.tied_positions:
             tie_mode, tied_pl = (
                 "explicit",
-                _parse_positions(args.tied_positions, lookup, design_name),
+                _parse_positions(ctx.args.tied_positions, ctx.lookup, design_name),
             )
         else:
             tie_mode, tied_pl = "", ""
@@ -320,7 +319,7 @@ def build_proteinmpnn_manifest(
 
     # Split each signature group into subgroups of <= X, then bin-pack subgroups
     # into array tasks with a total budget of X designs each.
-    x = args.designs_per_task
+    x = ctx.args.designs_per_task
     chunks: list[Subgroup] = []
     for sig, members in groups.items():
         for i in range(0, len(members), x):
@@ -329,14 +328,14 @@ def build_proteinmpnn_manifest(
 
     # Materialize: one grp_<g>/ output dir per subgroup (inputs/ holds symlinks), one
     # sub-manifest per task (a row per subgroup), and a 1-field top-level row per task.
-    tasks_dir = out_dir / "proteinmpnn_tasks"
+    tasks_dir = ctx.out_dir / "proteinmpnn_tasks"
     tasks_dir.mkdir(parents=True, exist_ok=True)
     manifest_rows: list[tuple[str, ...]] = []
     gid = 0
     for t, subgroups in enumerate(tasks):
         sub_rows: list[tuple[str, ...]] = []
         for (chains_sig, fixed_pl, tie_mode, tied_pl), members in subgroups:
-            grp_dir = out_dir / f"grp_{gid}"
+            grp_dir = ctx.out_dir / f"grp_{gid}"
             inputs_dir = grp_dir / "inputs"
             inputs_dir.mkdir(parents=True, exist_ok=True)
             for name, pdb_src in members:

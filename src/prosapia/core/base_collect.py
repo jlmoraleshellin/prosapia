@@ -21,7 +21,15 @@ from dotenv import load_dotenv
 
 from .base_parser import base_parser
 from .data_manager import Database, DataManager
-from .naming import GEN, PARENT_DB, PARENT_NAME, resolve_dir_name
+from .naming import (
+    GEN,
+    PARENT_DB,
+    PARENT_NAME,
+    filter_ready,
+    path_column,
+    resolve_dir_name,
+    status_column,
+)
 
 if TYPE_CHECKING:
     from .tool import ToolMetadata
@@ -34,6 +42,7 @@ class CollectArgs(Namespace):
     run_dir: Path
     database: str
     dir_label: str
+    input_column: str
     force: bool
 
 
@@ -48,22 +57,31 @@ ArgsT = TypeVar("ArgsT", bound=CollectArgs)
 
 @dataclass
 class CollectCtx(Generic[ArgsT]):
-    """Inputs a collect function may read (frame, args, dirs, parent, lookup)."""
+    """Inputs a collect function may read (frame, args, dirs, cols, parent, lookup)."""
 
     df: pd.DataFrame
     args: ArgsT
     db_name: str
     out_dir: Path
+    status_col: str
+    path_col: str
     parent_db: str | None
     parent_df: pd.DataFrame
     lookup: LookupFn
+
+    @property
+    def ready(self) -> pd.DataFrame:
+        """Rows with a present ``--input-column`` -- the designs to collect for."""
+        # Again, here find a way to avoid passing the input column as an arg. The collect should be able to infer the input column from the run.
+        return filter_ready(self.df, self.args.input_column)
 
 
 CollectFn = Callable[[CollectCtx[ArgsT]], CollectResult]
 
 
-def _add_collect_args(parser: ArgumentParser) -> None:
-    """Add the flags shared by every collector (``--dir-label`` + ``--force``)."""
+def _add_collect_args(parser: ArgumentParser, default_input_column: str) -> None:
+    """Add the flags shared by every collector (``--dir-label`` + ``--input-column``
+    + ``--force``)."""
     parser.add_argument(
         "-l",
         "--dir-label",
@@ -72,6 +90,16 @@ def _add_collect_args(parser: ArgumentParser) -> None:
         help="Suffix of the tool output dir / column, for same-tool variants. "
         "Default is empty.",
     )
+    # FIX: the input column here should not be necessary. The collect should be able to infer the input column from the run.
+    # But for now, we keep it for backward compatibility.
+    parser.add_argument(
+        "-i",
+        "--input-column",
+        type=str,
+        default=default_input_column,
+        help="Input column the collect selects designs by (mirrors the run flag). "
+        f"Defaults to '{default_input_column}'.",
+    )
     parser.add_argument(
         "--force",
         action="store_true",
@@ -79,15 +107,17 @@ def _add_collect_args(parser: ArgumentParser) -> None:
     )
 
 
-def collect_argparser(description: str) -> ArgumentParser:
-    """Parser shared by all collectors (``--database`` + ``--dir-label`` + ``--force``)."""
+def collect_argparser(description: str, default_input_column: str) -> ArgumentParser:
+    """Parser shared by all collectors (``--database`` + ``--dir-label`` +
+    ``--input-column`` + ``--force``)."""
     parser = ArgumentParser(parents=[base_parser()], description=description)
-    _add_collect_args(parser)
+    _add_collect_args(parser, default_input_column)
     return parser
 
 
 def build_collect_parser(
     metadata: "ToolMetadata",
+    default_input_column: str,
     add_extra_args_fn: AddArgsFn | None = None,
 ) -> ArgumentParser:
     """Build a reusable (``add_help=False``) parent parser holding every collect flag
@@ -95,7 +125,7 @@ def build_collect_parser(
     ``parents=[...]`` of each ``collect <tool>`` subparser.
     """
     parser = ArgumentParser(add_help=False, parents=[base_parser()])
-    _add_collect_args(parser)
+    _add_collect_args(parser, default_input_column)
     if add_extra_args_fn is not None:
         add_extra_args_fn(parser)
     return parser
@@ -168,11 +198,14 @@ def collect_from_args(
         # Read source DataFrame
         df = read_frame(db_name)
 
+        leaf = out_dir.name
         ctx = CollectCtx(
             df=df,
             args=args,
             db_name=db_name,
             out_dir=out_dir,
+            status_col=status_column(leaf),
+            path_col=path_column(leaf),
             parent_db=output_db.parent_db_name,
             parent_df=parent_df,
             lookup=partial(dm.lookup, df),

@@ -313,26 +313,27 @@ def _build_create_designs(
     ctx: ManifestCtx[RFDiffArgs], global_extra: str
 ) -> list[tuple[str, ...]]:
     """Iterate the input db's --input-column: one diffusion per ready design row."""
-    df, args, out_dir = ctx.df, ctx.args, ctx.out_dir
-    ready = df[df[args.input_column].notna() & (df[args.input_column] != "")]
+    ready = ctx.ready
 
     designs: list[tuple[str, ...]] = []
     for name in ready.index:
         name = cast(str, name)
-        input_path = Path(str(ready.at[name, args.input_column]))
+        input_path = Path(str(ready.at[name, ctx.args.input_column]))
         if not input_path.exists():
             print(f"{name}: MISSING {input_path} (skipping)")
             continue
 
         # Prep (deterministic, input-derived): renumber the input per-chain into a
         # staged PDB so the sbatch only launches the binary.
-        staged_input = out_dir / name / "_diffusion_input" / f"{name}_renumbered.pdb"
+        staged_input = (
+            ctx.out_dir / name / "_diffusion_input" / f"{name}_renumbered.pdb"
+        )
         renumber_chains_independently(input_path, staged_input)
 
         try:
             designs.append(
                 _assemble_design(
-                    name, staged_input, args, out_dir, ctx.lookup, global_extra
+                    name, staged_input, ctx.args, ctx.out_dir, ctx.lookup, global_extra
                 )
             )
         except ValueError as e:
@@ -351,23 +352,21 @@ def _build_root_designs(
     partial diffusion of a PDB not yet in any db); without it we generate de-novo.
     Either way it's one group -> one SLURM task.
     """
-    args, out_dir = ctx.args, ctx.out_dir
-
     # {expr} placeholders resolve up the db lineage, which a root run doesn't have.
-    if _HAS_PLACEHOLDER.search(args.contigs):
+    if _HAS_PLACEHOLDER.search(ctx.args.contigs):
         raise ValueError(
             "--contigs contains a {expr} placeholder, but this is a root run "
             "(no --database) with no db lineage to resolve it against. Use literal "
             "contigs, or run with --database to diffuse existing db rows."
         )
 
-    if args.input_pdb is not None:
-        input_path = Path(args.input_pdb)
+    if ctx.args.input_pdb is not None:
+        input_path = Path(ctx.args.input_pdb)
         if not input_path.exists():
             raise FileNotFoundError(f"--input-pdb {input_path} does not exist.")
         name = input_path.stem
         staged_input: Path | None = (
-            out_dir / name / "_diffusion_input" / f"{name}_renumbered.pdb"
+            ctx.out_dir / name / "_diffusion_input" / f"{name}_renumbered.pdb"
         )
         renumber_chains_independently(input_path, staged_input)
     else:
@@ -375,18 +374,19 @@ def _build_root_designs(
         staged_input = None
 
     return [
-        _assemble_design(name, staged_input, args, out_dir, ctx.lookup, global_extra)
+        _assemble_design(
+            name, staged_input, ctx.args, ctx.out_dir, ctx.lookup, global_extra
+        )
     ]
 
 
 def build_rfdiff_manifest(ctx: ManifestCtx[RFDiffArgs]) -> list[tuple[str, ...]]:
-    args, out_dir = ctx.args, ctx.out_dir
-    global_extra = _global_extra(args)
+    global_extra = _global_extra(ctx.args)
 
-    if args.database is None:
+    if ctx.args.database is None:
         designs = _build_root_designs(ctx, global_extra)
     else:
-        if args.input_pdb is not None:
+        if ctx.args.input_pdb is not None:
             raise ValueError(
                 "--input-pdb is only valid for a root run (no --database); with "
                 "--database, inputs come from the db's --input-column. Drop one of them."
@@ -395,13 +395,13 @@ def build_rfdiff_manifest(ctx: ManifestCtx[RFDiffArgs]) -> list[tuple[str, ...]]
 
     # One sub-manifest per task; the sbatch script launches its rows
     # concurrently on the task's single allocated GPU.
-    task_dir = out_dir / "diffusion_tasks"
+    task_dir = ctx.out_dir / "diffusion_tasks"
     task_dir.mkdir(parents=True, exist_ok=True)
 
     manifest_rows: list[tuple[str, ...]] = []
-    for i in range(0, len(designs), args.per_card):
-        chunk = designs[i : i + args.per_card]
-        sub = task_dir / f"task_{i // args.per_card}.tsv"
+    for i in range(0, len(designs), ctx.args.per_card):
+        chunk = designs[i : i + ctx.args.per_card]
+        sub = task_dir / f"task_{i // ctx.args.per_card}.tsv"
         with open(sub, "w") as f:
             for row in chunk:
                 f.write("\t".join(row) + "\n")

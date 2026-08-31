@@ -24,7 +24,7 @@ from pandas import DataFrame
 
 from .base_parser import base_parser
 from .data_manager import Database, DataManager, RegistryManager
-from .naming import resolve_dir_name
+from .naming import filter_ready, resolve_dir_name, status_column
 
 if TYPE_CHECKING:
     from .tool import ToolMetadata
@@ -51,6 +51,7 @@ class CommonArgs(Namespace):
     account: str | None
     max_gpu_fraction: float
     gpus_per_task: int
+    force: bool
 
 
 def _add_sbatch_args(
@@ -129,6 +130,12 @@ def _add_sbatch_args(
         help="GPUs requested per array task (--gres=gpu:N). Can be 0 for CPU-only tasks."
         "Scripts like run_boltz_batch.py set this automatically from --devices. "
         "Defaults to 1.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-submit designs this tool already completed (skips the resume "
+        "filter that drops rows whose <leaf>_status is already 'OK').",
     )
 
 
@@ -237,6 +244,23 @@ class ManifestCtx(Generic[ArgsT]):
     args: ArgsT
     out_dir: Path
     lookup: LookupFn
+
+    @property
+    def ready(self) -> pd.DataFrame:
+        """The designs this run should submit: rows with a present ``--input-column``,
+        minus those this tool already finished (``<leaf>_status == "OK"``) unless
+        ``--force``.
+
+        The already-OK skip is the framework's resume-on-rerun: it fires only when
+        the output status column is present in the source frame, i.e. for ``update``
+        tools (which annotate the same db). For ``create`` tools the column lives in
+        the child db, so the skip is a no-op and every ready design is submitted. #TODO maybe check child db too?
+        """
+        ready = filter_ready(self.df, self.args.input_column)
+        out_status = status_column(self.out_dir.name)
+        if not self.args.force and out_status in ready.columns:
+            ready = ready[ready[out_status] != "OK"]
+        return ready
 
 
 BuildManifestFn = Callable[[ManifestCtx[ArgsT]], Sequence[ManifestRow]]

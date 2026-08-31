@@ -74,14 +74,8 @@ def _find_outputs(results_dirs: list[Path], name: str) -> list[tuple[int, int, P
 
 
 def collect_rfd3(ctx: CollectCtx) -> CollectResult:
-    out_dir, run_dir = ctx.out_dir, ctx.args.run_dir
-    num_designs = ctx.args.num_designs
-
-    status_col = f"{out_dir.name}_status"
-    path_col = f"{out_dir.name}_path"
-
-    results_dirs = sorted(d for d in out_dir.glob("results_*") if d.is_dir())
-    print(f"Scanning {len(results_dirs)} results dir(s) in {out_dir}")
+    results_dirs = sorted(d for d in ctx.out_dir.glob("results_*") if d.is_dir())
+    print(f"Scanning {len(results_dirs)} results dir(s) in {ctx.out_dir}")
 
     # Parent rows are the design keys we wrote into the shard JSONs.
     parent_names = [cast(str, n) for n in ctx.parent_df.index]
@@ -95,25 +89,27 @@ def collect_rfd3(ctx: CollectCtx) -> CollectResult:
 
         if not outputs:
             n_failed_parents += 1
-            print(f"{name}: no outputs, marking {num_designs} row(s) as error")
-            for i in range(num_designs):
+            print(
+                f"{name}: no outputs, marking {ctx.args.num_designs} row(s) as error"
+            )
+            for i in range(ctx.args.num_designs):
                 updates[f"{name}_{i}"] = {
                     PARENT_NAME: name,
                     "iteration": i,
-                    status_col: "error: no output",
-                    path_col: pd.NA,
+                    ctx.status_col: "error: no output",
+                    ctx.path_col: pd.NA,
                 }
             continue
 
         for i, (batch, model, cif_gz) in enumerate(outputs):
-            pdb_path = ensure_pdb(cif_gz, run_dir)
+            pdb_path = ensure_pdb(cif_gz, ctx.args.run_dir)
             row: dict[str, Any] = {
                 PARENT_NAME: name,
                 "iteration": i,
                 "rfd3_batch": batch,
                 "rfd3_model": model,
-                status_col: "OK",
-                path_col: str(pdb_path),
+                ctx.status_col: "OK",
+                ctx.path_col: str(pdb_path),
             }
             row.update(_load_metadata(cif_gz.with_suffix("").with_suffix(".json")))
             updates[f"{name}_{i}"] = row

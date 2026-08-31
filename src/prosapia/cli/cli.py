@@ -86,7 +86,13 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
         collect_p = collect_tools.add_parser(
             name,
             help=tool.collect_description,
-            parents=[build_collect_parser(tool.metadata, tool.add_collect_args_fn)],
+            parents=[
+                build_collect_parser(
+                    tool.metadata,
+                    tool.default_input_column,
+                    tool.add_collect_args_fn,
+                )
+            ],
         )
         collect_p.set_defaults(
             _dispatch=lambda args, t=tool: collect_from_args(

@@ -16,19 +16,14 @@ from prosapia.core import CommonArgs, ManifestCtx
 
 
 def build_relax_manifest(ctx: ManifestCtx[CommonArgs]) -> list[tuple[str, ...]]:
-    df, args, out_dir = ctx.df, ctx.args, ctx.out_dir
     """Symmetric relax takes .symm paths as inputs and derives _INPUT.pdb
     paths next to each symm file by name"""
-    ready = df[df[args.input_column].notna() & (df[args.input_column] != "")]
-
-    output_status_col = f"{out_dir.name}_status"
-    if output_status_col in ready.columns:
-        ready = ready[ready[output_status_col] != "OK"]
+    ready = ctx.ready
 
     manifest_rows: list[tuple[str, ...]] = []
     for name in ready.index:
         # Columns to look for
-        symm_pdb_path = Path(ready.at[name, args.input_column])  # type: ignore
+        symm_pdb_path = Path(ready.at[name, ctx.args.input_column])  # type: ignore
         hairpin_length = int(ready.at[name, "hairpin_length"])  # type: ignore
 
         # Derived data

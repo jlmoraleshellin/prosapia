@@ -41,7 +41,6 @@ class USalignArgs(CommonArgs):
     col_b: str | None
     ref: str | None
     output_prefix: str | None
-    force: bool
 
 
 def _add_usalign_args(parser: ArgumentParser) -> None:
@@ -74,11 +73,6 @@ def _add_usalign_args(parser: ArgumentParser) -> None:
         help="Prefix for output columns and subdirectory. Defaults to "
         "'<col_a_stem>_vs_<col_b_stem>' (e.g. 'boltz_vs_openfold3').",
     )
-    parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Re-run USalign for designs that already have status OK.",
-    )
 
 
 def _resolve_prefix(args: USalignArgs) -> str:
@@ -94,27 +88,28 @@ def _resolve_prefix(args: USalignArgs) -> str:
 
 
 def build_usalign_manifest(ctx: ManifestCtx[USalignArgs]) -> list[tuple[str, ...]]:
-    df, args = ctx.df, ctx.args
-    args.gpus_per_task = 0
+    ctx.args.gpus_per_task = 0
 
-    if args.col_b is None and args.ref is None:
+    if ctx.args.col_b is None and ctx.args.ref is None:
         raise ValueError("Either --col-b or --ref must be provided.")
-    if args.col_b is not None and args.ref is not None:
+    if ctx.args.col_b is not None and ctx.args.ref is not None:
         raise ValueError("Cannot use both --col-b and --ref.")
 
-    col_a = args.col_a
-    prefix = _resolve_prefix(args)
+    col_a = ctx.args.col_a
+    prefix = _resolve_prefix(ctx.args)
 
-    ready = df[df[col_a].notna() & (df[col_a] != "")]
+    # USalign selects by --col-a (not --input-column), so it filters the frame
+    # itself rather than using ctx.ready; the resume skip mirrors ctx.ready.
+    ready = ctx.df[ctx.df[col_a].notna() & (ctx.df[col_a] != "")]
 
     status_col = f"{prefix}_status"
-    if args.force:
+    if ctx.args.force:
         print("Re-running USalign for all designs (including those with status OK).")
     elif status_col in ready.columns:
         ready = ready[ready[status_col] != "OK"]
 
-    ref_path = str(Path(args.ref).resolve()) if args.ref else None
-    col_b_label = "ref" if args.ref else cast(str, args.col_b)
+    ref_path = str(Path(ctx.args.ref).resolve()) if ctx.args.ref else None
+    col_b_label = "ref" if ctx.args.ref else cast(str, ctx.args.col_b)
 
     manifest_rows: list[tuple[str, ...]] = []
     for name in ready.index:
@@ -123,14 +118,14 @@ def build_usalign_manifest(ctx: ManifestCtx[USalignArgs]) -> list[tuple[str, ...
         if ref_path:
             src_b = Path(ref_path)
         else:
-            val = ctx.lookup(name, cast(str, args.col_b))
+            val = ctx.lookup(name, cast(str, ctx.args.col_b))
             if pd.isna(val) or str(val) == "":
                 continue  # no col_b structure on this row or its ancestors
             src_b = Path(str(val))
         # Stage CIF->PDB up front (cached under run_dir/.cif_to_pdb). A missing
         # input is passed through raw so the sbatch records it as an error.
-        pdb_a = ensure_pdb(src_a, args.run_dir) if src_a.exists() else src_a
-        pdb_b = ensure_pdb(src_b, args.run_dir) if src_b.exists() else src_b
+        pdb_a = ensure_pdb(src_a, ctx.args.run_dir) if src_a.exists() else src_a
+        pdb_b = ensure_pdb(src_b, ctx.args.run_dir) if src_b.exists() else src_b
         manifest_rows.append((name, str(pdb_a), str(pdb_b), col_a, col_b_label, prefix))
 
     return manifest_rows

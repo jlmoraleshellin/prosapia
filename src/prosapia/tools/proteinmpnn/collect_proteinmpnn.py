@@ -90,16 +90,10 @@ def parse_fasta(fasta_path: Path) -> List[Tuple[str, str]]:
 
 
 def collect_mpnn(ctx: CollectCtx) -> CollectResult:
-    args, mpnn_dir = ctx.args, ctx.out_dir
-
-    status_col = f"{mpnn_dir.name}_status"
-    path_col = f"{mpnn_dir.name}_path"
-    output_df = ctx.df
-
     # Each grp_<g>/ output dir holds seqs/<design>.fa, where the staged input was
     # symlinked as <design>.pdb -- so the FASTA stem IS the parent-db row name.
-    subdirs = sorted(p for p in mpnn_dir.iterdir() if p.is_dir())
-    print(f"Scanning {len(subdirs)} subdirectory(ies) in {mpnn_dir}")
+    subdirs = sorted(p for p in ctx.out_dir.iterdir() if p.is_dir())
+    print(f"Scanning {len(subdirs)} subdirectory(ies) in {ctx.out_dir}")
 
     updates: CollectResult = {}
     n_rows = 0
@@ -131,13 +125,19 @@ def collect_mpnn(ctx: CollectCtx) -> CollectResult:
             entries = parse_fasta(fasta_path)
 
             for i, (header, sequence) in enumerate(entries):
+                # entries[0] is ProteinMPNN's echo of the native input sequence
+                # (the old <parent>_f0). Skip it: only the sampled designs (_f1+)
+                # are real outputs, so downstream predictors need no _f0 guard.
+                if i == 0:
+                    continue
+
                 row_name = f"{parent_name}_f{i}"
 
                 if (
-                    not args.force
-                    and status_col in output_df.columns
-                    and row_name in output_df.index
-                    and output_df.at[row_name, status_col] == "OK"
+                    not ctx.args.force
+                    and ctx.status_col in ctx.df.columns
+                    and row_name in ctx.df.index
+                    and ctx.df.at[row_name, ctx.status_col] == "OK"
                 ):
                     n_skipped += 1
                     continue
@@ -145,8 +145,8 @@ def collect_mpnn(ctx: CollectCtx) -> CollectResult:
                 row: Dict[str, Any] = {
                     PARENT_NAME: parent_name,  # immediate parent row in parent_db
                     "iteration": i,
-                    status_col: "OK",
-                    path_col: str(fasta_path),
+                    ctx.status_col: "OK",
+                    ctx.path_col: str(fasta_path),
                     "sequence": sequence,
                 }
                 row.update(parse_mpnn_header(header))

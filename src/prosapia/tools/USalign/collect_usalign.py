@@ -76,11 +76,9 @@ def _resolve_prefix(args: USalignCollectArgs) -> str:
 
 
 def collect_usalign(ctx: CollectCtx) -> CollectResult:
-    df, args = ctx.df, ctx.args
-
     # The comparison prefix is the leaf *under* the USalign tool dir; it also
     # prefixes the columns (e.g. boltz_vs_openfold3_TM1).
-    prefix = _resolve_prefix(args)
+    prefix = _resolve_prefix(ctx.args)
     results_dir = ctx.out_dir / prefix
     if not results_dir.is_dir():
         raise FileNotFoundError(f"Results dir not found: {results_dir}")
@@ -107,11 +105,11 @@ def collect_usalign(ctx: CollectCtx) -> CollectResult:
         status = str(row_data["status"])
 
         if (
-            not args.force
-            and status_col in df.columns
-            and name in df.index
-            and not pd.isna(df.at[name, status_col])
-            and df.at[name, status_col] == "OK"
+            not ctx.args.force
+            and status_col in ctx.df.columns
+            and name in ctx.df.index
+            and not pd.isna(ctx.df.at[name, status_col])
+            and ctx.df.at[name, status_col] == "OK"
         ):
             n_skipped += 1
             continue

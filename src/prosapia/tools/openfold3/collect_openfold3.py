@@ -81,24 +81,15 @@ def load_metrics(json_path: Path) -> Dict[str, Any]:
 
 
 def collect_openfold3(ctx: CollectCtx) -> CollectResult:
-    df, of3_dir = ctx.df, ctx.out_dir
-
-    path_col = f"{of3_dir.name}_path"
-    status_col = f"{of3_dir.name}_status"
-
-    if df.empty:
+    if ctx.df.empty:
         raise RuntimeError(
             f"Database {ctx.args.database!r} is empty or missing in {ctx.args.run_dir}."
         )
 
-    ready = df[
-        df["sequence"].notna()
-        & (df["sequence"] != "")
-        & ~df.index.astype(str).str.endswith("_f0")
-    ]
+    ready = ctx.ready
 
-    if not ctx.args.force and path_col in df.columns:
-        existing = df.loc[ready.index, path_col]
+    if not ctx.args.force and ctx.path_col in ctx.df.columns:
+        existing = ctx.df.loc[ready.index, ctx.path_col]
         already_done = ready.index[existing.notna() & (existing != "")]
         if len(already_done) > 0:
             print(
@@ -109,7 +100,7 @@ def collect_openfold3(ctx: CollectCtx) -> CollectResult:
 
     # Build a map of design_name -> design_dir across all task directories.
     design_dirs: dict[str, Path] = {}
-    for task_dir in sorted(of3_dir.iterdir()):
+    for task_dir in sorted(ctx.out_dir.iterdir()):
         if not task_dir.is_dir() or not task_dir.name.startswith("task_"):
             continue
         for design_dir in task_dir.iterdir():
@@ -126,8 +117,8 @@ def collect_openfold3(ctx: CollectCtx) -> CollectResult:
 
         if design_dir is None:
             row: Dict[str, Any] = {
-                status_col: f"missing: no task dir for {design_name}",
-                path_col: pd.NA,
+                ctx.status_col: f"missing: no task dir for {design_name}",
+                ctx.path_col: pd.NA,
             }
             row.update({k: pd.NA for k in OPENFOLD3_METRICS})
             updates[design_name] = row
@@ -138,8 +129,8 @@ def collect_openfold3(ctx: CollectCtx) -> CollectResult:
 
         if json_path is None or cif_path is None:
             row = {
-                status_col: f"missing: no models in {design_dir}",
-                path_col: pd.NA,
+                ctx.status_col: f"missing: no models in {design_dir}",
+                ctx.path_col: pd.NA,
             }
             row.update({k: pd.NA for k in OPENFOLD3_METRICS})
             updates[design_name] = row
@@ -150,15 +141,15 @@ def collect_openfold3(ctx: CollectCtx) -> CollectResult:
             metrics = load_metrics(json_path)
         except (OSError, json.JSONDecodeError) as exc:
             row = {
-                status_col: f"error: {exc.__class__.__name__}: {exc}",
-                path_col: pd.NA,
+                ctx.status_col: f"error: {exc.__class__.__name__}: {exc}",
+                ctx.path_col: pd.NA,
             }
             row.update({k: pd.NA for k in OPENFOLD3_METRICS})
             updates[design_name] = row
             n_missing += 1
             continue
 
-        row = {status_col: "OK", path_col: str(cif_path)}
+        row = {ctx.status_col: "OK", ctx.path_col: str(cif_path)}
         row.update(metrics)
         updates[design_name] = row
         n_filled += 1

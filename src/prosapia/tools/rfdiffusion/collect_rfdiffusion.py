@@ -58,14 +58,8 @@ def _add_diffusion_args(parser: ArgumentParser) -> None:
 
 
 def collect_diffusion(ctx: CollectCtx) -> CollectResult:
-    out_dir = ctx.out_dir
-    num_designs = ctx.args.num_designs
-
-    status_col = f"{out_dir.name}_status"
-    path_col = f"{out_dir.name}_path"
-
-    parent_dirs = sorted(p for p in out_dir.iterdir() if p.is_dir())
-    print(f"Scanning {len(parent_dirs)} parent dir(s) in {out_dir}")
+    parent_dirs = sorted(p for p in ctx.out_dir.iterdir() if p.is_dir())
+    print(f"Scanning {len(parent_dirs)} parent dir(s) in {ctx.out_dir}")
 
     updates: CollectResult = {}
     n_ok = 0
@@ -84,14 +78,15 @@ def collect_diffusion(ctx: CollectCtx) -> CollectResult:
             # No success marker -- treat the whole parent as failed.
             n_failed_parents += 1
             print(
-                f"{name}: no {MARKER_FILENAME}, marking {num_designs} row(s) as error"
+                f"{name}: no {MARKER_FILENAME}, marking "
+                f"{ctx.args.num_designs} row(s) as error"
             )
-            for i in range(num_designs):
+            for i in range(ctx.args.num_designs):
                 updates[f"{name}_{i}"] = {
                     PARENT_NAME: name,
                     "iteration": i,
-                    status_col: "error: no marker",
-                    path_col: pd.NA,
+                    ctx.status_col: "error: no marker",
+                    ctx.path_col: pd.NA,
                 }
             continue
 
@@ -104,8 +99,8 @@ def collect_diffusion(ctx: CollectCtx) -> CollectResult:
             updates[f"{name}_{i}"] = {
                 PARENT_NAME: name,
                 "iteration": i,
-                status_col: "OK",
-                path_col: str(pdb_path),
+                ctx.status_col: "OK",
+                ctx.path_col: str(pdb_path),
             }
             n_ok += 1
 

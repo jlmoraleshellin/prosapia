@@ -179,30 +179,28 @@ def _cli_overrides(args: RFD3Args) -> str:
 
 
 def build_rfd3_manifest(ctx: ManifestCtx[RFD3Args]) -> list[tuple[str, ...]]:
-    df, args, out_dir = ctx.df, ctx.args, ctx.out_dir
-
-    ready = df[df[args.input_column].notna() & (df[args.input_column] != "")]
+    ready = ctx.ready
 
     specs: list[tuple[str, dict[str, Any]]] = []
     for name in ready.index:
         name = cast(str, name)
-        input_path = Path(str(ready.at[name, args.input_column])).resolve()
+        input_path = Path(str(ready.at[name, ctx.args.input_column])).resolve()
         if not input_path.exists():
             print(f"{name}: MISSING {input_path} (skipping)")
             continue
-        specs.append((name, _build_spec(input_path, args)))
+        specs.append((name, _build_spec(input_path, ctx.args)))
 
     if not specs:
         return []
 
-    shards_dir = out_dir / "rfd3_inputs"
+    shards_dir = ctx.out_dir / "rfd3_inputs"
     shards_dir.mkdir(parents=True, exist_ok=True)
 
-    overrides = _cli_overrides(args)
+    overrides = _cli_overrides(ctx.args)
     manifest_rows: list[tuple[str, ...]] = []
-    for i in range(0, len(specs), args.shard_size):
-        shard_idx = i // args.shard_size
-        chunk = dict(specs[i : i + args.shard_size])
+    for i in range(0, len(specs), ctx.args.shard_size):
+        shard_idx = i // ctx.args.shard_size
+        chunk = dict(specs[i : i + ctx.args.shard_size])
         shard_json = shards_dir / f"shard_{shard_idx}.json"
         shard_json.write_text(json.dumps(chunk, indent=2))
         manifest_rows.append((str(shard_json), overrides))

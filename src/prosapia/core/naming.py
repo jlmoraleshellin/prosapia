@@ -11,6 +11,8 @@ from argparse import (
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pandas as pd
+
 if TYPE_CHECKING:
     from .data_manager import Database
     from .tool import ToolMetadata
@@ -27,6 +29,30 @@ ROOT_PARENT = "root"
 def build_tool_leaf(tool: str, dir_label: str = "") -> str:
     """Leaf name for a tool's output dir and DB column prefix (``tool[_dir_label]``)."""
     return f"{tool}_{dir_label}" if dir_label else tool
+
+
+def status_column(leaf: str) -> str:
+    """The ``<leaf>_status`` column a tool writes/reads for a design's run state."""
+    return f"{leaf}_status"
+
+
+def path_column(leaf: str) -> str:
+    """The ``<leaf>_path`` column a tool writes/reads for a design's output path."""
+    return f"{leaf}_path"
+
+
+def filter_ready(df: pd.DataFrame, input_column: str) -> pd.DataFrame:
+    """Rows whose ``input_column`` is present (non-null, non-empty) -- the inputs a
+    run/collect should act on.
+
+    Defensive: an empty frame or a missing ``input_column`` yields ``df`` unchanged,
+    so root tools (empty source db) and tools that key off a different column never
+    crash on this shared filter.
+    """
+    if df.empty or input_column not in df.columns:
+        return df
+    col = df[input_column]
+    return df[col.notna() & (col != "")]
 
 
 def resolve_dir_name(

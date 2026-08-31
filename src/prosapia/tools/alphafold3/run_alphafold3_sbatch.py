@@ -95,32 +95,23 @@ def _add_af3_args(parser: ArgumentParser) -> None:
 
 
 def build_af3_manifest(ctx: ManifestCtx[AlphaFold3Args]):
-    df, args, out_dir, lookup = ctx.df, ctx.args, ctx.out_dir, ctx.lookup
-    json_dir = out_dir / "af3_inputs"
+    json_dir = ctx.out_dir / "af3_inputs"
     json_dir.mkdir(parents=True, exist_ok=True)
 
-    ready = df[
-        df[args.input_column].notna()
-        & (df[args.input_column] != "")
-        & ~df.index.astype(str).str.endswith("_f0")
-    ]
+    ready = ctx.ready
 
-    output_status_col = f"{out_dir.name}_status"
-    if output_status_col in ready.columns:
-        ready = ready[ready[output_status_col] != "OK"]
-
-    start_at_col: str | None = args.start_at_column
+    start_at_col: str | None = ctx.args.start_at_column
     if start_at_col and start_at_col.lower() == "none":
         start_at_col = None
 
     json_paths: list[Path] = []
     for name in ready.index:
         name = cast(str, name)
-        sequence = str(ready.at[name, args.input_column]).split("/", 1)[0]
+        sequence = str(ready.at[name, ctx.args.input_column]).split("/", 1)[0]
         if start_at_col:
             start_at = int(ready.at[name, start_at_col])  # type: ignore
             sequence = sequence[start_at:]
-        n_subunits = args.n_subunits or int(lookup(name, "n_subunits"))
+        n_subunits = ctx.args.n_subunits or int(ctx.lookup(name, "n_subunits"))
         chain_ids = list(string.ascii_uppercase[:n_subunits])
         json_path = json_dir / f"{name}.json"
         write_af3_json(
@@ -128,20 +119,20 @@ def build_af3_manifest(ctx: ManifestCtx[AlphaFold3Args]):
             name,
             sequence,
             chain_ids,
-            args.model_seeds,
-            no_msa=args.no_msa,
+            ctx.args.model_seeds,
+            no_msa=ctx.args.no_msa,
         )
         json_paths.append(json_path)
 
-    shards_dir = out_dir / "af3_shards"
+    shards_dir = ctx.out_dir / "af3_shards"
     shards_dir.mkdir(parents=True, exist_ok=True)
 
     manifest_rows: list[tuple[str, ...]] = []
-    for i in range(0, len(json_paths), args.shard_size):
-        shard_idx = i // args.shard_size
+    for i in range(0, len(json_paths), ctx.args.shard_size):
+        shard_idx = i // ctx.args.shard_size
         shard = shards_dir / f"shard_{shard_idx}"
         shard.mkdir(parents=True, exist_ok=True)
-        for json_path in json_paths[i : i + args.shard_size]:
+        for json_path in json_paths[i : i + ctx.args.shard_size]:
             copy2(json_path, shard / json_path.name)
         manifest_rows.append((str(shard),))
 
