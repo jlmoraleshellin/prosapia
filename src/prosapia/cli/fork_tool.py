@@ -76,7 +76,9 @@ def fork_from_args(args: argparse.Namespace) -> None:
     folders = _builtin_folders()
     if args.tool not in folders:
         available = ", ".join(sorted(folders))
-        raise SystemExit(f"Unknown built-in tool {args.tool!r}. Available: {available}.")
+        raise SystemExit(
+            f"Unknown built-in tool {args.tool!r}. Available: {available}."
+        )
 
     src = folders[args.tool]
     dest_base = args.tools_dir or _default_tools_dir()

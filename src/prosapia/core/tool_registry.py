@@ -7,6 +7,7 @@ from .tool import Tool
 
 BUILTIN_TOOLS_DIR = Path(__file__).parent.parent / "tools"
 
+
 def _load(spec_py: Path) -> Tool:
     """Load a tool's ``spec.py`` as a submodule of a synthetic package rooted at
     the tool folder, so ``spec.py`` can use relative imports (``from .run import
@@ -45,6 +46,7 @@ def discover(*tools_dirs: Path) -> dict[str, Tool]:
             if t := _load(f):
                 tools[t.name] = t
     return tools
+
 
 def get_builtin(tool_name: str) -> Tool:
     """Return the built-in tool with the given name, or raise KeyError."""

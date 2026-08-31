@@ -19,6 +19,7 @@ class ToolMetadata:
         """True when the tool reserves a new db (a child *or* a root)."""
         return self.action == "create"
 
+
 class ToolOverrides(TypedDict, total=False):
     name: str
     action: Action

@@ -80,7 +80,9 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
             ],
         )
         run_p.set_defaults(
-            _dispatch=lambda args, t=tool: run_from_args(t.metadata, t.build_manifest_fn, args)
+            _dispatch=lambda args, t=tool: run_from_args(
+                t.metadata, t.build_manifest_fn, args
+            )
         )
 
         collect_p = collect_tools.add_parser(

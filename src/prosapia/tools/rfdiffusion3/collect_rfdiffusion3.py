@@ -89,9 +89,7 @@ def collect_rfd3(ctx: CollectCtx) -> CollectResult:
 
         if not outputs:
             n_failed_parents += 1
-            print(
-                f"{name}: no outputs, marking {ctx.args.num_designs} row(s) as error"
-            )
+            print(f"{name}: no outputs, marking {ctx.args.num_designs} row(s) as error")
             for i in range(ctx.args.num_designs):
                 updates[f"{name}_{i}"] = {
                     PARENT_NAME: name,
