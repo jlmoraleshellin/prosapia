@@ -2,8 +2,8 @@ from pathlib import Path
 
 from prosapia.core import Tool
 
-from .collect_rfdiffusion3 import RFD3CollectArgs, _add_rfd3_collect_args, collect_rfd3
-from .run_rfdiffusion3_sbatch import RFD3Args, _add_rfd3_args, build_rfd3_manifest
+from .collect_rfdiffusion3 import _add_rfd3_collect_args, collect_rfd3
+from .run_rfdiffusion3_sbatch import _add_rfd3_args, build_rfd3_manifest
 
 TOOL = Tool(
     name="rfdiffusion3",
@@ -13,8 +13,6 @@ TOOL = Tool(
     default_input_column="relaxed_symm_path",
     build_manifest_fn=build_rfd3_manifest,
     add_run_args_fn=_add_rfd3_args,
-    run_args_type=RFD3Args,
     collect_fn=collect_rfd3,
     add_collect_args_fn=_add_rfd3_collect_args,
-    collect_args_type=RFD3CollectArgs,
 )

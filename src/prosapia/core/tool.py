@@ -1,8 +1,8 @@
 from dataclasses import dataclass, replace
 from typing import Callable, Literal, TypedDict, Unpack
 
-from .base_collect import CollectArgs, CollectFn
-from .base_sbatch import CommonArgs, BuildManifestFn
+from .base_collect import CollectFn
+from .base_sbatch import BuildManifestFn
 
 Action = Literal["create", "update"]
 
@@ -29,9 +29,7 @@ class ToolOverrides(TypedDict, total=False):
     build_manifest_fn: BuildManifestFn
     collect_fn: CollectFn
     add_run_args_fn: Callable | None
-    run_args_type: type
     add_collect_args_fn: Callable | None
-    collect_args_type: type
 
 
 @dataclass(frozen=True)
@@ -45,9 +43,7 @@ class Tool:
     collect_fn: CollectFn
     description: str = ""
     add_run_args_fn: Callable | None = None
-    run_args_type: type = CommonArgs
     add_collect_args_fn: Callable | None = None
-    collect_args_type: type = CollectArgs
 
     @property
     def metadata(self) -> ToolMetadata:

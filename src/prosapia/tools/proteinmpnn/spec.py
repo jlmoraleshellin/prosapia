@@ -2,7 +2,6 @@ from pathlib import Path
 
 from .collect_proteinmpnn import collect_mpnn
 from .run_proteinmpnn_sbatch import (
-    ProteinMPNNArgs,
     add_proteinmpnn_args,
     build_proteinmpnn_manifest,
 )
@@ -17,6 +16,5 @@ TOOL = Tool(
     default_input_column="diffused_path",
     build_manifest_fn=build_proteinmpnn_manifest,
     add_run_args_fn=add_proteinmpnn_args,
-    run_args_type=ProteinMPNNArgs,
     collect_fn=collect_mpnn,
 )
