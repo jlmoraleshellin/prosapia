@@ -84,8 +84,6 @@ def collect_boltz(ctx: CollectCtx) -> CollectResult:
             f"Database {ctx.args.database!r} is empty or missing in {ctx.args.run_dir}."
         )
 
-    ready = ctx.ready
-
     # Build a map of design_name -> prediction dir across all boltz_results_* dirs.
     prediction_dirs: dict[str, Path] = {}
     for results_dir in sorted(ctx.out_dir.glob("boltz_results_*")):
@@ -99,7 +97,7 @@ def collect_boltz(ctx: CollectCtx) -> CollectResult:
     updates: CollectResult = {}
     n_filled = 0
     n_missing = 0
-    for design_name in ready.index:
+    for design_name in ctx.ready.index:
         design_name = cast(str, design_name)
         json_path, cif_path, plddt_path = find_prediction_files(
             ctx.out_dir,
@@ -135,6 +133,6 @@ def collect_boltz(ctx: CollectCtx) -> CollectResult:
         n_filled += 1
 
     print(
-        f"Done. filled={n_filled}, missing={n_missing}, total_considered={len(ready)}"
+        f"Done. filled={n_filled}, missing={n_missing}, total_considered={len(ctx.ready)}"
     )
     return updates

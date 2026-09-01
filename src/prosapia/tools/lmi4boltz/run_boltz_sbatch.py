@@ -29,7 +29,7 @@ load_dotenv()  # Load environment variables from .env file
 # ------------ Boltz template config -----------------------------------------
 N_SUBUNITS = 11
 CHAIN_IDS = list("ABCDEFGHIJK")[:N_SUBUNITS]
-TEMPLATE_CIF = os.getenv("TEMPLATE_CIF", "data/7ojg.cif")  # set in .env
+TEMPLATE_CIF = os.getenv("TEMPLATE_CIF", "")  # set in .env
 TEMPLATE_THRESHOLD = os.getenv("TEMPLATE_THRESHOLD", 2.0)  # set in .env
 USE_MSA = os.getenv("USE_MSA", False)  # set in .env
 # -----------------------------------------------------------------------------
@@ -91,12 +91,10 @@ def build_boltz_manifest(ctx: ManifestCtx[BoltzArgs]):
     yaml_dir = ctx.out_dir / "boltz_inputs"
     yaml_dir.mkdir(parents=True, exist_ok=True)
 
-    ready = ctx.ready
-
     yaml_paths: list[Path] = []
-    for name in ready.index:
+    for name in ctx.ready.index:
         name = cast(str, name)
-        sequence = str(ready.at[name, ctx.args.input_column])
+        sequence = str(ctx.ready.at[name, ctx.args.input_column])
         yaml_path = yaml_dir / f"{name}.yml"
         write_boltz_yaml(yaml_path, sequence)
         yaml_paths.append(yaml_path)
