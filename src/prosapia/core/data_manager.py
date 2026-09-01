@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import pandas as pd
 
@@ -317,3 +317,23 @@ class DataManager:
                 return default
             seen.add(key)
             cur_df, cur_name = self.read_frame(str(parent_db)), str(parent_name)
+
+
+# Type alias for a lineage lookup function (row name + column -> value)
+# walking parent_db/parent_name. No write access to the DataManager is exposed.
+LookupFn = Callable[[str, str], Any]
+
+
+# FILTERING FUNCTIONS
+def filter_ready(df: pd.DataFrame, input_column: str) -> pd.DataFrame:
+    """Rows whose ``input_column`` is present (non-null, non-empty) -- the inputs a
+    run/collect should act on.
+
+    Defensive: an empty frame or a missing ``input_column`` yields ``df`` unchanged,
+    so root tools (empty source db) and tools that key off a different column never
+    crash on this shared filter.
+    """
+    if df.empty or input_column not in df.columns:
+        return df
+    col = df[input_column]
+    return df[col.notna() & (col != "")]

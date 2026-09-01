@@ -21,13 +21,12 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from .base_parser import base_parser
-from .data_manager import Database, DataManager
+from .data_manager import Database, DataManager, LookupFn, filter_ready
 from .naming import (
     GEN,
     PARENT_DB,
     PARENT_NAME,
     RUN_META_FILENAME,
-    filter_ready,
     path_column,
     resolve_dir_name,
     status_column,
@@ -52,7 +51,6 @@ AddArgsFn = Callable[[ArgumentParser], None]
 
 # COLLECT FUNCTION
 CollectResult = dict[str, dict[str, Any]]
-LookupFn = Callable[[str, str], Any]
 ArgsT = TypeVar("ArgsT", bound=CollectArgs)
 
 

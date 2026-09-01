@@ -15,7 +15,7 @@ import re
 
 import pandas as pd
 
-from ..core.base_sbatch import LookupFn
+from ..core.data_manager import LookupFn
 
 # ``{expr}`` islands inside a template string; the inner expression is resolved
 # per-design via resolve_expr and everything outside is left literal.

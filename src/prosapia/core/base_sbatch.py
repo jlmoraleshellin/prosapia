@@ -18,17 +18,16 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Generic, Sequence, TypeVar
+from typing import TYPE_CHECKING, Callable, Generic, Sequence, TypeVar
 
 import pandas as pd
 from dotenv import load_dotenv
 from pandas import DataFrame
 
 from .base_parser import base_parser
-from .data_manager import Database, DataManager, RegistryManager
+from .data_manager import Database, DataManager, LookupFn, RegistryManager, filter_ready
 from .naming import (
     RUN_META_FILENAME,
-    filter_ready,
     resolve_dir_name,
     status_column,
 )
@@ -235,10 +234,6 @@ def _get_filter_fn_from_module(module_path: Path) -> FilterFn:
 ## MANIFEST BUILDING AND SBATCH SUBMISSION
 ManifestRow = Sequence[str]
 AddArgsFn = Callable[[ArgumentParser], None]
-
-# Read-only lineage lookup handed to builders: lookup(name, column) -> value,
-# walking parent_db/parent_name. No write access to the DataManager is exposed.
-LookupFn = Callable[[str, str], Any]
 
 ArgsT = TypeVar("ArgsT", bound=CommonArgs)
 
