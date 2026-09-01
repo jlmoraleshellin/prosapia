@@ -25,7 +25,7 @@ GEN = "gen"  # generation depth (root = 0); per-row for concat
 # parent_db sentinel for a root database (no parent)
 ROOT_PARENT = "root"
 
-# Per-out_dir sidecar: records the run parameters 
+# Per-out_dir sidecar: records the run parameters
 # that aren't recoverable from the db itself
 RUN_META_FILENAME = ".meta.json"
 

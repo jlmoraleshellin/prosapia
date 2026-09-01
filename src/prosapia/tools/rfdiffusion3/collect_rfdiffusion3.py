@@ -77,8 +77,9 @@ def collect_rfd3(ctx: CollectCtx) -> CollectResult:
     results_dirs = sorted(d for d in ctx.out_dir.glob("results_*") if d.is_dir())
     print(f"Scanning {len(results_dirs)} results dir(s) in {ctx.out_dir}")
 
-    # Parent rows are the design keys we wrote into the shard JSONs.
-    parent_names = [cast(str, n) for n in ctx.parent_df.index]
+    # Parent rows are the design keys we wrote into the shard JSONs. ctx.ready
+    # drops parents with an NA input column (a create tool rebuilds from disk).
+    parent_names = [cast(str, n) for n in ctx.ready.index]
 
     updates: CollectResult = {}
     n_ok = 0

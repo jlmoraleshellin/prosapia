@@ -64,6 +64,47 @@ def test_collect_update_in_place(tmp_path, monkeypatch):
     assert out.at["r1", "score"] == 1.5
 
 
+def test_collect_update_ready_skips_already_ok(tmp_path, monkeypatch):
+    # An update collect resumes: ctx.ready drops rows already status=="OK", so the
+    # collect_fn only iterates pending rows (the former inline skip-guard, now in
+    # the framework).
+    dm = DataManager(tmp_path)
+    df = dm.read_frame("db0")
+    df = dm.update(df, "done", {"sequence": "AAA", "alphafold3_status": "OK"})
+    df = dm.update(df, "pending", {"sequence": "BBB"})
+    dm.write_frame("db0", df)
+    _make_out_dir(tmp_path, "db0", UPDATE.name)
+
+    seen = {}
+
+    def collect_fn(ctx: CollectCtx):
+        seen["ready"] = list(ctx.ready.index)
+        return {}
+
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-d", "db0"])
+    collect(metadata=UPDATE, collect_fn=collect_fn)
+    assert seen["ready"] == ["pending"]  # "done" was skipped
+
+
+def test_collect_update_ready_force_reincludes_ok(tmp_path, monkeypatch):
+    # --force bypasses the resume filter: every valid row is re-collected.
+    dm = DataManager(tmp_path)
+    df = dm.read_frame("db0")
+    df = dm.update(df, "done", {"sequence": "AAA", "alphafold3_status": "OK"})
+    dm.write_frame("db0", df)
+    _make_out_dir(tmp_path, "db0", UPDATE.name)
+
+    seen = {}
+
+    def collect_fn(ctx: CollectCtx):
+        seen["ready"] = list(ctx.ready.index)
+        return {}
+
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-d", "db0", "--force"])
+    collect(metadata=UPDATE, collect_fn=collect_fn)
+    assert seen["ready"] == ["done"]  # --force re-includes collected rows
+
+
 def _reserve_child(tmp_path):
     """Register a parent + child db and the child's output dir (as run would)."""
     dm = DataManager(tmp_path)

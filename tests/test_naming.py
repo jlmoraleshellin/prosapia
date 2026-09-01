@@ -2,9 +2,16 @@
 
 from argparse import Namespace
 
+import pandas as pd
 import pytest
 
-from prosapia.core import Database, ToolMetadata, build_tool_leaf, resolve_dir_name
+from prosapia.core import (
+    Database,
+    ToolMetadata,
+    build_tool_leaf,
+    drop_collected,
+    resolve_dir_name,
+)
 
 
 def test_tool_leaf():
@@ -59,3 +66,36 @@ def test_resolve_dir_name_must_exist_false(tmp_path):
         _args(tmp_path), db, ToolMetadata("alphafold3", "update"), must_exist=False
     )
     assert got == expected
+
+
+def _done_frame():
+    # Only "OK" counts as collected; NA/empty/other statuses stay pending.
+    ready = pd.DataFrame(index=["a", "b", "c", "d"])
+    src = pd.DataFrame(
+        {"leaf_status": ["OK", "error", pd.NA, "OK_no_pdb"]},
+        index=["a", "b", "c", "d"],
+    )
+    return ready, src
+
+
+def test_drop_collected_drops_only_ok():
+    ready, src = _done_frame()
+    assert list(drop_collected(ready, src, "leaf_status", False).index) == [
+        "b",
+        "c",
+        "d",
+    ]
+
+
+def test_drop_collected_force_keeps_all():
+    ready, src = _done_frame()
+    assert list(drop_collected(ready, src, "leaf_status", True).index) == list(
+        ready.index
+    )
+
+
+def test_drop_collected_missing_column_keeps_all():
+    ready, src = _done_frame()
+    assert list(drop_collected(ready, src, "absent_status", False).index) == list(
+        ready.index
+    )

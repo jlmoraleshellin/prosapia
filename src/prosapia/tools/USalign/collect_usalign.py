@@ -17,11 +17,11 @@ Usage:
 
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 import pandas as pd
 
-from prosapia.core import CollectArgs, CollectCtx, CollectResult
+from prosapia.core import CollectArgs, CollectCtx, CollectResult, drop_collected
 
 USALIGN_COLUMNS = ["TM1", "TM2", "RMSD", "ID1", "ID2", "IDali", "L1", "L2", "Lali"]
 
@@ -86,33 +86,32 @@ def collect_usalign(ctx: CollectCtx) -> CollectResult:
     status_col = f"{prefix}_status"
     sup_path_col = f"{prefix}_sup_path"
 
-    tsvs = sorted(results_dir.glob("*.tsv"))
-    print(f"Found {len(tsvs)} result file(s) in {results_dir}")
+    # USalign columns are prefix-keyed, not leaf-keyed (one leaf hosts several
+    # comparisons), so it can't use the plain ctx.ready done-filter -- apply the
+    # shared helper with the prefix status column. Each design writes <name>.tsv.
+    pending = drop_collected(ctx.ready, ctx.df, status_col, ctx.args.force)
 
     updates: CollectResult = {}
     n_ok = 0
     n_err = 0
-    n_skipped = 0
 
-    for tsv_path in tsvs:
+    for name in pending.index:
+        name = cast(str, name)
+        tsv_path = results_dir / f"{name}.tsv"
+
+        if not tsv_path.is_file():
+            updates[name] = {status_col: "missing"}
+            n_err += 1
+            continue
+
         result_df = pd.read_csv(tsv_path, sep="\t")
         if result_df.empty:
+            updates[name] = {status_col: "error: empty tsv"}
             n_err += 1
             continue
 
         row_data = result_df.iloc[0]
-        name = str(row_data["name"])
         status = str(row_data["status"])
-
-        if (
-            not ctx.args.force
-            and status_col in ctx.df.columns
-            and name in ctx.df.index
-            and not pd.isna(ctx.df.at[name, status_col])
-            and ctx.df.at[name, status_col] == "OK"
-        ):
-            n_skipped += 1
-            continue
 
         update: Dict[str, Any] = {status_col: status}
 
@@ -130,6 +129,5 @@ def collect_usalign(ctx: CollectCtx) -> CollectResult:
 
         updates[name] = update
 
-    skipped_msg = f", skipped={n_skipped}" if n_skipped else ""
-    print(f"Done. ok={n_ok}, errors={n_err}{skipped_msg}")
+    print(f"Done. ok={n_ok}, errors={n_err}")
     return updates

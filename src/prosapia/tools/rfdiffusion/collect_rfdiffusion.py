@@ -18,6 +18,7 @@ Usage:
 import re
 from argparse import ArgumentParser
 from pathlib import Path
+from typing import cast
 
 import pandas as pd
 
@@ -58,21 +59,17 @@ def _add_diffusion_args(parser: ArgumentParser) -> None:
 
 
 def collect_diffusion(ctx: CollectCtx) -> CollectResult:
-    parent_dirs = sorted(p for p in ctx.out_dir.iterdir() if p.is_dir())
-    print(f"Scanning {len(parent_dirs)} parent dir(s) in {ctx.out_dir}")
-
     updates: CollectResult = {}
     n_ok = 0
     n_failed_parents = 0
 
-    for parent_dir in parent_dirs:
-        name = parent_dir.name  # the parent row (a design in the input db)
+    # rfdiffusion is a create tool: iterate the ready parents and rebuild child
+    # rows from each parent's on-disk output dir (out_dir/<name>/). A parent with
+    # no dir/marker is marked failed, like a parent whose run produced no marker.
+    for name in ctx.ready.index:
+        name = cast(str, name)  # the parent row (a design in the input db)
+        parent_dir = ctx.out_dir / name
         marker = parent_dir / MARKER_FILENAME
-
-        # Skip the driver's own scratch dirs: the SLURM log dir (named
-        # "<sbatch_stem>_logs") and the sub-manifest task dir.
-        if name.endswith("_logs") or name == "diffusion_tasks":
-            continue
 
         if not marker.exists():
             # No success marker -- treat the whole parent as failed.

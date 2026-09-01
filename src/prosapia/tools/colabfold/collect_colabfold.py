@@ -93,16 +93,6 @@ def collect_colabfold(ctx: CollectCtx) -> CollectResult:
 
     ready = ctx.ready
 
-    if not ctx.args.force and ctx.path_col in ctx.df.columns:
-        existing = ctx.df.loc[ready.index, ctx.path_col]
-        already_done = ready.index[existing.notna() & (existing != "")]
-        if len(already_done) > 0:
-            print(
-                f"Skipping {len(already_done)} already-collected design(s) "
-                f"(use --force to re-collect)"
-            )
-            ready = ready.drop(already_done)
-
     design_files = _build_design_file_map(ctx.out_dir)
 
     updates: CollectResult = {}

@@ -85,10 +85,8 @@ class CollectCtx(Generic[ArgsT]):
 
     @property
     def ready(self) -> pd.DataFrame:
-        """The designs to collect for: rows with a present input column.
-
-        The input column is read from the run's sidecar; read from ``default_input_column`` when absent.
-        The column lives in the source frame the run used: parent_db for a create tool, else this db.
+        """The designs a collect should iterate over. Create-collect uses the parent db's ready designs,
+        update-collect uses this db's ready designs. A design is ready when it has a present input column.
         """
         meta = self._meta()
         col = (
@@ -97,10 +95,31 @@ class CollectCtx(Generic[ArgsT]):
             else self.default_input_column
         )
         frame = self.parent_df if self.creates_db else self.df
-        return filter_ready(frame, col)
+        ready = filter_ready(frame, col)
+        if self.creates_db:
+            return ready
+        return drop_collected(ready, self.df, self.status_col, self.args.force)
 
 
 CollectFn = Callable[[CollectCtx[ArgsT]], CollectResult]
+
+
+def drop_collected(
+    ready_df: pd.DataFrame,
+    source_df: pd.DataFrame,
+    status_col: str,
+    force: bool,
+) -> pd.DataFrame:
+    """Rows of ``ready_df`` not yet successfully collected.
+
+    A row is done when ``source_df[status_col] == "OK"``. ``force`` bypasses the
+    filter (re-collect everything); a missing ``status_col`` (first collect) also
+    yields ``ready_df`` unchanged.
+    """
+    if force or status_col not in source_df.columns:
+        return ready_df
+    done = source_df.index[source_df[status_col] == "OK"]
+    return ready_df.drop(ready_df.index.intersection(done))
 
 
 def _add_collect_args(parser: ArgumentParser) -> None:

@@ -76,7 +76,8 @@ def collect_relax(ctx: CollectCtx) -> CollectResult:
 
     score_by_name: Dict[str, Path] = {}
     pdb_by_name: Dict[str, Path] = {}
-    candidate_names = [cast(str, name) for name in ctx.df.index]
+    # ctx.ready already drops already-OK rows (unless --force) and NA-input rows.
+    candidate_names = [cast(str, name) for name in ctx.ready.index]
 
     for name in candidate_names:
         for f in all_score_files:

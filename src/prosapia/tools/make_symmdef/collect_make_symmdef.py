@@ -11,6 +11,8 @@ Usage:
         --database db1_..._assembled
 """
 
+from typing import cast
+
 import pandas as pd
 
 from prosapia.core import CollectCtx, CollectResult
@@ -19,33 +21,29 @@ from prosapia.core import CollectCtx, CollectResult
 def collect_make_symmdef(ctx: CollectCtx) -> CollectResult:
     # Columns are keyed by the tool leaf (make_symmdef[_<dir_label>]); variants
     # are distinguished via --dir-label, matching the output dir.
-    tsvs = sorted(ctx.out_dir.glob("*.tsv"))
-    print(f"Found {len(tsvs)} result file(s) in {ctx.out_dir}")
-
     updates: CollectResult = {}
     n_ok = 0
     n_err = 0
-    n_skipped = 0
 
-    for tsv_path in tsvs:
+    # ctx.ready is the set of designs still to collect (already-OK rows are
+    # dropped unless --force); each writes a one-row <name>.tsv.
+    for name in ctx.ready.index:
+        name = cast(str, name)
+        tsv_path = ctx.out_dir / f"{name}.tsv"
+
+        if not tsv_path.is_file():
+            updates[name] = {ctx.status_col: "missing", ctx.path_col: ""}
+            n_err += 1
+            continue
+
         result_df = pd.read_csv(tsv_path, sep="\t")
         if result_df.empty:
+            updates[name] = {ctx.status_col: "error: empty tsv", ctx.path_col: ""}
             n_err += 1
             continue
 
         row_data = result_df.iloc[0]
-        name = str(row_data["name"])
         status = str(row_data["status"])
-
-        if (
-            not ctx.args.force
-            and ctx.status_col in ctx.df.columns
-            and name in ctx.df.index
-            and not pd.isna(ctx.df.at[name, ctx.status_col])
-            and ctx.df.at[name, ctx.status_col] == "OK"
-        ):
-            n_skipped += 1
-            continue
 
         if status == "OK":
             symm_path = row_data["symm_path"]
@@ -58,6 +56,5 @@ def collect_make_symmdef(ctx: CollectCtx) -> CollectResult:
             updates[name] = {ctx.status_col: status, ctx.path_col: ""}
             n_err += 1
 
-    skipped_msg = f", skipped={n_skipped}" if n_skipped else ""
-    print(f"Done. ok={n_ok}, errors={n_err}{skipped_msg}")
+    print(f"Done. ok={n_ok}, errors={n_err}")
     return updates
