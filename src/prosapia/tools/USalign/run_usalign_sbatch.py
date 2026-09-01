@@ -33,7 +33,8 @@ from typing import cast
 
 import pandas as pd
 
-from prosapia.core import CommonArgs, ManifestCtx, ensure_pdb
+from prosapia.core import CommonArgs, ManifestCtx
+from prosapia.utils import ensure_pdb
 
 
 class USalignArgs(CommonArgs):

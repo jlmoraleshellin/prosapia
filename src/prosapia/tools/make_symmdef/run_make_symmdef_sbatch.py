@@ -18,8 +18,8 @@ from typing import cast
 from prosapia.core import (
     CommonArgs,
     ManifestCtx,
-    ensure_pdb,
 )
+from prosapia.utils import ensure_pdb
 
 
 def build_make_symmdef_manifest(

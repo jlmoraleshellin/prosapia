@@ -74,9 +74,8 @@ from prosapia.core import (
     CommonArgs,
     LookupFn,
     ManifestCtx,
-    ensure_pdb,
-    resolve_template,
 )
+from prosapia.utils import ensure_pdb, resolve_template
 
 
 class ProteinMPNNArgs(CommonArgs):

@@ -2,7 +2,7 @@
 
 import pytest
 
-from prosapia.core import resolve_expr, resolve_template
+from prosapia.utils import resolve_expr, resolve_template
 
 # Stub lineage lookup: (name, column) -> value.
 _COLUMNS = {"hairpin_length": 30, "prebundle_length": 12, "frac": 2.5, "empty": None}

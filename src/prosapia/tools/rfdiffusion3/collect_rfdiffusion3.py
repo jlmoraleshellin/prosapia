@@ -26,13 +26,8 @@ from typing import Any, cast
 
 import pandas as pd
 
-from prosapia.core import (
-    PARENT_NAME,
-    CollectArgs,
-    CollectCtx,
-    CollectResult,
-    ensure_pdb,
-)
+from prosapia.core import PARENT_NAME, CollectArgs, CollectCtx, CollectResult
+from prosapia.utils import ensure_pdb
 
 # Metadata keys pulled from the per-design sidecar JSON when present.
 RFD3_METADATA_KEYS = ["ca_rmsd_to_input"]

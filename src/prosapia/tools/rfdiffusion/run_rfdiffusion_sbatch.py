@@ -8,7 +8,7 @@ keeps it general: symmetric or not, partial or full diffusion.
 
 Contigs are authored in RFdiffusion's native contig syntax, with ``{expr}``
 placeholders resolved per-design against the database lineage (integers, bare
-column names, and + - * // arithmetic; see pipeline_core.resolve_expr):
+column names, and + - * // arithmetic; see resolve_expr):
 
     --contigs '[A1-{prebundle_length}/0 B1-{prebundle_length}/0]'
     --contigs '{prepend_len},A1-{motif_end-1}'
@@ -49,7 +49,8 @@ from typing import Callable, cast
 
 import gemmi
 
-from prosapia.core import CommonArgs, ManifestCtx, resolve_template
+from prosapia.core import CommonArgs, ManifestCtx
+from prosapia.utils import resolve_template
 
 # A fixed contig segment references an input chain: an uppercase chain letter
 # immediately followed by a residue number (e.g. A1-108). Diffused segments
