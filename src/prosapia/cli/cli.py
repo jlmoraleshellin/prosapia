@@ -91,7 +91,6 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
             parents=[
                 build_collect_parser(
                     tool.metadata,
-                    tool.default_input_column,
                     tool.add_collect_args_fn,
                 )
             ],

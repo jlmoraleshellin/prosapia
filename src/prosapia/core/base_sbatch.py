@@ -1,5 +1,5 @@
 # PYTHON_ARGCOMPLETE_OK
-"""Generic SLURM array submission (``submit_sbatch_array``).
+"""Generic SLURM array submission.
 
 Every batch-submission script delegates here, supplying a ``build_manifest_fn``
 (filters the db, returns one manifest row per array task) and optionally an
@@ -10,10 +10,12 @@ Every batch-submission script delegates here, supplying a ``build_manifest_fn``
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import subprocess
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Generic, Sequence, TypeVar
@@ -24,7 +26,12 @@ from pandas import DataFrame
 
 from .base_parser import base_parser
 from .data_manager import Database, DataManager, RegistryManager
-from .naming import filter_ready, resolve_dir_name, status_column
+from .naming import (
+    RUN_META_FILENAME,
+    filter_ready,
+    resolve_dir_name,
+    status_column,
+)
 
 if TYPE_CHECKING:
     from .tool import ToolMetadata
@@ -299,6 +306,18 @@ def _write_manifest(path: Path, rows: Sequence[ManifestRow]) -> None:
             f.write("\t".join(str(v) for v in row) + "\n")
 
 
+def write_run_meta(out_dir: Path, metadata: ToolMetadata, args: CommonArgs) -> None:
+    """Record this run's parameters into the out_dir sidecar"""
+    meta = {
+        "tool": metadata.name,
+        "input_column": args.input_column,
+        "dir_label": args.dir_label,
+        "filter": str(args.filter) if args.filter else None,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    (out_dir / RUN_META_FILENAME).write_text(json.dumps(meta, indent=2))
+
+
 def _submit_array(
     args: CommonArgs,
     manifest: Path,
@@ -431,9 +450,7 @@ def run_from_args(
     args: ArgsT,
 ) -> None:
     """Execute a run from already-parsed args (shared by standalone and ``sapia``)."""
-    # Only new_run_dir mints run dirs. Guard here because resolve_output_db writes
-    # the registry TSV before any dir is created, so a missing run_dir would
-    # otherwise fail cryptically deep inside the backend write.
+    # Only new_run_dir mints run dirs.
     if not args.run_dir.is_dir():
         raise FileNotFoundError(
             f"run_dir {args.run_dir} does not exist. Create one first: "
@@ -456,6 +473,8 @@ def run_from_args(
         log_dir = out_dir / f"{args.sbatch_script.stem}_logs"
         out_dir.mkdir(parents=True, exist_ok=True)
         log_dir.mkdir(parents=True, exist_ok=True)
+
+        write_run_meta(out_dir, metadata, args)
 
         # A root tool has no source db: give an empty frame (for type security).
         df = read_frame(src_db) if src_db else pd.DataFrame()

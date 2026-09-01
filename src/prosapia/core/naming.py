@@ -25,6 +25,10 @@ GEN = "gen"  # generation depth (root = 0); per-row for concat
 # parent_db sentinel for a root database (no parent)
 ROOT_PARENT = "root"
 
+# Per-out_dir sidecar: records the run parameters 
+# that aren't recoverable from the db itself
+RUN_META_FILENAME = ".meta.json"
+
 
 def build_tool_leaf(tool: str, dir_label: str = "") -> str:
     """Leaf name for a tool's output dir and DB column prefix (``tool[_dir_label]``)."""

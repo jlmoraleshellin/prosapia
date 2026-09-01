@@ -13,6 +13,7 @@ class ToolMetadata:
     action: Action
     run_description: str = ""
     collect_description: str = ""
+    default_input_column: str = ""
 
     @property
     def creates_db(self) -> bool:
@@ -59,6 +60,7 @@ class Tool:
             self.action,
             self.run_description,
             self.collect_description,
+            self.default_input_column,
         )
 
     def with_overrides(self, **overrides: Unpack[ToolOverrides]) -> "Tool":

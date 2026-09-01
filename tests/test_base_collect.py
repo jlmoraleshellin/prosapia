@@ -30,7 +30,7 @@ CREATE = ToolMetadata("diffused", "create")
 def collect(metadata, collect_fn, add_extra_args_fn=None, args_type=CollectArgs):
     """Parse argv and run, mirroring the former ``collect`` wrapper (now split into
     ``build_collect_parser`` + ``collect_from_args``, composed by the ``sapia`` CLI)."""
-    parser = build_collect_parser(metadata, "sequence", add_extra_args_fn)
+    parser = build_collect_parser(metadata, add_extra_args_fn)
     args = parser.parse_args(namespace=args_type())
     collect_from_args(metadata, collect_fn, args)
 
