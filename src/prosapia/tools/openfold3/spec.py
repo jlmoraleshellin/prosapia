@@ -12,8 +12,7 @@ from .run_openfold3_sbatch import (
 TOOL = Tool(
     name="openfold3",
     action="update",
-    run_description="Run OpenFold3 predictions on MPNN-designed sequences.",
-    collect_description="Collect OpenFold3 predictions into the database.",
+    description="Run OpenFold3 predictions.",
     default_sbatch=str(Path(__file__).parent / "openfold3.sbatch"),
     default_input_column="sequence",
     build_manifest_fn=build_openfold3_manifest,

@@ -3,7 +3,6 @@ from .base_collect import (  # noqa: F401
     CollectCtx,
     CollectResult,
     build_collect_parser,
-    collect_argparser,
     collect_from_args,
     drop_collected,
 )
@@ -14,7 +13,6 @@ from .base_sbatch import (  # noqa: F401
     build_run_parser,
     resolve_output_db,
     run_from_args,
-    sbatch_argparser,
 )
 from .data_manager import (  # noqa: F401
     Database,

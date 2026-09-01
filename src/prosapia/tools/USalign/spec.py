@@ -12,8 +12,7 @@ from .run_usalign_sbatch import (
 TOOL = Tool(
     name="USalign",
     action="update",
-    run_description="Submit a SLURM array to compare structures using USalign.",
-    collect_description="Collect USalign comparison results into the database.",
+    description="Compare structures using USalign.",
     default_sbatch=str(Path(__file__).parent / "usalign.sbatch"),
     default_input_column="not applicable",
     build_manifest_fn=build_usalign_manifest,

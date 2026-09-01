@@ -8,8 +8,7 @@ from .run_boltz_sbatch import BoltzArgs, _add_boltz_args, build_boltz_manifest
 TOOL = Tool(
     name="boltz",
     action="update",
-    run_description="Submit a SLURM array to predict sequences listed in the DB.",
-    collect_description="Collect boltz predictions into the database.",
+    description="Run Boltz structure predictions",
     default_sbatch=str(Path(__file__).parent / "boltz.sbatch"),
     default_input_column="sequence",
     build_manifest_fn=build_boltz_manifest,

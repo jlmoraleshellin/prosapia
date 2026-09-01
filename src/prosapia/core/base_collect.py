@@ -141,14 +141,6 @@ def _add_collect_args(parser: ArgumentParser) -> None:
     )
 
 
-def collect_argparser(description: str) -> ArgumentParser:
-    """Parser shared by all collectors (``--database`` + ``--dir-label`` +
-    ``--force``)."""
-    parser = ArgumentParser(parents=[base_parser()], description=description)
-    _add_collect_args(parser)
-    return parser
-
-
 def build_collect_parser(
     metadata: "ToolMetadata",
     add_extra_args_fn: AddArgsFn | None = None,

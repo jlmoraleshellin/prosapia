@@ -16,8 +16,7 @@ from .run_rfdiffusion_sbatch import (
 TOOL = Tool(
     name="rfdiffusion",
     action="create",
-    run_description="Submit a SLURM array to run RFdiffusion.",
-    collect_description="Collect RFdiffusion outputs into the diffusion db.",
+    description="Run RFdiffusion.",
     default_sbatch=str(Path(__file__).parent / "rfdiffusion.sbatch"),
     default_input_column="relaxed_symm_path",
     build_manifest_fn=build_rfdiff_manifest,

@@ -8,8 +8,7 @@ from .run_make_symmdef_sbatch import build_make_symmdef_manifest
 TOOL = Tool(
     name="symmdef",
     action="update",
-    run_description="Submit a SLURM array to make symmetry definitions.",
-    collect_description="Collect symmdef files into the database.",
+    description="Make symmetry definition files.",
     default_sbatch=str(Path(__file__).parent / "symmdef.sbatch"),
     default_input_column="assembled_path",
     build_manifest_fn=build_make_symmdef_manifest,

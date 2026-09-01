@@ -145,20 +145,6 @@ def _add_sbatch_args(
     )
 
 
-def sbatch_argparser(
-    description: str,
-    default_sbatch: str,
-    default_input_column: str,
-    require_database: bool = True,
-) -> ArgumentParser:
-    parser = ArgumentParser(
-        parents=[base_parser(require_database=require_database)],
-        description=description,
-    )
-    _add_sbatch_args(parser, default_sbatch, default_input_column)
-    return parser
-
-
 def build_run_parser(
     metadata: "ToolMetadata",
     default_sbatch: str,

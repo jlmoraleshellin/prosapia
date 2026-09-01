@@ -12,8 +12,7 @@ from prosapia.core import Tool
 TOOL = Tool(
     name="mpnn_seqs",
     action="create",
-    run_description="Run ProteinMPNN on a set of input PDBs.",
-    collect_description="Collect ProteinMPNN-designed sequences into the database.",
+    description="Run ProteinMPNN on a set of input PDBs.",
     default_sbatch=str(Path(__file__).parent / "run_proteinmpnn.sbatch"),
     default_input_column="diffused_path",
     build_manifest_fn=build_proteinmpnn_manifest,

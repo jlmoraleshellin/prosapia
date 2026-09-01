@@ -69,7 +69,8 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
     for name, tool in sorted(tools.items()):
         run_p = run_tools.add_parser(
             name,
-            help=tool.run_description,
+            help=tool.description,
+            description=tool.description,
             parents=[
                 build_run_parser(
                     tool.metadata,
@@ -87,7 +88,8 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
 
         collect_p = collect_tools.add_parser(
             name,
-            help=tool.collect_description,
+            help=tool.description,
+            description=tool.description,
             parents=[
                 build_collect_parser(
                     tool.metadata,

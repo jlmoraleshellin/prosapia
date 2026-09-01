@@ -12,8 +12,7 @@ from .run_colabfold_sbatch import (
 TOOL = Tool(
     name="colabfold",
     action="update",
-    run_description="Submit a SLURM array to run ColabFold predictions.",
-    collect_description="Collect ColabFold predictions into the database.",
+    description="Run ColabFold structure predictions.",
     default_sbatch=str(Path(__file__).parent / "colabfold.sbatch"),
     default_input_column="sequence",
     build_manifest_fn=build_colabfold_manifest,

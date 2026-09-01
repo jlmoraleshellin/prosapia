@@ -8,8 +8,7 @@ from .run_rfdiffusion3_sbatch import RFD3Args, _add_rfd3_args, build_rfd3_manife
 TOOL = Tool(
     name="rfdiffusion3",
     action="create",
-    run_description="Submit a SLURM array to run RFdiffusion3 symmetric motif scaffolding.",
-    collect_description="Collect RFdiffusion3 outputs into the diffusion db.",
+    description="Run RFdiffusion3 symmetric motif scaffolding.",
     default_sbatch=str(Path(__file__).parent / "rfdiffusion3.sbatch"),
     default_input_column="relaxed_symm_path",
     build_manifest_fn=build_rfd3_manifest,
