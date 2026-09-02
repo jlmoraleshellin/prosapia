@@ -14,10 +14,12 @@ from prosapia.core import (
     GEN,
     PARENT_DB,
     PARENT_NAME,
+    Collected,
     CollectArgs,
     CollectCtx,
     Database,
     DataManager,
+    DesignCtx,
     ToolMetadata,
     build_collect_parser,
     collect_from_args,
@@ -52,9 +54,12 @@ def test_collect_update_in_place(tmp_path, monkeypatch):
     def collect_fn(ctx: CollectCtx):
         assert ctx.parent_db is None  # not registered -> no parent edge
         assert ctx.parent_df.empty
-        return {
-            name: {"alphafold3_status": "OK", "score": 1.5} for name in ctx.df.index
-        }
+
+        def one(d: DesignCtx):
+            # status defaults to "OK" -> <leaf>_status; extra columns via data.
+            yield Collected(data={"score": 1.5})
+
+        return one
 
     monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-d", "db0"])
     collect(metadata=UPDATE, collect_fn=collect_fn)
@@ -79,7 +84,7 @@ def test_collect_update_ready_skips_already_ok(tmp_path, monkeypatch):
 
     def collect_fn(ctx: CollectCtx):
         seen["ready"] = list(ctx.ready.index)
-        return {}
+        return lambda d: ()  # emit nothing
 
     monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-d", "db0"])
     collect(metadata=UPDATE, collect_fn=collect_fn)
@@ -98,7 +103,7 @@ def test_collect_update_ready_force_reincludes_ok(tmp_path, monkeypatch):
 
     def collect_fn(ctx: CollectCtx):
         seen["ready"] = list(ctx.ready.index)
-        return {}
+        return lambda d: ()  # emit nothing
 
     monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-d", "db0", "--force"])
     collect(metadata=UPDATE, collect_fn=collect_fn)
@@ -137,8 +142,13 @@ def test_collect_create_fills_child_and_stamps_lineage(tmp_path, monkeypatch):
         seen["parent_db"] = ctx.parent_db
         seen["has_S0"] = "S0" in ctx.parent_df.index
         seen["out_dir"] = ctx.out_dir
-        # per-row parent name is the collect_fn's job; the framework stamps the rest.
-        return {"S0_d0": {"sequence": "CCC", PARENT_NAME: "S0"}}
+
+        def one(d: DesignCtx):
+            # A create tool mints a child row and names its parent; the framework
+            # stamps parent_db/gen and validates the parent edge.
+            yield Collected(name=f"{d.name}_d0", parent=d.name, data={"sequence": "CCC"})
+
+        return one
 
     monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-d", child])
     collect(metadata=CREATE, collect_fn=collect_fn)
@@ -159,10 +169,14 @@ def test_collect_create_requires_resolvable_parent_name(tmp_path, monkeypatch):
     child = _reserve_child(tmp_path)
 
     def missing(ctx: CollectCtx):
-        return {"S0_d0": {"sequence": "CCC"}}  # no PARENT_NAME
+        # no parent -> no parent_name stamped on the row
+        return lambda d: [Collected(name=f"{d.name}_d0", data={"sequence": "CCC"})]
 
     def unknown(ctx: CollectCtx):
-        return {"S0_d0": {"sequence": "CCC", PARENT_NAME: "ZZZ"}}  # not in parent db
+        # parent not present in the parent db
+        return lambda d: [
+            Collected(name=f"{d.name}_d0", parent="ZZZ", data={"sequence": "CCC"})
+        ]
 
     for fn in (missing, unknown):
         monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-d", child])
@@ -177,7 +191,8 @@ def test_collect_update_warns_on_new_row(tmp_path, monkeypatch, capsys):
     _make_out_dir(tmp_path, "db0", UPDATE.name)
 
     def collect_fn(ctx: CollectCtx):
-        return {"rNEW": {"alphafold3_status": "OK"}}  # not already in the db
+        # a row keyed to a name not already in the db (name override)
+        return lambda d: [Collected(name="rNEW")]
 
     monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-d", "db0"])
     collect(metadata=UPDATE, collect_fn=collect_fn)
@@ -196,4 +211,71 @@ def test_collect_requires_output_dir(tmp_path, monkeypatch):
 
     monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-d", "db0"])
     with pytest.raises(FileNotFoundError):
-        collect(metadata=UPDATE, collect_fn=lambda ctx: {})
+        collect(metadata=UPDATE, collect_fn=lambda ctx: (lambda d: []))
+
+
+def test_by_design_stamps_path_and_status(tmp_path, monkeypatch):
+    # A Collected's path/status land in the leaf-keyed <leaf>_path / <leaf>_status
+    # columns; data lands as-is.
+    dm = DataManager(tmp_path)
+    dm.write_frame("db0", dm.update(dm.read_frame("db0"), "r1", {"sequence": "AAA"}))
+    _make_out_dir(tmp_path, "db0", UPDATE.name)
+    model = tmp_path / "r1_model.cif"
+
+    def collect_fn(ctx: CollectCtx):
+        return lambda d: [Collected(path=model, data={"ptm": 0.9})]
+
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-d", "db0"])
+    collect(metadata=UPDATE, collect_fn=collect_fn)
+
+    out = DataManager(tmp_path).read_frame("db0")
+    assert out.at["r1", "alphafold3_status"] == "OK"
+    assert out.at["r1", "alphafold3_path"] == str(model)
+    assert out.at["r1", "ptm"] == 0.9
+
+
+def test_by_design_status_none_suppresses_leaf_status(tmp_path, monkeypatch):
+    # status=None: the tool owns all its columns via data (e.g. prefix-keyed
+    # comparison columns), and no <leaf>_status column is written.
+    dm = DataManager(tmp_path)
+    dm.write_frame("db0", dm.update(dm.read_frame("db0"), "r1", {"sequence": "AAA"}))
+    _make_out_dir(tmp_path, "db0", UPDATE.name)
+
+    def collect_fn(ctx: CollectCtx):
+        return lambda d: [
+            Collected(status=None, data={"cmp_status": "OK", "cmp_TM1": 0.87})
+        ]
+
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-d", "db0"])
+    collect(metadata=UPDATE, collect_fn=collect_fn)
+
+    out = DataManager(tmp_path).read_frame("db0")
+    assert "alphafold3_status" not in out.columns  # suppressed
+    assert out.at["r1", "cmp_status"] == "OK"
+    assert out.at["r1", "cmp_TM1"] == 0.87
+
+
+def test_by_design_create_mints_multiple_children(tmp_path, monkeypatch):
+    # A create tool can yield several child rows per ready parent; each gets its
+    # parent_name, and the framework stamps parent_db/gen on all of them.
+    child = _reserve_child(tmp_path)
+
+    def collect_fn(ctx: CollectCtx):
+        def one(d: DesignCtx):
+            for i in range(2):
+                yield Collected(
+                    name=f"{d.name}_d{i}", parent=d.name, data={"iteration": i}
+                )
+
+        return one
+
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-d", child])
+    collect(metadata=CREATE, collect_fn=collect_fn)
+
+    df = DataManager(tmp_path).read_frame(child)
+    for i in range(2):
+        row = f"S0_d{i}"
+        assert df.at[row, PARENT_NAME] == "S0"
+        assert df.at[row, PARENT_DB] == "db0_worms"
+        assert df.at[row, GEN] == 1
+        assert df.at[row, "iteration"] == i

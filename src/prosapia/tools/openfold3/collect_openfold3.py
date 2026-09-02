@@ -19,11 +19,11 @@ Usage:
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, Iterable, List
 
 import pandas as pd
 
-from prosapia.core import CollectCtx, CollectResult
+from prosapia.core import Collected, CollectCtx, CollectEach, DesignCtx
 
 OPENFOLD3_JSON_KEYS: List[str] = [
     "avg_plddt",
@@ -80,13 +80,13 @@ def load_metrics(json_path: Path) -> Dict[str, Any]:
     return {f"openfold_{k}": data.get(k, pd.NA) for k in OPENFOLD3_JSON_KEYS}
 
 
-def collect_openfold3(ctx: CollectCtx) -> CollectResult:
+def collect_openfold3(ctx: CollectCtx) -> CollectEach:
+    """Per-design OpenFold3 collector. The framework iterates ready designs and
+    stamps status/path; this only locates the best model for one design."""
     if ctx.df.empty:
         raise RuntimeError(
             f"Database {ctx.args.database!r} is empty or missing in {ctx.args.run_dir}."
         )
-
-    ready = ctx.ready
 
     # Build a map of design_name -> design_dir across all task directories.
     design_dirs: dict[str, Path] = {}
@@ -97,54 +97,31 @@ def collect_openfold3(ctx: CollectCtx) -> CollectResult:
             if design_dir.is_dir():
                 design_dirs[design_dir.name] = design_dir
 
-    updates: CollectResult = {}
-    n_filled = 0
-    n_missing = 0
-    # Iterate over ready designs and check for best model in the design directory
-    for design_name in ready.index:
-        design_name = cast(str, design_name)
-        design_dir = design_dirs.get(design_name)
+    na_metrics: Dict[str, Any] = {k: pd.NA for k in OPENFOLD3_METRICS}
 
+    def one(d: DesignCtx) -> Iterable[Collected]:
+        design_dir = design_dirs.get(d.name)
         if design_dir is None:
-            row: Dict[str, Any] = {
-                ctx.status_col: f"missing: no task dir for {design_name}",
-                ctx.path_col: pd.NA,
-            }
-            row.update({k: pd.NA for k in OPENFOLD3_METRICS})
-            updates[design_name] = row
-            n_missing += 1
-            continue
+            yield Collected(
+                status=f"missing: no task dir for {d.name}", data=na_metrics
+            )
+            return
 
         json_path, cif_path = find_best_model(design_dir)
-
         if json_path is None or cif_path is None:
-            row = {
-                ctx.status_col: f"missing: no models in {design_dir}",
-                ctx.path_col: pd.NA,
-            }
-            row.update({k: pd.NA for k in OPENFOLD3_METRICS})
-            updates[design_name] = row
-            n_missing += 1
-            continue
+            yield Collected(
+                status=f"missing: no models in {design_dir}", data=na_metrics
+            )
+            return
 
         try:
             metrics = load_metrics(json_path)
         except (OSError, json.JSONDecodeError) as exc:
-            row = {
-                ctx.status_col: f"error: {exc.__class__.__name__}: {exc}",
-                ctx.path_col: pd.NA,
-            }
-            row.update({k: pd.NA for k in OPENFOLD3_METRICS})
-            updates[design_name] = row
-            n_missing += 1
-            continue
+            yield Collected(
+                status=f"error: {exc.__class__.__name__}: {exc}", data=na_metrics
+            )
+            return
 
-        row = {ctx.status_col: "OK", ctx.path_col: str(cif_path)}
-        row.update(metrics)
-        updates[design_name] = row
-        n_filled += 1
+        yield Collected(data=metrics, path=cif_path)
 
-    print(
-        f"Done. filled={n_filled}, missing={n_missing}, total_considered={len(ready)}"
-    )
-    return updates
+    return one

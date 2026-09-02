@@ -22,13 +22,15 @@ Usage:
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, Iterable, List
 
 import pandas as pd
 
 from prosapia.core import (
+    Collected,
     CollectCtx,
-    CollectResult,
+    CollectEach,
+    DesignCtx,
 )
 
 AF3_JSON_KEYS: List[str] = [
@@ -66,14 +68,15 @@ def load_metrics(prefix: str, json_path: Path) -> Dict[str, Any]:
     return {f"{prefix}_{k}": data.get(k, pd.NA) for k in AF3_JSON_KEYS}
 
 
-def collect_af3(ctx: CollectCtx) -> CollectResult:
+def collect_af3(ctx: CollectCtx) -> CollectEach:
+    """Per-design AF3 collector. The framework iterates ready designs and stamps
+    status/path; this only locates + parses one design's output."""
     if ctx.df.empty:
         raise RuntimeError(
             f"Database {ctx.args.database!r} is empty or missing in {ctx.args.run_dir}."
         )
 
-    ready = ctx.ready
-
+    # Index every predicted design dir once, up front.
     design_dirs: dict[str, Path] = {}
     for shard_dir in sorted(ctx.out_dir.glob("results_shard_*")):
         if not shard_dir.is_dir():
@@ -82,56 +85,33 @@ def collect_af3(ctx: CollectCtx) -> CollectResult:
             if design_dir.is_dir():
                 design_dirs[design_dir.name] = design_dir
 
-    updates: CollectResult = {}
-    n_filled = 0
-    n_missing = 0
-    for design_name in ready.index:
-        design_name = cast(str, design_name)
-        design_dir = design_dirs.get(design_name)
+    # Failure rows keep the metric columns present (as NA) so the frame's schema
+    # is stable even when every design fails.
+    na_metrics: Dict[str, Any] = {k: pd.NA for k in _get_af3_metrics(ctx.out_dir.name)}
 
+    def one(d: DesignCtx) -> Iterable[Collected]:
+        design_dir = design_dirs.get(d.name)
         if design_dir is None:
-            row: Dict[str, Any] = {
-                ctx.status_col: f"missing: no output dir for {design_name}",
-                ctx.path_col: pd.NA,
-            }
-            row.update({k: pd.NA for k in _get_af3_metrics(ctx.out_dir.name)})
-            updates[design_name] = row
-            n_missing += 1
-            continue
+            yield Collected(
+                status=f"missing: no output dir for {d.name}", data=na_metrics
+            )
+            return
 
         summary_path, cif_path = find_prediction_files(design_dir)
-
         if summary_path is None or cif_path is None:
-            row = {
-                ctx.status_col: f"missing: no models in {design_dir}",
-                ctx.path_col: pd.NA,
-            }
-            row.update({k: pd.NA for k in _get_af3_metrics(ctx.out_dir.name)})
-            updates[design_name] = row
-            n_missing += 1
-            continue
+            yield Collected(
+                status=f"missing: no models in {design_dir}", data=na_metrics
+            )
+            return
 
         try:
-            metrics = load_metrics(ctx.out_dir.name, summary_path)
+            metrics = load_metrics(d.leaf, summary_path)
         except (OSError, json.JSONDecodeError) as exc:
-            row = {
-                ctx.status_col: f"error: {exc.__class__.__name__}: {exc}",
-                ctx.path_col: pd.NA,
-            }
-            row.update({k: pd.NA for k in _get_af3_metrics(ctx.out_dir.name)})
-            updates[design_name] = row
-            n_missing += 1
-            continue
+            yield Collected(
+                status=f"error: {exc.__class__.__name__}: {exc}", data=na_metrics
+            )
+            return
 
-        row = {
-            ctx.status_col: "OK",
-            ctx.path_col: str(cif_path),
-        }
-        row.update(metrics)
-        updates[design_name] = row
-        n_filled += 1
+        yield Collected(data=metrics, path=cif_path)
 
-    print(
-        f"Done. filled={n_filled}, missing={n_missing}, total_considered={len(ready)}"
-    )
-    return updates
+    return one

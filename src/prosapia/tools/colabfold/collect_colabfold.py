@@ -22,12 +22,12 @@ Usage:
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, Iterable, List
 
 import numpy as np
 import pandas as pd
 
-from prosapia.core import CollectCtx, CollectResult
+from prosapia.core import Collected, CollectCtx, CollectEach, DesignCtx
 
 
 def _build_design_file_map(
@@ -81,53 +81,35 @@ def load_metrics(prefix: str, json_path: Path) -> Dict[str, Any]:
     }
 
 
-def collect_colabfold(ctx: CollectCtx) -> CollectResult:
-    metrics_cols: List[str] = [
-        f"{ctx.out_dir.name}_{m}" for m in ("avg_plddt", "ptm", "iptm", "max_pae")
-    ]
-
+def collect_colabfold(ctx: CollectCtx) -> CollectEach:
+    """Per-design ColabFold collector. The framework iterates ready designs and
+    stamps status/path; this only locates + parses one design's rank-1 output."""
     if ctx.df.empty:
         raise RuntimeError(
             f"Database {ctx.args.database!r} is empty or missing in {ctx.args.run_dir}."
         )
 
-    ready = ctx.ready
-
     design_files = _build_design_file_map(ctx.out_dir)
+    metrics_cols: List[str] = [
+        f"{ctx.out_dir.name}_{m}" for m in ("avg_plddt", "ptm", "iptm", "max_pae")
+    ]
+    na_metrics: Dict[str, Any] = {k: pd.NA for k in metrics_cols}
 
-    updates: CollectResult = {}
-    n_filled = 0
-    n_missing = 0
-    for design_name in ready.index:
-        design_name = cast(str, design_name)
-        files = design_files.get(design_name)
-
+    def one(d: DesignCtx) -> Iterable[Collected]:
+        files = design_files.get(d.name)
         if files is None:
-            row: Dict[str, Any] = {ctx.status_col: "missing", ctx.path_col: pd.NA}
-            row.update({k: pd.NA for k in metrics_cols})
-            updates[design_name] = row
-            n_missing += 1
-            continue
+            yield Collected(status="missing", data=na_metrics)
+            return
 
         scores_path, model_path = files
         try:
-            metrics = load_metrics(ctx.out_dir.name, scores_path)
+            metrics = load_metrics(d.leaf, scores_path)
         except (OSError, json.JSONDecodeError) as exc:
-            row = {
-                ctx.status_col: f"error: {exc.__class__.__name__}: {exc}",
-                ctx.path_col: pd.NA,
-            }
-            row.update({k: pd.NA for k in metrics_cols})
-            updates[design_name] = row
-            n_missing += 1
-            continue
+            yield Collected(
+                status=f"error: {exc.__class__.__name__}: {exc}", data=na_metrics
+            )
+            return
 
-        row = {ctx.status_col: "OK", ctx.path_col: str(model_path)}
-        row.update(metrics)
-        updates[design_name] = row
-        n_filled += 1
+        yield Collected(data=metrics, path=model_path)
 
-    print(
-        f"Done. filled={n_filled}, missing={n_missing}, total_considered={len(ready)}"
-    )
-    return updates
+    return one

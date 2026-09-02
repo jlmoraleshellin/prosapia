@@ -18,15 +18,14 @@ Usage:
 import re
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import cast
-
-import pandas as pd
+from typing import Iterable
 
 from prosapia.core import (
-    PARENT_NAME,
+    Collected,
     CollectArgs,
     CollectCtx,
-    CollectResult,
+    CollectEach,
+    DesignCtx,
 )
 
 MARKER_FILENAME = "command.txt"
@@ -58,52 +57,43 @@ def _add_diffusion_args(parser: ArgumentParser) -> None:
     )
 
 
-def collect_diffusion(ctx: CollectCtx) -> CollectResult:
-    updates: CollectResult = {}
-    n_ok = 0
-    n_failed_parents = 0
+def collect_diffusion(ctx: CollectCtx[DiffusionCollectArgs]) -> CollectEach:
+    """Per-parent rfdiffusion collector. rfdiffusion is a create tool: the framework
+    iterates the ready parents and this rebuilds each parent's child rows from its
+    on-disk output dir (out_dir/<name>/). A parent with no dir/marker is marked
+    failed. The framework stamps status/path/parent_name from each Collected."""
+    num_designs = ctx.args.num_designs
 
-    # rfdiffusion is a create tool: iterate the ready parents and rebuild child
-    # rows from each parent's on-disk output dir (out_dir/<name>/). A parent with
-    # no dir/marker is marked failed, like a parent whose run produced no marker.
-    for name in ctx.ready.index:
-        name = cast(str, name)  # the parent row (a design in the input db)
-        parent_dir = ctx.out_dir / name
+    def one(d: DesignCtx) -> Iterable[Collected]:
+        parent_dir = ctx.out_dir / d.name
         marker = parent_dir / MARKER_FILENAME
 
         if not marker.exists():
             # No success marker -- treat the whole parent as failed.
-            n_failed_parents += 1
             print(
-                f"{name}: no {MARKER_FILENAME}, marking "
-                f"{ctx.args.num_designs} row(s) as error"
+                f"{d.name}: no {MARKER_FILENAME}, marking {num_designs} row(s) as error"
             )
-            for i in range(ctx.args.num_designs):
-                updates[f"{name}_{i}"] = {
-                    PARENT_NAME: name,
-                    "iteration": i,
-                    ctx.status_col: "error: no marker",
-                    ctx.path_col: pd.NA,
-                }
-            continue
+            for i in range(num_designs):
+                yield Collected(
+                    name=f"{d.name}_{i}",
+                    parent=d.name,
+                    status="error: no marker",
+                    data={"iteration": i},
+                )
+            return
 
-        pdbs = _find_diffused_pdbs(parent_dir, name)
+        pdbs = _find_diffused_pdbs(parent_dir, d.name)
         if not pdbs:
-            print(f"{name}: marker present but no PDBs found")
-            continue
+            print(f"{d.name}: marker present but no PDBs found")
+            return
 
         for i, pdb_path in pdbs:
-            updates[f"{name}_{i}"] = {
-                PARENT_NAME: name,
-                "iteration": i,
-                ctx.status_col: "OK",
-                ctx.path_col: str(pdb_path),
-            }
-            n_ok += 1
+            yield Collected(
+                name=f"{d.name}_{i}",
+                parent=d.name,
+                path=pdb_path,
+                data={"iteration": i},
+            )
+        print(f"{d.name}: OK ({len(pdbs)} iteration(s))")
 
-        print(f"{name}: OK ({len(pdbs)} iteration(s))")
-
-    print(
-        f"\nDone. {len(updates)} row(s): {n_ok} OK, {n_failed_parents} failed parent(s)."
-    )
-    return updates
+    return one

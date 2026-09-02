@@ -1,7 +1,7 @@
 from dataclasses import dataclass, replace
 from typing import Callable, Literal, TypedDict, Unpack
 
-from .base_collect import CollectFn
+from .base_collect import CollectorFactory
 from .base_sbatch import BuildManifestFn
 
 Action = Literal["create", "update"]
@@ -27,7 +27,7 @@ class ToolOverrides(TypedDict, total=False):
     default_sbatch: str
     default_input_column: str
     build_manifest_fn: BuildManifestFn
-    collect_fn: CollectFn
+    collect_fn: CollectorFactory
     add_run_args_fn: Callable | None
     add_collect_args_fn: Callable | None
 
@@ -40,7 +40,7 @@ class Tool:
     default_sbatch: str
     default_input_column: str
     build_manifest_fn: BuildManifestFn
-    collect_fn: CollectFn
+    collect_fn: CollectorFactory
     description: str = ""
     add_run_args_fn: Callable | None = None
     add_collect_args_fn: Callable | None = None

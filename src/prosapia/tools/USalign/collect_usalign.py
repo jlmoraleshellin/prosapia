@@ -17,11 +17,11 @@ Usage:
 
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import Any, Dict, cast
+from typing import Any, Dict, Iterable
 
 import pandas as pd
 
-from prosapia.core import CollectArgs, CollectCtx, CollectResult, drop_collected
+from prosapia.core import Collected, CollectArgs, CollectCtx, CollectEach, DesignCtx
 
 USALIGN_COLUMNS = ["TM1", "TM2", "RMSD", "ID1", "ID2", "IDali", "L1", "L2", "Lali"]
 
@@ -75,9 +75,15 @@ def _resolve_prefix(args: USalignCollectArgs) -> str:
     raise ValueError("Provide --output-prefix, or --col-a with --col-b or --ref.")
 
 
-def collect_usalign(ctx: CollectCtx) -> CollectResult:
-    # The comparison prefix is the leaf *under* the USalign tool dir; it also
-    # prefixes the columns (e.g. boltz_vs_openfold3_TM1).
+def collect_usalign(ctx: CollectCtx) -> CollectEach:
+    """Per-design USalign collector.
+
+    USalign's columns are *prefix*-keyed, not leaf-keyed: one output dir hosts
+    several named comparisons (e.g. ``boltz_vs_openfold3_TM1``), so it owns all of
+    its columns via ``Collected.data`` and sets ``status=None`` to suppress the
+    framework's ``<leaf>_status``/``<leaf>_path`` stamp. Each design writes one
+    ``<name>.tsv``; re-collecting is idempotent (same tsv -> same values), so this
+    relies on the framework's ready iteration rather than a per-prefix resume."""
     prefix = _resolve_prefix(ctx.args)
     results_dir = ctx.out_dir / prefix
     if not results_dir.is_dir():
@@ -86,48 +92,31 @@ def collect_usalign(ctx: CollectCtx) -> CollectResult:
     status_col = f"{prefix}_status"
     sup_path_col = f"{prefix}_sup_path"
 
-    # USalign columns are prefix-keyed, not leaf-keyed (one leaf hosts several
-    # comparisons), so it can't use the plain ctx.ready done-filter -- apply the
-    # shared helper with the prefix status column. Each design writes <name>.tsv.
-    pending = drop_collected(ctx.ready, ctx.df, status_col, ctx.args.force)
-
-    updates: CollectResult = {}
-    n_ok = 0
-    n_err = 0
-
-    for name in pending.index:
-        name = cast(str, name)
-        tsv_path = results_dir / f"{name}.tsv"
+    def one(d: DesignCtx) -> Iterable[Collected]:
+        tsv_path = results_dir / f"{d.name}.tsv"
 
         if not tsv_path.is_file():
-            updates[name] = {status_col: "missing"}
-            n_err += 1
-            continue
+            yield Collected(status=None, data={status_col: "missing"})
+            return
 
         result_df = pd.read_csv(tsv_path, sep="\t")
         if result_df.empty:
-            updates[name] = {status_col: "error: empty tsv"}
-            n_err += 1
-            continue
+            yield Collected(status=None, data={status_col: "error: empty tsv"})
+            return
 
         row_data = result_df.iloc[0]
         status = str(row_data["status"])
-
-        update: Dict[str, Any] = {status_col: status}
+        data: Dict[str, Any] = {status_col: status}
 
         if status == "OK":
-            update[sup_path_col] = row_data["sup_path"]
+            data[sup_path_col] = row_data["sup_path"]
             for col in USALIGN_COLUMNS:
                 if col in row_data.index:
                     try:
-                        update[f"{prefix}_{col}"] = float(row_data[col])
+                        data[f"{prefix}_{col}"] = float(row_data[col])
                     except (ValueError, TypeError):
-                        update[f"{prefix}_{col}"] = pd.NA
-            n_ok += 1
-        else:
-            n_err += 1
+                        data[f"{prefix}_{col}"] = pd.NA
 
-        updates[name] = update
+        yield Collected(status=None, data=data)
 
-    print(f"Done. ok={n_ok}, errors={n_err}")
-    return updates
+    return one

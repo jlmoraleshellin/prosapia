@@ -7,11 +7,9 @@ Usage:
 """
 
 from pathlib import Path
-from typing import Any, Dict, Optional, cast
+from typing import Dict, Iterable, Optional
 
-import pandas as pd
-
-from prosapia.core import CollectCtx, CollectResult
+from prosapia.core import Collected, CollectCtx, CollectEach, DesignCtx
 
 # Metrics to extract from each score file. Add/remove as needed.
 METRICS = [
@@ -69,54 +67,38 @@ def parse_score_file(score_file: Path) -> Optional[Dict[str, float]]:
     return out
 
 
-def collect_relax(ctx: CollectCtx) -> CollectResult:
+def collect_relax(ctx: CollectCtx) -> CollectEach:
+    """Per-design Rosetta relax collector. The framework iterates ready designs and
+    stamps status/path (keyed by the tool leaf); this locates one design's score file
+    (+ relaxed PDB) and parses its metrics."""
     all_score_files = sorted(ctx.out_dir.glob("*_scores.sc"))
     all_pdb_files = sorted(ctx.out_dir.glob("*_0001.pdb"))
     print(f"Found {len(all_score_files)} score files, {len(all_pdb_files)} PDB files")
 
-    score_by_name: Dict[str, Path] = {}
-    pdb_by_name: Dict[str, Path] = {}
-    # ctx.ready already drops already-OK rows (unless --force) and NA-input rows.
-    candidate_names = [cast(str, name) for name in ctx.ready.index]
+    def one(d: DesignCtx) -> Iterable[Collected]:
+        score_file = next((f for f in all_score_files if d.name in f.name), None)
+        if score_file is None:
+            print(f"{d.name}: no score file")
+            yield Collected(status="missing")
+            return
 
-    for name in candidate_names:
-        for f in all_score_files:
-            if name in f.name:
-                score_by_name[name] = f
-                break
-        for f in all_pdb_files:
-            if name in f.name:
-                pdb_by_name[name] = f
-
-    updates: CollectResult = {}
-    for name in candidate_names:
-        if name not in score_by_name:
-            print(f"{name}: no score file")
-            updates[name] = {ctx.status_col: "missing"}
-            continue
-
-        metrics = parse_score_file(score_by_name[name])
+        metrics = parse_score_file(score_file)
         if metrics is None:
-            print(f"{name}: empty score file")
-            updates[name] = {ctx.status_col: "empty"}
-            continue
+            print(f"{d.name}: empty score file")
+            yield Collected(status="empty")
+            return
 
-        relaxed_path = str(pdb_by_name[name]) if name in pdb_by_name else pd.NA
-
-        update: Dict[str, Any] = {
-            f"{ctx.out_dir.name}_{k}": v for k, v in metrics.items()
-        }
-        update[ctx.status_col] = "OK"
-        update[ctx.path_col] = relaxed_path
-        if not relaxed_path:
-            update[ctx.status_col] = "OK_no_pdb"
-            print(f"{name}: scores parsed but no relaxed PDB found")
-
-        updates[name] = update
+        pdb_file = next((f for f in all_pdb_files if d.name in f.name), None)
+        data = {f"{d.leaf}_{k}": v for k, v in metrics.items()}
         print(
-            f"{name}: dG_sep={metrics.get('dG_separated', float('nan')):7.2f}  "
+            f"{d.name}: dG_sep={metrics.get('dG_separated', float('nan')):7.2f}  "
             f"fa_rep={metrics.get('fa_rep', float('nan')):8.2f}  "
             f"total={metrics.get('total_score', float('nan')):9.2f}"
         )
+        if pdb_file is None:
+            print(f"{d.name}: scores parsed but no relaxed PDB found")
+            yield Collected(status="OK_no_pdb", data=data)
+        else:
+            yield Collected(status="OK", path=pdb_file, data=data)
 
-    return updates
+    return one

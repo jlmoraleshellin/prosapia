@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import json
 from argparse import ArgumentParser, Namespace
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Generic, Iterable, Mapping, TypeVar
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -100,6 +100,91 @@ class CollectCtx(Generic[ArgsT]):
 
 
 CollectFn = Callable[[CollectCtx[ArgsT]], CollectResult]
+
+
+# PER-DESIGN COLLECTION (the tool-facing contract)
+@dataclass(frozen=True)
+class Collected:
+    """One collected row's payload -- what a tool returns, sans framework bookkeeping.
+
+    ``data`` are the tool-specific columns. The framework stamps the rest:
+    ``path`` -> the tool's ``<leaf>_path`` column, ``status`` -> ``<leaf>_status``.
+    ``name`` overrides the row key -- omit it for an update (the row is keyed by the
+    design), set it for a create tool that mints child rows. ``parent`` -> the row's
+    ``parent_name`` (create tools linking a child to its parent).
+
+    ``status=None`` suppresses the ``<leaf>_status`` stamp entirely: for the rare tool
+    whose status/path columns are not leaf-keyed (e.g. one output dir hosting several
+    named comparisons), put every column in ``data`` and set ``status=None``.
+    """
+
+    data: Mapping[str, Any] = field(default_factory=dict)
+    path: str | Path | None = None
+    status: str | None = "OK"
+    name: str | None = None
+    parent: str | None = None
+
+
+@dataclass(frozen=True)
+class DesignCtx:
+    """One ready design, handed to a per-design collector. Carries no column names --
+    ``status``/``path`` are values on the returned ``Collected``, stamped by the driver."""
+
+    name: str
+    out_dir: Path
+    leaf: str
+    lookup: LookupFn
+
+
+# A per-design collector yields the rows one ready design produced (0..N).
+CollectEach = Callable[[DesignCtx], Iterable[Collected]]
+# A tool's ``collect_fn``: called once per run to do setup, returns the per-design
+# collector. The driver (``by_design``) wraps it into a full ``CollectFn``.
+CollectorFactory = Callable[["CollectCtx[ArgsT]"], CollectEach]
+
+
+def by_design(make: CollectorFactory) -> CollectFn:
+    """Adapt a tool's per-design collector factory into a full ``CollectFn``.
+
+    Iterates the run's ready designs, calls the tool's ``one(design)`` for each, and
+    folds every emitted ``Collected`` into the ``CollectResult`` -- stamping
+    ``<leaf>_status`` / ``<leaf>_path`` / ``parent_name`` here so no tool has to. This
+    is the *only* place that knows those column names.
+
+    Empty emission means "nothing on disk for this design": an update tool marks the
+    existing row ``missing``; a create tool has no row to mark, so it is skipped.
+    """
+
+    def _fn(ctx: "CollectCtx[ArgsT]") -> CollectResult:
+        one = make(ctx)  # per-run setup happens once (build indices, capture args)
+        updates: CollectResult = {}
+        for name in map(str, ctx.ready.index):
+            emitted = list(
+                one(
+                    DesignCtx(
+                        name,
+                        ctx.out_dir,
+                        ctx.out_dir.name,
+                        ctx.lookup,
+                    )
+                )
+            )
+            if not emitted:
+                if not ctx.creates_db:  # update: flag the existing row
+                    updates[name] = {ctx.status_col: "missing"}
+                continue  # create: nothing to mark
+            for c in emitted:
+                row = dict(c.data)
+                if c.status is not None:
+                    row[ctx.status_col] = c.status
+                if c.path is not None:
+                    row[ctx.path_col] = str(c.path)
+                if c.parent is not None:
+                    row[PARENT_NAME] = c.parent
+                updates[c.name or name] = row
+        return updates
+
+    return _fn
 
 
 def drop_collected(
@@ -202,7 +287,7 @@ def _finalize_update(
 
 def collect_from_args(
     metadata: ToolMetadata,
-    collect_fn: CollectFn[ArgsT],
+    collect_fn: CollectorFactory[ArgsT],
     args: ArgsT,
 ) -> None:
     """Execute a collect from already-parsed args (shared by standalone and ``sapia``)."""
@@ -237,7 +322,7 @@ def collect_from_args(
             creates_db=metadata.creates_db,
             default_input_column=metadata.default_input_column,
         )
-        updates = collect_fn(ctx)
+        updates = by_design(collect_fn)(ctx)
 
         if metadata.creates_db:
             _finalize_create(updates, output_db, parent_df)

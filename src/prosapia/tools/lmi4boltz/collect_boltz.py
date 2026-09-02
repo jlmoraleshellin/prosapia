@@ -18,11 +18,11 @@ Usage:
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, Iterable, List
 
 import pandas as pd
 
-from prosapia.core import CollectCtx, CollectResult
+from prosapia.core import Collected, CollectCtx, CollectEach, DesignCtx
 
 # Top-level scalar metrics to copy from the boltz confidence JSON.
 # Matches the first 9 keys in boltz's confidence_*_model_0.json output.
@@ -78,7 +78,9 @@ def load_metrics(json_path: Path) -> Dict[str, Any]:
     return {f"boltz_{k}": data.get(k, pd.NA) for k in BOLTZ_METRICS}
 
 
-def collect_boltz(ctx: CollectCtx) -> CollectResult:
+def collect_boltz(ctx: CollectCtx) -> CollectEach:
+    """Per-design boltz collector. The framework iterates ready designs and stamps
+    status/path; this only locates + parses one design's prediction."""
     if ctx.df.empty:
         raise RuntimeError(
             f"Database {ctx.args.database!r} is empty or missing in {ctx.args.run_dir}."
@@ -94,45 +96,25 @@ def collect_boltz(ctx: CollectCtx) -> CollectResult:
             if design_dir.is_dir():
                 prediction_dirs[design_dir.name] = design_dir
 
-    updates: CollectResult = {}
-    n_filled = 0
-    n_missing = 0
-    for design_name in ctx.ready.index:
-        design_name = cast(str, design_name)
-        json_path, cif_path, plddt_path = find_prediction_files(
-            ctx.out_dir,
-            design_name,
-            prediction_dirs,
+    na_metrics: Dict[str, Any] = {f"boltz_{k}": pd.NA for k in BOLTZ_METRICS}
+
+    def one(d: DesignCtx) -> Iterable[Collected]:
+        json_path, cif_path, _plddt_path = find_prediction_files(
+            ctx.out_dir, d.name, prediction_dirs
         )
 
         if json_path is None or cif_path is None:
-            row: Dict[str, Any] = {
-                ctx.status_col: f"missing: boltz_results_{design_name}",
-                ctx.path_col: pd.NA,
-            }
-            row.update({f"boltz_{k}": pd.NA for k in BOLTZ_METRICS})
-            updates[design_name] = row
-            n_missing += 1
-            continue
+            yield Collected(status=f"missing: boltz_results_{d.name}", data=na_metrics)
+            return
 
         try:
             metrics = load_metrics(json_path)
         except (OSError, json.JSONDecodeError) as exc:
-            row = {
-                ctx.status_col: f"error: {exc.__class__.__name__}: {exc}",
-                ctx.path_col: pd.NA,
-            }
-            row.update({f"boltz_{k}": pd.NA for k in BOLTZ_METRICS})
-            updates[design_name] = row
-            n_missing += 1
-            continue
+            yield Collected(
+                status=f"error: {exc.__class__.__name__}: {exc}", data=na_metrics
+            )
+            return
 
-        row = {ctx.status_col: "OK", ctx.path_col: str(cif_path)}
-        row.update(metrics)
-        updates[design_name] = row
-        n_filled += 1
+        yield Collected(data=metrics, path=cif_path)
 
-    print(
-        f"Done. filled={n_filled}, missing={n_missing}, total_considered={len(ctx.ready)}"
-    )
-    return updates
+    return one

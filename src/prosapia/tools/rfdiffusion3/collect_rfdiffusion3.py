@@ -22,11 +22,17 @@ import json
 import re
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Iterable
 
 import pandas as pd
 
-from prosapia.core import PARENT_NAME, CollectArgs, CollectCtx, CollectResult
+from prosapia.core import (
+    Collected,
+    CollectArgs,
+    CollectCtx,
+    CollectEach,
+    DesignCtx,
+)
 from prosapia.utils import ensure_pdb
 
 # Metadata keys pulled from the per-design sidecar JSON when present.
@@ -68,50 +74,44 @@ def _find_outputs(results_dirs: list[Path], name: str) -> list[tuple[int, int, P
     return found
 
 
-def collect_rfd3(ctx: CollectCtx) -> CollectResult:
+def collect_rfd3(ctx: CollectCtx) -> CollectEach:
+    """Per-parent RFdiffusion3 collector. A create tool: the framework iterates the
+    ready parents and this rebuilds each parent's child rows (``<name>_<i>``) from the
+    outputs on disk, converting each ``.cif.gz`` to PDB. The framework stamps
+    status/path/parent_name from each Collected."""
     results_dirs = sorted(d for d in ctx.out_dir.glob("results_*") if d.is_dir())
     print(f"Scanning {len(results_dirs)} results dir(s) in {ctx.out_dir}")
+    num_designs = ctx.args.num_designs
+    run_dir = ctx.args.run_dir
 
-    # Parent rows are the design keys we wrote into the shard JSONs. ctx.ready
-    # drops parents with an NA input column (a create tool rebuilds from disk).
-    parent_names = [cast(str, n) for n in ctx.ready.index]
-
-    updates: CollectResult = {}
-    n_ok = 0
-    n_failed_parents = 0
-
-    for name in parent_names:
-        outputs = _find_outputs(results_dirs, name)
+    def one(d: DesignCtx) -> Iterable[Collected]:
+        outputs = _find_outputs(results_dirs, d.name)
 
         if not outputs:
-            n_failed_parents += 1
-            print(f"{name}: no outputs, marking {ctx.args.num_designs} row(s) as error")
-            for i in range(ctx.args.num_designs):
-                updates[f"{name}_{i}"] = {
-                    PARENT_NAME: name,
-                    "iteration": i,
-                    ctx.status_col: "error: no output",
-                    ctx.path_col: pd.NA,
-                }
-            continue
+            print(f"{d.name}: no outputs, marking {num_designs} row(s) as error")
+            for i in range(num_designs):
+                yield Collected(
+                    name=f"{d.name}_{i}",
+                    parent=d.name,
+                    status="error: no output",
+                    data={"iteration": i},
+                )
+            return
 
         for i, (batch, model, cif_gz) in enumerate(outputs):
-            pdb_path = ensure_pdb(cif_gz, ctx.args.run_dir)
-            row: dict[str, Any] = {
-                PARENT_NAME: name,
+            pdb_path = ensure_pdb(cif_gz, run_dir)
+            data: dict[str, Any] = {
                 "iteration": i,
                 "rfd3_batch": batch,
                 "rfd3_model": model,
-                ctx.status_col: "OK",
-                ctx.path_col: str(pdb_path),
             }
-            row.update(_load_metadata(cif_gz.with_suffix("").with_suffix(".json")))
-            updates[f"{name}_{i}"] = row
-            n_ok += 1
+            data.update(_load_metadata(cif_gz.with_suffix("").with_suffix(".json")))
+            yield Collected(
+                name=f"{d.name}_{i}",
+                parent=d.name,
+                path=pdb_path,
+                data=data,
+            )
+        print(f"{d.name}: OK ({len(outputs)} output(s))")
 
-        print(f"{name}: OK ({len(outputs)} output(s))")
-
-    print(
-        f"\nDone. {len(updates)} row(s): {n_ok} OK, {n_failed_parents} failed parent(s)."
-    )
-    return updates
+    return one
