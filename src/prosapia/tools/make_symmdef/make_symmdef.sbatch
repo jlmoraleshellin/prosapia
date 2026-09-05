@@ -13,6 +13,11 @@ set -euo pipefail
 # Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
 source "${SAPIA_PRELUDE:?}"
 
+# Site-specific activation (required) — see docs/configuration.md.
+set +u
+source "${SAPIA_ACTIVATE_SYMMDEF:?set SAPIA_ACTIVATE_SYMMDEF in your .env to a tool activation script}"
+set -u
+
 NAME=$(echo "$SAPIA_LINE" | cut -f1)
 SRC=$(echo "$SAPIA_LINE" | cut -f2)
 

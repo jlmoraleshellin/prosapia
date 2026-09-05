@@ -8,18 +8,20 @@
 #SBATCH --mem=16G
 
 set -uo pipefail
-set -a
-source .env # RFDIFFUSION_ENV, RUN_INFERENCE
-set +a
 
 # Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE. Our manifest line is a
 # path to this task's sub-manifest (one row per design); output locations are
 # baked into each design's output_prefix, so we never need OUT_DIR here.
 source "${SAPIA_PRELUDE:?}"
 
+# Site-specific activation (required) — see docs/configuration.md.
+set +u
+source "${SAPIA_ACTIVATE_RFDIFFUSION:?set SAPIA_ACTIVATE_RFDIFFUSION in your .env to a tool activation script}"
+set -u
+
 # Each array task gets its own sub-manifest (one row per design). With
 # --per-card N these N diffusions are launched together and time-share the
-# task's single GPU. Rows are prepared at manifest-build time (tab-separated):
+# task's single GPU. Rows are ACTIVATEd at manifest-build time (tab-separated):
 #   name  staged_input  output_prefix  contig  symmetry_token  global_extra
 # symmetry_token and global_extra may be empty and may contain spaces, so fields
 # are pulled with `cut` (which preserves empty fields, unlike `IFS=$'\t' read`).
@@ -36,8 +38,11 @@ run_one() {
     # optional overrides + --set) and $symmetry_token are intentionally unquoted
     # so their space-separated Hydra tokens each become a separate argv entry.
     # contigmap.contigs stays a single token (it may contain spaces).
+    # The interpreter defaults to `python` (made right by the Activation hook, or already
+    # on PATH); set RFDIFFUSION_PYTHON to point straight at a specific interpreter
+    # instead of activating the SE3nv environment.
     local cmd=(
-        "$RFDIFFUSION_ENV" "$RUN_INFERENCE" $global_extra
+        "${RFDIFFUSION_PYTHON:-python}" "$RUN_INFERENCE" $global_extra
     )
     # A root de-novo row carries an empty $staged: omit inference.input_pdb so
     # RFdiffusion generates from scratch. When set, keep it a single quoted token.

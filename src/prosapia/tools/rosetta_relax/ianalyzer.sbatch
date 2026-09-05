@@ -10,6 +10,12 @@
 
 # Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
 source "${SAPIA_PRELUDE:?}"
+
+# Site-specific activation (required) — see docs/configuration.md.
+set +u
+source "${SAPIA_ACTIVATE_RELAXED:?set SAPIA_ACTIVATE_RELAXED in your .env to a tool activation script}"
+set -u
+
 input=$(echo "$SAPIA_LINE" | cut -f1)
 symm=$(echo "$SAPIA_LINE" | cut -f2)
 hairpin_length=$(echo "$SAPIA_LINE" | cut -f3)

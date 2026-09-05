@@ -1,14 +1,6 @@
 # Writing a tool
 
-A tool carries **no orchestration logic** — the [drivers](architecture.md#the-drivers)
-supply that. A tool is just declarative metadata, two behavioral hooks, and a
-batch script. This guide covers the anatomy, the `.sbatch` contract, and how tools
-are discovered.
-
-> [!TIP]
-> **Scaffolding.** If you use Claude Code in this repo, the **`authoring-a-tool`**
-> skill scaffolds a new tool end-to-end. This page is the reference for what it
-> produces.
+A tool carries **no orchestration logic** — the [drivers](architecture.md#the-drivers) supply that. A tool is just declarative metadata, two behavioral hooks, and a batch script. This guide covers the anatomy, the `.sbatch` contract, and how tools are discovered.
 
 ## The four pieces
 
@@ -16,7 +8,7 @@ are discovered.
 | --- | --- |
 | **metadata** (`Tool` / `ToolMetadata`) | `name`, `description`, and `action` (`create` / `update`), plus `default_sbatch` and `default_input_column`. |
 | **`build_manifest_fn`** | reads the ready rows, returns one manifest line (a `Sequence[str]`) per array task. |
-| **`collect_fn`** | reads on-disk outputs and returns row updates keyed by design `name` (see [Writing a collect function](writing-a-collect-function.md)). |
+| **`collect_fn`** | a collector factory: runs once per collect, returns a per-design function that yields the rows a design produced (see [Writing a collect function](writing-a-collect-function.md)). |
 | **`tool.sbatch`** | the per-array-task script; receives the manifest and `out_dir` as positional args. |
 
 An optional `tool_worker.py` can do extra Python work per task. If the per-design
@@ -60,14 +52,11 @@ TOOL = Tool(
 )
 ```
 
-Pick `action` with the [lineage rule](lineage-and-databases.md) in mind:
-`create` if the tool produces **new entities** (a new database generation),
-`update` if it measures a **property** of designs that already exist.
+Pick `action` with the [lineage rule](lineage-and-databases.md) in mind: `create` if the tool produces **new entities** (a new database generation), `update` if it measures a **property** of designs that already exist.
 
 ### `build_manifest_fn`
 
-The submit-phase hook. It receives a `ManifestCtx` and returns one **manifest row**
-(a `Sequence[str]`, written tab-separated) per array task:
+The submit-phase hook. It receives a `ManifestCtx` and returns one **manifest row** (a `Sequence[str]`, written tab-separated) per array task:
 
 ```python
 from prosapia.core import ManifestCtx, ManifestRow
@@ -80,23 +69,24 @@ def build_mytool_manifest(ctx: ManifestCtx) -> list[ManifestRow]:
     return rows
 ```
 
-`ctx` exposes the input frame (`ctx.df`), the parsed CLI args (`ctx.args`), the
-output directory (`ctx.out_dir`), a lineage `ctx.lookup`, and — most importantly —
-`ctx.ready`: the designs this run should submit (rows with a present input column,
-minus those the tool already finished, unless `--force`). You never filter or
-resume by hand.
+`ctx` exposes the input frame (`ctx.df`), the parsed CLI args (`ctx.args`), the output directory (`ctx.out_dir`), a lineage `ctx.lookup`, and — most importantly — `ctx.ready`: the designs this run should submit (rows with a present input column, minus those the tool already finished, unless `--force`). You never filter or resume by hand.
 
 ### `collect_fn`
 
-The collect-phase hook. It reads on-disk outputs and returns a `CollectResult` —
-a dict keyed by design `name`. See the dedicated
-[Writing a collect function](writing-a-collect-function.md) guide.
+The collect-phase hook is a **factory**: `collect_mytool(ctx) -> CollectEach` runs
+once per collect (do any one-time output scan here) and returns a per-design
+function that `yield`s a `Collected` for each row a design produced. The driver
+iterates the ready designs and stamps the `<leaf>_status` / `<leaf>_path` /
+`parent_name` columns for you. See the dedicated
+[Writing a collect function](writing-a-collect-function.md) guide for the full
+contract with `create` and `update` examples.
 
 ## Writing a `.sbatch`
 
 Every tool's `.sbatch` receives two positional args — the manifest (`$1`) and the
-`out_dir` (`$2`) — and should source the shared prelude, which the driver locates
-via `$SAPIA_PRELUDE`:
+`out_dir` (`$2`) — and sources two things in order: the shared **prelude** (located
+via `$SAPIA_PRELUDE`) and the user's **activation script** (via
+`$SAPIA_ACTIVATE_<NAME>`, [required](#environment-activation)):
 
 ```bash
 #!/bin/bash
@@ -104,6 +94,11 @@ via `$SAPIA_PRELUDE`:
 
 # Sets MANIFEST ($1), OUT_DIR ($2), and SAPIA_LINE (this array task's manifest line).
 source "${SAPIA_PRELUDE:?}"
+
+# Site-specific activation (required) — see "Environment activation" below.
+set +u
+source "${SAPIA_ACTIVATE_MYTOOL:?set SAPIA_ACTIVATE_MYTOOL in your .env to a tool activation script}"
+set -u
 
 # Cut your own fields out of $SAPIA_LINE and write results under $OUT_DIR:
 name=$(echo "$SAPIA_LINE" | cut -f1)
@@ -114,6 +109,31 @@ src=$(echo "$SAPIA_LINE"  | cut -f2)
 The prelude is the one place per-task boilerplate lives: it resolves `MANIFEST`,
 `OUT_DIR`, and this array task's line as `SAPIA_LINE`. Tools cut their own fields
 out of `$SAPIA_LINE` and write results under `$OUT_DIR`.
+
+### Environment activation
+
+**Do not hard-code activation** (`conda activate`, `module load`, `source
+<activate>`) in your `.sbatch` — that is site-specific and belongs to the user.
+Instead add the standard activation block right after you source the prelude (as in
+the skeleton above): source the user's `SAPIA_ACTIVATE_<NAME>` script (`<NAME>` = your
+tool's `name`, upper-cased; see [Configuration](configuration.md#how-binding-works)).
+Make it **required** — a batch job starts from a bare shell, so failing fast beats
+running against the wrong environment. You may still expose an **optional path override
+that defaults to `PATH`** for the binary the user's script puts there:
+
+```bash
+# defaults to PATH; user may set MYTOOL_BIN to a specific path
+"${MYTOOL_BIN:-mytool}" "$input" --out "$OUT_DIR"
+```
+
+The `:?` makes the variable required and fails the job with a clear message when it is
+unset. The `set +u` guard matters — activation scripts often reference unset vars. Keep
+genuine *inputs* (script paths, container/weights/db paths) as their own named variables
+read in the `.sbatch`; the user exports them from the same activation script alongside
+activation, which is also where any per-tool runtime setup (framework caches, extra env
+vars) belongs (see [Configuration](configuration.md)). The exception is any input you
+read in Python at **submit time** (e.g. `os.getenv` in your build-manifest step) — that
+runs before the activation script, so it must come from `.env`.
 
 ## Customizing bundled tools
 

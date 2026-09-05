@@ -24,7 +24,7 @@ chain breaks in place. E.g. an 11-mer without listing all 11 chains:
 Everything else is opt-in and appended to run_inference.py only when set:
 ``--symmetry`` (``auto`` derives c<n_chains> from the input), ``--partial-T``,
 ``--num-designs``, ``--ckpt``, ``--config-name`` / ``--config-dir`` (Hydra), and
-repeatable ``--set key=value``. All per-design prep happens here at manifest-build
+repeatable ``--set key=value``. All per-design activation happens here at manifest-build
 time (renumber + contig resolution); the sbatch just launches the binary.
 
 With --per-card N, designs are chunked N at a time into per-task sub-manifests;
@@ -324,7 +324,7 @@ def _build_create_designs(
             print(f"{name}: MISSING {input_path} (skipping)")
             continue
 
-        # Prep (deterministic, input-derived): renumber the input per-chain into a
+        # Activation (deterministic, input-derived): renumber the input per-chain into a
         # staged PDB so the sbatch only launches the binary.
         staged_input = (
             ctx.out_dir / name / "_diffusion_input" / f"{name}_renumbered.pdb"

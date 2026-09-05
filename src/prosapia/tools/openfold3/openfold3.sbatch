@@ -4,42 +4,23 @@
 #SBATCH --time=08:00:00
 #SBATCH --job-name=openfold3
 
-set -a
-source .env
-set +a
-
 set -euo pipefail
 
 # Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
 # Manifest line is tab-separated: query_json, runner_yaml.
 source "${SAPIA_PRELUDE:?}"
+
+# Site-specific activation (required) — see docs/configuration.md.
+# Must put `run_openfold` on PATH and set TORCH_EXTENSIONS_DIR.
+set +u
+source "${SAPIA_ACTIVATE_OPENFOLD3:?set SAPIA_ACTIVATE_OPENFOLD3 in your .env to a tool activation script}"
+set -u
+
 QUERY_JSON=$(echo "$SAPIA_LINE" | cut -f1)
 RUNNER_YAML=$(echo "$SAPIA_LINE" | cut -f2)
 
-set +u
-source $OPENFOLD_ACTIVATE
-set -u
-
 TASK_OUT_DIR=$OUT_DIR/task_${SLURM_ARRAY_TASK_ID}
 mkdir -p "$TASK_OUT_DIR"
-
-# Override the activation script's NFS paths with node-local ones
-export TRITON_CACHE_DIR="$SCRATCHDIR/triton_cache"
-export PYTHONUNBUFFERED=1
-mkdir -p "$TRITON_CACHE_DIR"
-
-# OpenFold's PyTorch extensions can be large and take a long time to compile, so we use a persistent cache directory on the NFS to speed up subsequent runs.
-# We copy the cache to the node-local scratch for faster access during the run
-PERSISTENT_CACHE=$TORCH_EXTENSIONS_DIR
-export TORCH_EXTENSIONS_DIR=$SCRATCHDIR/openfold_cache
-
-if [ -d "$PERSISTENT_CACHE" ]; then
-  cp -r "$PERSISTENT_CACHE" "$TORCH_EXTENSIONS_DIR"
-  # Defensive: nuke any locks that might have been copied. This is important because if a predicition is killed midrun while compiling an extension, the lock files can be left behind and cause subsequent runs to fail.
-  find "$TORCH_EXTENSIONS_DIR" -name lock -delete 2>/dev/null || true
-else
-  mkdir -p "$TORCH_EXTENSIONS_DIR"
-fi
 
 echo "[$(date +%T)] task $SLURM_ARRAY_TASK_ID: predicting $QUERY_JSON"
 run_openfold predict \

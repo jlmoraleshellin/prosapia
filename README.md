@@ -1,4 +1,4 @@
-# prosapia
+# prosapia - Under construction...
 
 **A data layer for protein design on HPC.** `prosapia` gives many heterogeneous
 protein-design tools (RFdiffusion, ProteinMPNN, AlphaFold3, ColabFold, Boltz,
@@ -75,34 +75,45 @@ sapia init          # one-time: install shell completion
 
 ## Configuration
 
-Tools shell out to external binaries and environments (RFdiffusion, ProteinMPNN,
-Rosetta, …). Their locations are supplied through **environment variables**,
-loaded from a `.env` file in your working directory.
+Prosapia does not bundle tools; you provide them as external binaries or environments (RFdiffusion, ProteinMPNN, Rosetta, …). What prosapia gives you is the framework to **bind** them: each tool needs a minimal **activation** shell snippet, sourced by its `.sbatch` to make the binary, environment, or input paths available to the SLURM job.
 
-Copy the template and fill in the paths for the tools you actually use:
+To bind a tool:
 
-```bash
-cp .env.example .env
-$EDITOR .env
-```
+1. **Write its activation script.** Runnable templates for every tool live in [`examples/activation/`](examples/activation/) — copy one and edit the paths.
 
-You only need to set the variables for the tools you run. A quick map:
+   ```bash
+   # examples/activation/rfdiffusion.sh
+   source "$CONDA_PREFIX/etc/profile.d/conda.sh"
+   conda activate SE3nv
+   export RUN_INFERENCE="/path/to/RFdiffusion/scripts/run_inference.py"
+   ```
+
+2. **Point `SAPIA_ACTIVATE_<NAME>` at it** from your `.env` (`<NAME>` = the tool's `sapia run` name, upper-cased).
+
+   ```bash
+   cp .env.example .env
+   $EDITOR .env   # SAPIA_ACTIVATE_RFDIFFUSION → the script above
+   ```
+
+`.env` itself holds only global settings, those `SAPIA_ACTIVATE_<NAME>` pointers, and
+the few values prosapia reads at submit time (marked ⏱ below). A quick map — variables
+live in the tool's activation script unless marked ⏱ (set in `.env`):
 
 | Tool | Variables |
 | --- | --- |
-| `rfdiffusion` | `RFDIFFUSION`, `RFDIFFUSION_ENV`, `RUN_INFERENCE` |
-| `rfdiffusion3` | `FOUNDRY_ENV_NAME`, `RFD3_CKPT` *(optional)* |
-| `mpnn_seqs` (ProteinMPNN) | `PROTEIN_MPNN`, `PROTEIN_MPNN_PYTHON` |
+| `rfdiffusion` | `RUN_INFERENCE`; optional `RFDIFFUSION_PYTHON` |
+| `rfdiffusion3` | `FOUNDRY_CHECKPOINT_DIRS`; optional ⏱ `RFD3_CKPT` |
+| `mpnn_seqs` (ProteinMPNN) | `PROTEIN_MPNN`; optional `PROTEIN_MPNN_PYTHON` |
 | `alphafold3` | `AF3_CONTAINER`, `AF3_PARAMETERS`, `AF3_DATABASE` |
-| `colabfold` | `COLABFOLD_ACTIVATE` |
-| `openfold3` | `OPENFOLD_ACTIVATE` |
-| `lmi4boltz` (Boltz) | `BOLTZ_ENV_NAME`; optional `USE_MSA`, `TEMPLATE_CIF`, `TEMPLATE_THRESHOLD` |
-| `USalign` | `USALIGN_BIN` |
-| `rosetta_relax`, `make_symmdef` | `ROSETTA` (+ `ROSETTASCRIPTS`) |
-| `align_symm_axis` | `PIPELINE_PYTHON` *(optional)* |
+| `colabfold` | activation only |
+| `openfold3` | activation + `TORCH_EXTENSIONS_DIR` |
+| `boltz` (lmi4boltz) | activation; optional ⏱ `USE_MSA`, ⏱ `TEMPLATE_CIF`, ⏱ `TEMPLATE_THRESHOLD` |
+| `USalign` | optional `USALIGN_BIN` |
+| `relaxed`, `symmdef` (Rosetta) | `ROSETTA` |
+| `align_symm_axis` | optional `PIPELINE_PYTHON` |
 
-See **[docs/configuration.md](docs/configuration.md)** for what each variable
-means and which are required vs. optional.
+See **[docs/configuration.md](docs/configuration.md)** for the activation-script model and
+what each variable means.
 
 ### Sharing custom tools across environments
 
@@ -173,7 +184,7 @@ flowchart TD
     S -->|"create: rfdiffusion"| R
     R -->|"create: mpnn_seqs<br/>1 backbone → N sequences"| A
     A -->|"update: alphafold3<br/>predict + score in place"| A
-    A -->|"update: USalign<br/>RMSD/TM in place"| A
+    A -->|"update: Alphafold<br/>Structure predictions"| A
 
     classDef db fill:#e8f0fe,stroke:#4285f4,color:#111;
     class R,A db;

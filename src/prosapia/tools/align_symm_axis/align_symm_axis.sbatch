@@ -6,20 +6,24 @@
 
 # Align one design's symmetric assembly onto RFdiffusion's +Z symmetry axis per
 # array task, and write a per-design TSV (name, status, aligned_path, max_dev_deg)
-# for collect_align_symm_axis.py to merge back. The worker needs pipeline_core +
-# gemmi + numpy, so it runs under $PIPELINE_PYTHON (the pixi env interpreter).
+# for collect_align_symm_axis.py to merge back. The worker needs prosapia + gemmi +
+# numpy, so it runs under $PIPELINE_PYTHON (defaulting to `python`).
 
 set -euo pipefail
-set -a
-source .env  # optional PIPELINE_PYTHON override (pipeline pixi interpreter)
-set +a
-
-# Default to the repo-relative pixi env interpreter (cwd is the repo root), which
-# carries pipeline_core + gemmi + numpy. Override via PIPELINE_PYTHON in .env.
-PY=${PIPELINE_PYTHON:-.pixi/envs/default/bin/python}
 
 # Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
 source "${SAPIA_PRELUDE:?}"
+
+# Site-specific activation (required) — see docs/configuration.md.
+set +u
+source "${SAPIA_ACTIVATE_ALIGN_SYMM_AXIS:?set SAPIA_ACTIVATE_ALIGN_SYMM_AXIS in your .env to a tool activation script}"
+set -u
+
+# The interpreter defaults to `python` (made right by the Activation hook, or already on
+# PATH — it must carry prosapia + gemmi + numpy). Set PIPELINE_PYTHON to point
+# straight at a specific interpreter.
+PY=${PIPELINE_PYTHON:-python}
+
 NAME=$(echo "$SAPIA_LINE" | cut -f1)
 SYMM_PDB=$(echo "$SAPIA_LINE" | cut -f2)
 SYMM_DEF=$(echo "$SAPIA_LINE" | cut -f3)
