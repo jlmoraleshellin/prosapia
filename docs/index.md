@@ -1,15 +1,8 @@
 # prosapia documentation
 
-**A data layer for protein design on HPC.** `prosapia` gives many heterogeneous
-protein-design tools a single way to exchange results: a **shared database** that
-every tool reads from and writes back to. You bring the tools; the package
-supplies the data format, the two-phase SLURM driver that runs them, and the
-lineage bookkeeping that ties their outputs together.
+**A shared workbench for protein-design tools on HPC.** `prosapia` gives many heterogeneous protein-design tools one bench to work on: a **shared database** every tool reads from and writes back to, and a **two-phase SLURM driver** that runs them on the cluster. Each tool sets its results on the bench and picks up what earlier tools left — so you bring the tools, and prosapia supplies the data format, the runner, and the lineage bookkeeping that ties their outputs together. It is meant to be used as a **library, not just a data store**: the core functions the bundled tools are built from are yours to import, so you can bolt your own tool onto the bench in two small functions.
 
-This is **not a pipeline framework.** There is no DAG to declare and no fixed
-order of steps — only a *consensus data format* (the database) and tools that
-consume and produce it. You compose a workflow by pointing the next tool at a
-database, forking and back-tracking as the science demands.
+This is **not a pipeline framework.** There is no DAG to declare and no fixed order of steps — only a *consensus data format* (the database) and tools that consume and produce it. You compose a workflow by pointing the next tool at a database, forking and back-tracking as the science demands.
 
 ## Start here
 

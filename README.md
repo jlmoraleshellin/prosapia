@@ -1,20 +1,10 @@
-# prosapia - Under construction...
+# prosapia
 
-**A data layer for protein design on HPC.** `prosapia` gives many heterogeneous
-protein-design tools (RFdiffusion, ProteinMPNN, AlphaFold3, ColabFold, Boltz,
-USalign, Rosetta, …) a single way to exchange results: a **shared database**
-that every tool reads from and writes back to. You bring the tools; the package
-supplies the data format, the two-phase SLURM driver that runs them, and the
-lineage bookkeeping that ties their outputs together.
+**A shared workbench for protein-design tools on HPC.** `prosapia` gives many heterogeneous protein-design tools (RFdiffusion, ProteinMPNN, AlphaFold3, ColabFold, Boltz, USalign, Rosetta, …) one bench to work on: a **shared database** every tool reads from and writes back to, and a **two-phase SLURM driver** that runs them on the cluster. Each tool sets its results on the bench and picks up what earlier tools left — so you bring the tools, and prosapia supplies the data format, the runner, and the lineage bookkeeping that ties their outputs together.
 
-This is **not a pipeline framework.** There is no DAG to declare and no fixed
-order of steps. Instead there is a *consensus data format* — the database — and
-tools that consume and produce it. You compose a workflow dynamically by pointing the next
-tool at a database, exploring, forking, and back-tracking as the science
-demands. The database is the interface; the tools are interchangeable.
+This is **not a pipeline framework.** There is no DAG to declare and no fixed order of steps. Instead there is a *consensus data format* — the database — and tools that consume and produce it. You compose a workflow dynamically by pointing the next tool at a database, exploring, forking, and back-tracking as the science demands. The database is the interface; the tools are interchangeable.
 
-`prosapia` installs the **`sapia`** CLI and is meant to be used as a **library**:
-you install it into a Python environment and build your own pipeline there by using the bundled tools, customizing them, or adding your own.
+`prosapia` installs the **`sapia`** CLI and is meant to be used as a **library, not just a data store**: the same core functions the bundled tools are built from are yours to import. Bolt your own tool onto the bench in **two small functions** — a manifest builder and a collector — reshape a bundled tool, or use the bundled ones as-is.
 
 > **Full documentation:** **[docs](docs/index.md)**.
 
@@ -22,30 +12,14 @@ you install it into a Python environment and build your own pipeline there by us
 
 ## How it works in one picture
 
-A design is a **row**; a database is a **table** (`.tsv`). Each tool contributes
-columns — a structure path, a sequence, a pLDDT, an RMSD — keyed by a design
-`name`. A tool never needs to know what ran before it; it reads the columns it
-needs and writes the columns it produces. That uniformity is what lets arbitrary
-tools compose without a hard-coded pipeline.
+A design is a **row**; a database is a **table** (`.tsv`). Each tool contributes columns — a structure path, a sequence, a pLDDT, an RMSD — keyed by a design `name`. A tool never needs to know what ran before it; it reads the columns it needs and writes the columns it produces. That uniformity is what lets arbitrary tools compose without a hard-coded pipeline.
 
 Every tool run has two phases against a `run_dir`:
 
-```mermaid
-flowchart LR
-    DB[("input db<br/>&lt;db&gt;.tsv")]
-    MAN["manifest .txt"]
-    OUT["on-disk outputs"]
-    DB2[("output db<br/>&lt;db&gt;.tsv")]
-
-    DB -->|"① sapia run<br/>build manifest"| MAN
-    MAN -->|"② SLURM array<br/>tool.sbatch"| OUT
-    OUT -->|"③ sapia collect<br/>read outputs"| DB2
-
-    classDef db fill:#e8f0fe,stroke:#4285f4,color:#111;
-    class DB,DB2 db;
-```
+![architecture](docs/images/architecture.png)
 
 The database is the durable record; the manifest is transient scaffolding for the SLURM job.
+
 See **[docs/architecture.md](docs/architecture.md)** for the full flow.
 
 ---
@@ -62,7 +36,7 @@ source .venv/bin/activate
 pip install git+https://github.com/jlmoraleshellin/prosapia.git
 ```
 
-> prosapia will be published to PyPI — `pip install prosapia` will work in the future.
+> [!NOTE] prosapia will be published to PyPI — `pip install prosapia` will work in the future.
 
 Verify the CLI is available and enable shell tab-completion:
 
@@ -159,21 +133,12 @@ one.
 
 ## Two kinds of tools: `create` vs. `update`
 
-A tool's `action` decides how its output relates to its input — and it encodes a
-biological rule:
+A tool's `action` decides how its output relates to its input — and it encodes a biological rule:
 
-**When a protein diverges in sequence or structure, it is no longer the same
-protein, so it needs a new database.**
+**When a protein diverges in sequence or structure, it is no longer the same protein, so it needs a new database.**
 
-- **`create`** mints a **new child database** (a new generation, `gen+1`) and
-  links each new row to its parent. Use it when the tool *produces new entities*:
-  RFdiffusion emits new backbones (and swaps side chains for glycines — a new
-  sequence); each diffusion is a distinct structure; ProteinMPNN turns one
-  backbone into many new sequences.
-- **`update`** annotates the **same database in place**, adding columns to
-  existing rows. Use it when the tool *measures a property* of designs that
-  already exist: an AlphaFold3 / ColabFold / Boltz prediction is a property of
-  *that* protein — not a new one — and a USalign score just annotates it.
+- **`create`** mints a **new child database** (a new generation, `gen+1`) and links each new row to its parent. Use it when the tool *produces new entities*: RFdiffusion emits new backbones (and swaps side chains for glycines — a new  sequence); each diffusion is a distinct structure; ProteinMPNN turns one backbone into many new sequences. 
+- **`update`** annotates the **same database in place**, adding columns to existing rows. Use it when the tool *measures a property* of designs that already exist: an AlphaFold3 / ColabFold / Boltz prediction is a property of *that* protein — not a new one — and a USalign score just annotates it.
 
 ```mermaid
 flowchart TD
@@ -183,24 +148,19 @@ flowchart TD
 
     S -->|"create: rfdiffusion"| R
     R -->|"create: mpnn_seqs<br/>1 backbone → N sequences"| A
-    A -->|"update: alphafold3<br/>predict + score in place"| A
-    A -->|"update: Alphafold<br/>Structure predictions"| A
+    A -->|"update: Alphafold<br/>structure predictions"| A
 
     classDef db fill:#e8f0fe,stroke:#4285f4,color:#111;
     class R,A db;
 ```
 
-Nothing about this tree is declared up front — each edge is just another
-`sapia run` / `sapia collect`. Read more in
-**[docs/lineage-and-databases.md](docs/lineage-and-databases.md)**.
+Nothing about this tree is declared up front — each edge is just another `sapia run` / `sapia collect`. Read more in **[docs/lineage-and-databases.md](docs/lineage-and-databases.md)**.
 
 ---
 
 ## Customizing and writing tools
 
-A tool carries **no orchestration logic** — the driver supplies that. It is just
-metadata plus two hooks and a batch script. There are three ways to adapt the
-bundled tools, from lightest to heaviest:
+A tool carries **no orchestration logic** — the driver supplies that. It is just metadata plus two hooks and a batch script. There are three ways to adapt the bundled tools, from lightest to heaviest:
 
 1. **Override one hook** — `get_builtin("rfdiffusion").with_overrides(collect_fn=…)`.
 2. **Fork a whole tool** — `sapia fork-tool rfdiffusion my_rfdiff` → `./tools/my_rfdiff/`.
