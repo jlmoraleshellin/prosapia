@@ -12,7 +12,7 @@ Databases are stored as `.tsv` by default, but the [`DataManager`](#the-drivers)
 
 A tool runs in **two phases** against a `run_dir`. The shared driver owns the flow; the tool fills in only the variable parts (which rows to submit, and how to read the results back).
 
-![architecture](docs/images/architecture.png)
+![architecture](images/architecture.png)
 
 1. **run** (`sapia run`) — the driver opens the input database, keeps the rows that are *ready* (their input column is present and the tool hasn't already finished them), and hands them to the tool's `build_manifest_fn`, which writes a tab-separated **manifest** — one line per array task. The driver then submits a SLURM array job whose `.sbatch` consumes that manifest.
 2. **compute** — SLURM runs the array. Each task cuts its own fields out of its manifest line and writes results under the tool's output directory (`run_dir/<db>/<tool>/`).
