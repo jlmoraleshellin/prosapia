@@ -1,6 +1,6 @@
 # Configuration
 
-`prosapia` does not bundle tools. You provide your own external binaries and environments (RFdiffusion, ProteinMPNN, Rosetta, etc.) and *bind* them to prosapia through **environment variables**, loaded from a `.env` file in your working directory. You only need to configure the tools you actually run.
+`prosapia` bundles the tool *implementations* but not the software behind them. You install your own external binaries and environments (RFdiffusion, ProteinMPNN, Rosetta, etc.) and *bind* them to prosapia through **environment variables**, loaded from a `.env` file in your working directory. You only need to configure the tools you actually run.
 
 ## How binding works
 

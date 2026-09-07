@@ -1,21 +1,25 @@
 # prosapia documentation
 
-**A shared workbench for protein-design tools on HPC.** `prosapia` gives many heterogeneous protein-design tools one bench to work on: a **shared database** every tool reads from and writes back to, and a **two-phase SLURM driver** that runs them on the cluster. Each tool sets its results on the bench and picks up what earlier tools left — so you bring the tools, and prosapia supplies the data format, the runner, and the lineage bookkeeping that ties their outputs together. It is meant to be used as a **library, not just a data store**: the core functions the bundled tools are built from are yours to import, so you can bolt your own tool onto the bench in two small functions.
-
-This is **not a pipeline framework.** There is no DAG to declare and no fixed order of steps — only a *consensus data format* (the database) and tools that consume and produce it. You compose a workflow by pointing the next tool at a database, forking and back-tracking as the science demands.
+New here? The [README](../README.md) has the pitch, installation, and a quick
+start. These pages go deeper.
 
 ## Start here
 
-- **New to prosapia?** The [README](../README.md) has installation and a quick start.
-- **Want the mental model?** Read [Architecture](architecture.md), then
-  [Lineage & databases](lineage-and-databases.md).
-- **Setting up tools?** See [Configuration](configuration.md).
-- **Building your own tool?** Follow [Writing a tool](writing-a-tool.md) and
-  [Writing a collect function](writing-a-collect-function.md).
-- **Hacking on prosapia itself?** See [Development](development.md).
-
-## The one-sentence model
-
-A design is a **row**, a database is a **table**, a tool contributes **columns** —
-and when a protein diverges in sequence or structure, a **new database** is born.
-Everything else follows from that.
+- **[Architecture](architecture.md)** — the shared database and the two-phase
+  SLURM driver.
+- **[Running a tool](running-a-tool.md)** — the `sapia run` flags and how they
+  map to a SLURM array job.
+- **[Collecting a tool](collecting-a-tool.md)** — the `sapia collect` phase that
+  writes a tool's outputs back into the database.
+- **[Using labels](using-labels.md)** — `--dir-label` and `--db-label` for
+  same-tool variants and forking the lineage.
+- **[Lineage & databases](lineage-and-databases.md)** — `create` vs. `update`,
+  roots, the lineage tree, and `lookup`.
+- **[Configuration](configuration.md)** — binding tools via activation scripts,
+  the environment-variable reference, and tool discovery.
+- **[Writing a tool](writing-a-tool.md)**, **[Writing a build-manifest
+  function](writing-a-build-manifest-function.md)**, and **[Writing a collect
+  function](writing-a-collect-function.md)** — build your own tool, or customize
+  a bundled one.
+- **[Writing a filter function](writing-a-filter-function.md)** — subset or
+  sample designs at submit time with `-f/--filter`.

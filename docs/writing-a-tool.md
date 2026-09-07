@@ -1,6 +1,10 @@
 # Writing a tool
 
-A tool carries **no orchestration logic** — the [drivers](architecture.md#the-drivers) supply that. A tool is just declarative metadata, two behavioral hooks, and a batch script. This guide covers the anatomy, the `.sbatch` contract, and how tools are discovered.
+## What is a tool?
+
+A **tool** is anything that **creates or updates a database**. It carries **no orchestration logic**; the [drivers](architecture.md#the-drivers) supply that. A tool is just declarative metadata, two behavioral hooks, and a batch script.
+
+prosapia bundles ready-made implementations for many popular tools (RFdiffusion, ProteinMPNN, AlphaFold3, and more), but it does **not install the underlying software** — you install and [bind](configuration.md) that yourself. When a tool you need isn't bundled, you write your own; when a bundled one nearly fits, you customize it. This guide covers both: the anatomy, the `.sbatch` contract, the [three ways to customize](#customizing-bundled-tools), and how tools are discovered.
 
 ## The four pieces
 
@@ -11,8 +15,7 @@ A tool carries **no orchestration logic** — the [drivers](architecture.md#the-
 | **`collect_fn`** | a collector factory: runs once per collect, returns a per-design function that yields the rows a design produced (see [Writing a collect function](writing-a-collect-function.md)). |
 | **`tool.sbatch`** | the per-array-task script; receives the manifest and `out_dir` as positional args. |
 
-An optional `tool_worker.py` can do extra Python work per task. If the per-design
-step is a simple shell command, put it directly in `tool.sbatch` instead.
+An optional `tool_worker.py` can do extra Python work per task. If the per-design step is a simple shell command, put it directly in `tool.sbatch` instead.
 
 ## Tool directory layout
 
@@ -26,6 +29,9 @@ mytool/
 ├── mytool.sbatch               # per-array-task script
 └── mytool_worker.py            # (optional) per-task Python
 ```
+
+> [!NOTE]
+> The only necessary files are `mytool.sbatch` and `spec.py`. The driver functions can be written in any python file inside the directory, even in `spec.py`.
 
 ### `spec.py`
 
@@ -69,24 +75,15 @@ def build_mytool_manifest(ctx: ManifestCtx) -> list[ManifestRow]:
     return rows
 ```
 
-`ctx` exposes the input frame (`ctx.df`), the parsed CLI args (`ctx.args`), the output directory (`ctx.out_dir`), a lineage `ctx.lookup`, and — most importantly — `ctx.ready`: the designs this run should submit (rows with a present input column, minus those the tool already finished, unless `--force`). You never filter or resume by hand.
+`ctx` exposes the input frame (`ctx.df`), the parsed CLI args (`ctx.args`), the output directory (`ctx.out_dir`), a lineage `ctx.lookup`, and — most importantly — `ctx.ready`: the designs this run should submit (rows with a present input column, minus those the tool already finished, unless `--force`). You never filter or resume by hand. See the dedicated [Writing a build-manifest function](writing-a-build-manifest-function.md) guide for the full contract, the context fields, and the common staging / sub-manifest / custom-selection patterns.
 
 ### `collect_fn`
 
-The collect-phase hook is a **factory**: `collect_mytool(ctx) -> CollectEach` runs
-once per collect (do any one-time output scan here) and returns a per-design
-function that `yield`s a `Collected` for each row a design produced. The driver
-iterates the ready designs and stamps the `<leaf>_status` / `<leaf>_path` /
-`parent_name` columns for you. See the dedicated
-[Writing a collect function](writing-a-collect-function.md) guide for the full
-contract with `create` and `update` examples.
+The collect-phase hook is a **factory**: `collect_mytool(ctx) -> CollectEach` runs once per collect (do any one-time output scan here) and returns a per-design function that `yield`s a `Collected` for each row a design produced. The driver iterates the ready designs and stamps the `<leaf>_status` / `<leaf>_path` / `parent_name` columns for you. See the dedicated [Writing a collect function](writing-a-collect-function.md) guide for the full contract with `create` and `update` examples.
 
 ## Writing a `.sbatch`
 
-Every tool's `.sbatch` receives two positional args — the manifest (`$1`) and the
-`out_dir` (`$2`) — and sources two things in order: the shared **prelude** (located
-via `$SAPIA_PRELUDE`) and the user's **activation script** (via
-`$SAPIA_ACTIVATE_<NAME>`, [required](#environment-activation)):
+Every tool's `.sbatch` receives two positional args — the manifest (`$1`) and the `out_dir` (`$2`) — and sources two things in order: the shared **prelude** (located via `$SAPIA_PRELUDE`) and the user's **activation script** (via `$SAPIA_ACTIVATE_<NAME>`, [required](#environment-activation)):
 
 ```bash
 #!/bin/bash
@@ -113,38 +110,22 @@ out of `$SAPIA_LINE` and write results under `$OUT_DIR`.
 ### Environment activation
 
 **Do not hard-code activation** (`conda activate`, `module load`, `source
-<activate>`) in your `.sbatch` — that is site-specific and belongs to the user.
-Instead add the standard activation block right after you source the prelude (as in
-the skeleton above): source the user's `SAPIA_ACTIVATE_<NAME>` script (`<NAME>` = your
-tool's `name`, upper-cased; see [Configuration](configuration.md#how-binding-works)).
-Make it **required** — a batch job starts from a bare shell, so failing fast beats
-running against the wrong environment. You may still expose an **optional path override
-that defaults to `PATH`** for the binary the user's script puts there:
+<activate>`) in your `.sbatch` — that is site-specific and belongs to the user. Instead add the standard activation block right after you source the prelude (as in the skeleton above): source the user's `SAPIA_ACTIVATE_<NAME>` script (`<NAME>` = your tool's `name`, upper-cased; see [Configuration](configuration.md#how-binding-works)). Make it **required** — a batch job starts from a bare shell, so failing fast beats running against the wrong environment. You may still expose an **optional path override that defaults to `PATH`** for the binary the user's script puts there:
 
 ```bash
 # defaults to PATH; user may set MYTOOL_BIN to a specific path
 "${MYTOOL_BIN:-mytool}" "$input" --out "$OUT_DIR"
 ```
 
-The `:?` makes the variable required and fails the job with a clear message when it is
-unset. The `set +u` guard matters — activation scripts often reference unset vars. Keep
-genuine *inputs* (script paths, container/weights/db paths) as their own named variables
-read in the `.sbatch`; the user exports them from the same activation script alongside
-activation, which is also where any per-tool runtime setup (framework caches, extra env
-vars) belongs (see [Configuration](configuration.md)). The exception is any input you
-read in Python at **submit time** (e.g. `os.getenv` in your build-manifest step) — that
-runs before the activation script, so it must come from `.env`.
+The `:?` makes the variable required and fails the job with a clear message when it is unset. The `set +u` guard matters — activation scripts often reference unset vars. Keep genuine *inputs* (script paths, container/weights/db paths) as their own named variables read in the `.sbatch`; the user exports them from the same activation script alongside activation, which is also where any per-tool runtime setup (framework caches, extra env vars) belongs (see [Configuration](configuration.md)). The exception is any input you read in Python at **submit time** (e.g. `os.getenv` in your build-manifest step) — that runs before the activation script, so it must come from `.env`.
 
 ## Customizing bundled tools
 
-The bundled tools are intentionally general and may not fit every workflow. Three
-ways to adapt them, from lightest to heaviest:
+The bundled tools are intentionally general and may not fit every workflow. Three ways to adapt them, from lightest to heaviest:
 
 ### 1. Reuse a bundled tool, override just what you need
 
-`Tool` is a frozen dataclass; `get_builtin` fetches a bundled one and
-`with_overrides` returns a copy with some fields swapped. In your own `spec.py`,
-reuse everything and replace only the hook that differs:
+`Tool` is a frozen dataclass; `get_builtin` fetches a bundled one and `with_overrides` returns a copy with some fields swapped. In your own `spec.py`, reuse everything and replace only the hook that differs:
 
 ```python
 from prosapia.core import get_builtin
@@ -166,21 +147,13 @@ Then edit the copy's `spec.py` / `run_*` / `collect_*`.
 
 ### 3. Write a tool from scratch
 
-Add a folder with a `spec.py` exporting `TOOL = Tool(...)`, a `run_*` manifest
-builder, a `collect_*` function, and a `.sbatch` — as laid out above.
+Add a folder with a `spec.py` exporting `TOOL = Tool(...)`, a `run_*` manifest builder, a `collect_*` function, and a `.sbatch` — as laid out above.
 
-## How tools are discovered (and how override wins)
+## How tools are discovered
 
-`sapia` scans the built-in tools directory first, then every directory in
-`$PROSAPIA_TOOLS_DIR` (`os.pathsep`-separated, default `./tools`). Tools are keyed
-by the `name` in their `spec.py`, and **later directories win**:
-
-- a tool whose `name` matches a built-in **shadows** it;
-- a new `name` registers a **new** tool alongside the built-ins.
-
-```bash
-export PROSAPIA_TOOLS_DIR=/shared/lab/prosapia-tools:./tools
-```
-
-Point `PROSAPIA_TOOLS_DIR` at a shared location to reuse custom tools across
-prosapia environments — see [Configuration](configuration.md#tool-discovery-and-sharing).
+`sapia` scans the built-in tools first, then every directory in
+`$PROSAPIA_TOOLS_DIR` (default `./tools`), keying tools by the `name` in their
+`spec.py`. Later directories win, so a custom tool can **shadow** a built-in of
+the same `name` or register **alongside** it under a new one. See
+[Configuration](configuration.md#tool-discovery-and-sharing) for the full rules
+and how to share a tools directory across environments.

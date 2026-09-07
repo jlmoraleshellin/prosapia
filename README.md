@@ -1,33 +1,32 @@
 # prosapia
 
-**A shared workbench for protein-design tools on HPC.** `prosapia` gives many heterogeneous protein-design tools (RFdiffusion, ProteinMPNN, AlphaFold3, ColabFold, Boltz, USalign, Rosetta, …) one bench to work on: a **shared database** every tool reads from and writes back to, and a **two-phase SLURM driver** that runs them on the cluster. Each tool sets its results on the bench and picks up what earlier tools left — so you bring the tools, and prosapia supplies the data format, the runner, and the lineage bookkeeping that ties their outputs together.
+`prosapia` is **a shared workbench for protein-design tools on HPC**. It's built with a single concept in mind: maximize *flexibility* while keeping *implementation* as simple as possible.
 
-This is **not a pipeline framework.** There is no DAG to declare and no fixed order of steps. Instead there is a *consensus data format* — the database — and tools that consume and produce it. You compose a workflow dynamically by pointing the next tool at a database, exploring, forking, and back-tracking as the science demands. The database is the interface; the tools are interchangeable.
+Tools share one bench: a **databases** they read from and write back to, and a **two-phase driver** that runs them on the cluster via SLURM. Each tool sets its results on the bench and picks up what earlier tools left.
 
-`prosapia` installs the **`sapia`** CLI and is meant to be used as a **library, not just a data store**: the same core functions the bundled tools are built from are yours to import. Bolt your own tool onto the bench in **two small functions** — a manifest builder and a collector — reshape a bundled tool, or use the bundled ones as-is.
-
-> **Full documentation:** **[docs](docs/index.md)**.
-
----
+See **[docs](docs/index.md)** for the full documentation.
 
 ## How it works in one picture
 
-A design is a **row**; a database is a **table** (`.tsv`). Each tool contributes columns — a structure path, a sequence, a pLDDT, an RMSD — keyed by a design `name`. A tool never needs to know what ran before it; it reads the columns it needs and writes the columns it produces. That uniformity is what lets arbitrary tools compose without a hard-coded pipeline.
+This is **not a pipeline framework.** There is no fixed order of steps. Instead there is a *consensus data format* — the database — and tools that consume and produce it. You compose a workflow dynamically by pointing the next tool at a database, exploring, forking, and back-tracking as the science demands. The database is the interface; the tools are interchangeable.
 
-Every tool run has two phases against a `run_dir`:
+Every tool is ran in two CLI phases against a `run_dir`. The database is the durable record; the manifest is transient scaffolding for the SLURM job:
 
 ![architecture](docs/images/architecture.png)
 
-The database is the durable record; the manifest is transient scaffolding for the SLURM job.
-
 See **[docs/architecture.md](docs/architecture.md)** for the full flow.
 
----
+## Tools
+
+A **tool** is anything that **creates or updates a database**. RFdiffusion creating backbones, ProteinMPNN designing sequences, an AlphaFold3 prediction annotating rows in place: each is just a tool that writes to the bench.
+
+`prosapia` implements many popular tools for you (RFdiffusion, ProteinMPNN, AlphaFold3, Boltz, etc.) as thin wrappers that plug into the driver. It does **not install the underlying software**. You install each binary or environment yourself and **bind** it to prosapia with a small activation script (see [Configuration](docs/configuration.md)).
+
+Need a tool that isn't bundled? **[Write your own](docs/writing-a-tool.md).**
 
 ## Installation
 
-`prosapia` is a `pip`-installable library. Install it into a dedicated
-environment and build your pipeline there.
+`prosapia` is a `pip`-installable library. Install it into a dedicated environment and build your pipeline there.
 
 ```bash
 python -m venv .venv
@@ -36,7 +35,8 @@ source .venv/bin/activate
 pip install git+https://github.com/jlmoraleshellin/prosapia.git
 ```
 
-> [!NOTE] prosapia will be published to PyPI — `pip install prosapia` will work in the future.
+> [!NOTE]
+prosapia will be published to PyPI — `pip install prosapia` will work in the future.
 
 Verify the CLI is available and enable shell tab-completion:
 
@@ -45,11 +45,9 @@ sapia --help
 sapia init          # one-time: install shell completion
 ```
 
----
-
 ## Configuration
 
-Prosapia does not bundle tools; you provide them as external binaries or environments (RFdiffusion, ProteinMPNN, Rosetta, …). What prosapia gives you is the framework to **bind** them: each tool needs a minimal **activation** shell snippet, sourced by its `.sbatch` to make the binary, environment, or input paths available to the SLURM job.
+prosapia ships the tool *implementations* but not the software behind them: you install each binary or environment yourself (RFdiffusion, ProteinMPNN, Rosetta, …) and **bind** it to prosapia. Each tool needs a minimal **activation** shell snippet, sourced by its `.sbatch` to make the binary, environment, or input paths available to the SLURM job.
 
 To bind a tool:
 
@@ -69,41 +67,15 @@ To bind a tool:
    $EDITOR .env   # SAPIA_ACTIVATE_RFDIFFUSION → the script above
    ```
 
-`.env` itself holds only global settings, those `SAPIA_ACTIVATE_<NAME>` pointers, and
-the few values prosapia reads at submit time (marked ⏱ below). A quick map — variables
-live in the tool's activation script unless marked ⏱ (set in `.env`):
+`.env` itself holds only global settings, those `SAPIA_ACTIVATE_<NAME>` pointers, and the few values prosapia reads at submit time.
 
-| Tool | Variables |
-| --- | --- |
-| `rfdiffusion` | `RUN_INFERENCE`; optional `RFDIFFUSION_PYTHON` |
-| `rfdiffusion3` | `FOUNDRY_CHECKPOINT_DIRS`; optional ⏱ `RFD3_CKPT` |
-| `mpnn_seqs` (ProteinMPNN) | `PROTEIN_MPNN`; optional `PROTEIN_MPNN_PYTHON` |
-| `alphafold3` | `AF3_CONTAINER`, `AF3_PARAMETERS`, `AF3_DATABASE` |
-| `colabfold` | activation only |
-| `openfold3` | activation + `TORCH_EXTENSIONS_DIR` |
-| `boltz` (lmi4boltz) | activation; optional ⏱ `USE_MSA`, ⏱ `TEMPLATE_CIF`, ⏱ `TEMPLATE_THRESHOLD` |
-| `USalign` | optional `USALIGN_BIN` |
-| `relaxed`, `symmdef` (Rosetta) | `ROSETTA` |
-| `align_symm_axis` | optional `PIPELINE_PYTHON` |
-
-See **[docs/configuration.md](docs/configuration.md)** for the activation-script model and
-what each variable means.
+See **[docs/configuration.md](docs/configuration.md)** for the activation-script model.
 
 ### Sharing custom tools across environments
 
-`sapia` discovers tools from the built-in set first, then from every directory
-in **`PROSAPIA_TOOLS_DIR`** (`os.pathsep`-separated, default `./tools`). Point it
-at a shared location and multiple prosapia environments can use the same custom
-tools:
+`sapia` discovers built-in tools first, then any directory in **`PROSAPIA_TOOLS_DIR`** (default `./tools`) — point it at a shared location to reuse custom tools across environments.
 
-```bash
-export PROSAPIA_TOOLS_DIR=/shared/lab/prosapia-tools:./tools
-```
-
-Later directories win, so a custom tool whose `name` matches a built-in
-**shadows** it, while a new `name` registers **alongside** the built-ins.
-
----
+ See [Configuration](docs/configuration.md#tool-discovery-and-sharing) for how discovery and shadowing work.
 
 ## Quick start
 
@@ -129,7 +101,7 @@ database to consume. Omit `-d` on a `create` tool to start a fresh root lineage.
 Only `sapia new_run` mints a `run_dir`; tools always operate inside an existing
 one.
 
----
+Every tool shares base `sapia run` flags — concurrency, partitions, GPUs, filtering, resume — and how they map to SLURM. See **[docs/running-a-tool.md](docs/running-a-tool.md)** for the full reference.
 
 ## Two kinds of tools: `create` vs. `update`
 
@@ -140,60 +112,35 @@ A tool's `action` decides how its output relates to its input — and it encodes
 - **`create`** mints a **new child database** (a new generation, `gen+1`) and links each new row to its parent. Use it when the tool *produces new entities*: RFdiffusion emits new backbones (and swaps side chains for glycines — a new  sequence); each diffusion is a distinct structure; ProteinMPNN turns one backbone into many new sequences. 
 - **`update`** annotates the **same database in place**, adding columns to existing rows. Use it when the tool *measures a property* of designs that already exist: an AlphaFold3 / ColabFold / Boltz prediction is a property of *that* protein — not a new one — and a USalign score just annotates it.
 
-```mermaid
-flowchart TD
-    S(["de-novo · no --database"])
-    R[("db0 · root<br/>backbones")]
-    A[("db1<br/>sequences")]
-
-    S -->|"create: rfdiffusion"| R
-    R -->|"create: mpnn_seqs<br/>1 backbone → N sequences"| A
-    A -->|"update: Alphafold<br/>structure predictions"| A
-
-    classDef db fill:#e8f0fe,stroke:#4285f4,color:#111;
-    class R,A db;
-```
-
-Nothing about this tree is declared up front — each edge is just another `sapia run` / `sapia collect`. Read more in **[docs/lineage-and-databases.md](docs/lineage-and-databases.md)**.
-
----
+Nothing about the resulting lineage tree is declared up front — each edge is just another `sapia run` / `sapia collect`. Read more, and see the tree diagram, in **[docs/lineage-and-databases.md](docs/lineage-and-databases.md)**.
 
 ## Customizing and writing tools
 
-A tool carries **no orchestration logic** — the driver supplies that. It is just metadata plus two hooks and a batch script. There are three ways to adapt the bundled tools, from lightest to heaviest:
-
-1. **Override one hook** — `get_builtin("rfdiffusion").with_overrides(collect_fn=…)`.
-2. **Fork a whole tool** — `sapia fork-tool rfdiffusion my_rfdiff` → `./tools/my_rfdiff/`.
-3. **Write one from scratch** — a folder with a `spec.py`, a manifest builder, a
-   collect function, and a `.sbatch`.
-
-Full walkthroughs:
+A tool carries **no orchestration logic** — the driver supplies that. It is just metadata plus two hooks and a batch script. You can override a single hook on a bundled tool, fork a whole tool, or write one from scratch. See:
 
 - **[docs/writing-a-tool.md](docs/writing-a-tool.md)** — the four pieces, the
-  `.sbatch` prelude, and tool discovery.
+  three ways to customize, and the `.sbatch` prelude.
 - **[docs/writing-a-collect-function.md](docs/writing-a-collect-function.md)** —
   the `collect_fn` contract with worked `create` and `update` examples.
 
----
 
 ## Documentation
 
 More detailed docs live under [`docs/`](docs/index.md):
 
 - [Architecture](docs/architecture.md) — the shared database and the two-phase driver.
+- [Running a tool](docs/running-a-tool.md) — the `sapia run` flags and how they map to SLURM.
+- [Collecting a tool](docs/collecting-a-tool.md) — the `sapia collect` phase and its flags.
+- [Using labels](docs/using-labels.md) — `--dir-label` and `--db-label` for variants and forks.
 - [Lineage & databases](docs/lineage-and-databases.md) — `create` vs. `update`, roots, and `lookup`.
 - [Configuration](docs/configuration.md) — the full environment-variable reference.
-- [Writing a tool](docs/writing-a-tool.md) and
-  [writing a collect function](docs/writing-a-collect-function.md).
-- [Development](docs/development.md) — working on prosapia itself.
+- [Writing a tool](docs/writing-a-tool.md), [writing a build-manifest function](docs/writing-a-build-manifest-function.md), [writing a collect function](docs/writing-a-collect-function.md), and [writing a filter function](docs/writing-a-filter-function.md).
 
----
 
 ## Contributing
 
 
 
----
 
 ## License
 
