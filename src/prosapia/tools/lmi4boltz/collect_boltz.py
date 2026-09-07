@@ -12,18 +12,17 @@ Supports both per-design results (boltz_results_<row>/) and shard results
 (boltz_results_shard_i/). Writes the metrics + path into the row.
 
 Usage:
-    python collect_boltz.py outputs/RUN --database db1_..._mpnn_seqs
-    python collect_boltz.py outputs/RUN --database db1_..._mpnn_seqs --force
+    sapia collect boltz outputs/RUN --database db1_..._mpnn_seqs
+    sapia collect boltz outputs/RUN --database db1_..._mpnn_seqs --force
 """
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, Iterable, List
 
-import numpy as np
 import pandas as pd
 
-from prosapia.core import CollectCtx, CollectResult
+from prosapia.core import Collected, CollectCtx, CollectEach, DesignCtx
 
 # Top-level scalar metrics to copy from the boltz confidence JSON.
 # Matches the first 9 keys in boltz's confidence_*_model_0.json output.
@@ -79,52 +78,17 @@ def load_metrics(json_path: Path) -> Dict[str, Any]:
     return {f"boltz_{k}": data.get(k, pd.NA) for k in BOLTZ_METRICS}
 
 
-def compute_redesigned_plddt(
-    plddt_path: Path,
-    hairpin_length: int,
-    n_subunits: int,
-) -> float:
-    """Mean pLDDT of the redesigned region (from hairpin_length onward) across all chains."""
-    plddt = np.load(plddt_path)["plddt"]
-    chain_len = len(plddt) // n_subunits
-    slices = [
-        plddt[i * chain_len + hairpin_length : (i + 1) * chain_len]
-        for i in range(n_subunits)
-    ]
-    return float(np.concatenate(slices).mean())
-
-
-def collect_boltz(ctx: CollectCtx) -> CollectResult:
-    df, boltz_dir = ctx.df, ctx.out_dir
-
-    path_col = f"{boltz_dir.name}_path"
-    status_col = f"{boltz_dir.name}_status"
-
-    if df.empty:
+def collect_boltz(ctx: CollectCtx) -> CollectEach:
+    """Per-design boltz collector. The framework iterates ready designs and stamps
+    status/path; this only locates + parses one design's prediction."""
+    if ctx.df.empty:
         raise RuntimeError(
             f"Database {ctx.args.database!r} is empty or missing in {ctx.args.run_dir}."
         )
 
-    # Same selection as run_boltz.py: OK MPNN sequences, excluding _f0.
-    ready = df[
-        df["sequence"].notna()
-        & (df["sequence"] != "")
-        & ~df.index.astype(str).str.endswith("_f0")
-    ]
-
-    if not ctx.args.force and path_col in df.columns:
-        existing = df.loc[ready.index, path_col]
-        already_done = ready.index[existing.notna() & (existing != "")]
-        if len(already_done) > 0:
-            print(
-                f"Skipping {len(already_done)} already-collected design(s) "
-                f"(use --force to re-collect)"
-            )
-            ready = ready.drop(already_done)
-
     # Build a map of design_name -> prediction dir across all boltz_results_* dirs.
     prediction_dirs: dict[str, Path] = {}
-    for results_dir in sorted(boltz_dir.glob("boltz_results_*")):
+    for results_dir in sorted(ctx.out_dir.glob("boltz_results_*")):
         preds = results_dir / "predictions"
         if not preds.is_dir():
             continue
@@ -132,59 +96,25 @@ def collect_boltz(ctx: CollectCtx) -> CollectResult:
             if design_dir.is_dir():
                 prediction_dirs[design_dir.name] = design_dir
 
-    updates: CollectResult = {}
-    n_filled = 0
-    n_missing = 0
-    for design_name in ready.index:
-        design_name = cast(str, design_name)
-        json_path, cif_path, plddt_path = find_prediction_files(
-            boltz_dir,
-            design_name,
-            prediction_dirs,
+    na_metrics: Dict[str, Any] = {f"boltz_{k}": pd.NA for k in BOLTZ_METRICS}
+
+    def one(d: DesignCtx) -> Iterable[Collected]:
+        json_path, cif_path, _plddt_path = find_prediction_files(
+            ctx.out_dir, d.name, prediction_dirs
         )
 
         if json_path is None or cif_path is None:
-            row: Dict[str, Any] = {
-                status_col: f"missing: boltz_results_{design_name}",
-                path_col: pd.NA,
-            }
-            row.update({f"boltz_{k}": pd.NA for k in BOLTZ_METRICS})
-            updates[design_name] = row
-            n_missing += 1
-            continue
+            yield Collected(status=f"missing: boltz_results_{d.name}", data=na_metrics)
+            return
 
         try:
             metrics = load_metrics(json_path)
         except (OSError, json.JSONDecodeError) as exc:
-            row = {
-                status_col: f"error: {exc.__class__.__name__}: {exc}",
-                path_col: pd.NA,
-            }
-            row.update({f"boltz_{k}": pd.NA for k in BOLTZ_METRICS})
-            updates[design_name] = row
-            n_missing += 1
-            continue
+            yield Collected(
+                status=f"error: {exc.__class__.__name__}: {exc}", data=na_metrics
+            )
+            return
 
-        # n_subunits / hairpin_length originate in worms_db and are inherited
-        # down the lineage -> resolve via lookup, not a local column.
-        hairpin_length = ctx.lookup(design_name, "hairpin_length")
-        n_subunits = ctx.lookup(design_name, "n_subunits")
-        if plddt_path is not None and pd.notna(hairpin_length) and pd.notna(n_subunits):
-            try:
-                metrics["boltz_redesigned_plddt"] = compute_redesigned_plddt(
-                    plddt_path,
-                    int(hairpin_length),
-                    int(n_subunits),
-                )
-            except Exception:
-                metrics["boltz_redesigned_plddt"] = pd.NA
+        yield Collected(data=metrics, path=cif_path)
 
-        row = {status_col: "OK", path_col: str(cif_path)}
-        row.update(metrics)
-        updates[design_name] = row
-        n_filled += 1
-
-    print(
-        f"Done. filled={n_filled}, missing={n_missing}, total_considered={len(ready)}"
-    )
-    return updates
+    return one

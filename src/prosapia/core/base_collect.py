@@ -10,18 +10,27 @@ writes rows back.
 
 from __future__ import annotations
 
+import json
 from argparse import ArgumentParser, Namespace
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Generic, Iterable, Mapping, TypeVar
 
 import pandas as pd
 from dotenv import load_dotenv
 
-from .base_cli import base_parser
-from .data_manager import Database, DataManager
-from .naming import GEN, PARENT_DB, PARENT_NAME, resolve_dir_name
+from .base_parser import base_parser
+from .data_manager import Database, DataManager, LookupFn, filter_ready
+from .naming import (
+    GEN,
+    PARENT_DB,
+    PARENT_NAME,
+    RUN_META_FILENAME,
+    path_column,
+    resolve_dir_name,
+    status_column,
+)
 
 if TYPE_CHECKING:
     from .tool import ToolMetadata
@@ -42,28 +51,166 @@ AddArgsFn = Callable[[ArgumentParser], None]
 
 # COLLECT FUNCTION
 CollectResult = dict[str, dict[str, Any]]
-LookupFn = Callable[[str, str], Any]
 ArgsT = TypeVar("ArgsT", bound=CollectArgs)
 
 
 @dataclass
 class CollectCtx(Generic[ArgsT]):
-    """Inputs a collect function may read (frame, args, dirs, parent, lookup)."""
+    """Inputs a collect function may read (frame, args, dirs, cols, parent, lookup)."""
 
     df: pd.DataFrame
     args: ArgsT
     db_name: str
     out_dir: Path
+    status_col: str
+    path_col: str
     parent_db: str | None
     parent_df: pd.DataFrame
     lookup: LookupFn
+    creates_db: bool
+    default_input_column: str
+
+    def _meta(self) -> dict | None:
+        """The run's sidecar (``.meta.json``) for this out_dir, or None when
+        absent (older run_dirs)."""
+        p = self.out_dir / RUN_META_FILENAME
+        if not p.is_file():
+            return None
+        try:
+            return json.loads(p.read_text())
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    @property
+    def ready(self) -> pd.DataFrame:
+        """The designs a collect should iterate over. Create-collect uses the parent db's ready designs,
+        update-collect uses this db's ready designs. A design is ready when it has a present input column.
+        """
+        meta = self._meta()
+        col = (
+            meta["input_column"]
+            if meta and "input_column" in meta
+            else self.default_input_column
+        )
+        frame = self.parent_df if self.creates_db else self.df
+        ready = filter_ready(frame, col)
+        if self.creates_db:
+            return ready
+        return drop_collected(ready, self.df, self.status_col, self.args.force)
 
 
 CollectFn = Callable[[CollectCtx[ArgsT]], CollectResult]
 
 
+# PER-DESIGN COLLECTION (the tool-facing contract)
+@dataclass(frozen=True)
+class Collected:
+    """One collected row's payload -- what a tool returns, sans framework bookkeeping.
+
+    ``data`` are the tool-specific columns. The framework stamps the rest:
+    ``path`` -> the tool's ``<leaf>_path`` column, ``status`` -> ``<leaf>_status``.
+    ``name`` overrides the row key -- omit it for an update (the row is keyed by the
+    design), set it for a create tool that mints child rows. ``parent`` -> the row's
+    ``parent_name`` (create tools linking a child to its parent).
+
+    ``status=None`` suppresses the ``<leaf>_status`` stamp entirely: for the rare tool
+    whose status/path columns are not leaf-keyed (e.g. one output dir hosting several
+    named comparisons), put every column in ``data`` and set ``status=None``.
+    """
+
+    data: Mapping[str, Any] = field(default_factory=dict)
+    path: str | Path | None = None
+    status: str | None = "OK"
+    name: str | None = None
+    parent: str | None = None
+
+
+@dataclass(frozen=True)
+class DesignCtx:
+    """One ready design, handed to a per-design collector. Carries no column names --
+    ``status``/``path`` are values on the returned ``Collected``, stamped by the driver."""
+
+    name: str
+    out_dir: Path
+    leaf: str
+    lookup: LookupFn
+
+
+# A per-design collector yields the rows one ready design produced (0..N).
+CollectEach = Callable[[DesignCtx], Iterable[Collected]]
+# A tool's ``collect_fn``: called once per run to do setup, returns the per-design
+# collector. The driver (``by_design``) wraps it into a full ``CollectFn``.
+CollectorFactory = Callable[["CollectCtx[ArgsT]"], CollectEach]
+
+
+def by_design(make: CollectorFactory) -> CollectFn:
+    """Adapt a tool's per-design collector factory into a full ``CollectFn``.
+
+    Iterates the run's ready designs, calls the tool's ``one(design)`` for each, and
+    folds every emitted ``Collected`` into the ``CollectResult`` -- stamping
+    ``<leaf>_status`` / ``<leaf>_path`` / ``parent_name`` here so no tool has to. This
+    is the *only* place that knows those column names.
+
+    Empty emission means "nothing on disk for this design": an update tool marks the
+    existing row ``missing``; a create tool has no row to mark, so it is skipped.
+    """
+
+    def _fn(ctx: "CollectCtx[ArgsT]") -> CollectResult:
+        one = make(ctx)  # per-run setup happens once (build indices, capture args)
+        updates: CollectResult = {}
+        for name in map(str, ctx.ready.index):
+            emitted = list(
+                one(
+                    DesignCtx(
+                        name,
+                        ctx.out_dir,
+                        ctx.out_dir.name,
+                        ctx.lookup,
+                    )
+                )
+            )
+            if not emitted:
+                if not ctx.creates_db:  # update: flag the existing row
+                    updates[name] = {ctx.status_col: "missing"}
+                continue  # create: nothing to mark
+            for c in emitted:
+                row = dict(c.data)
+                if c.status is not None:
+                    row[ctx.status_col] = c.status
+                if c.path is not None:
+                    row[ctx.path_col] = str(c.path)
+                if c.parent is not None:
+                    row[PARENT_NAME] = c.parent
+                updates[c.name or name] = row
+        return updates
+
+    return _fn
+
+
+def drop_collected(
+    ready_df: pd.DataFrame,
+    source_df: pd.DataFrame,
+    status_col: str,
+    force: bool,
+) -> pd.DataFrame:
+    """Rows of ``ready_df`` not yet successfully collected.
+
+    A row is done when ``source_df[status_col] == "OK"``. ``force`` bypasses the
+    filter (re-collect everything); a missing ``status_col`` (first collect) also
+    yields ``ready_df`` unchanged.
+    """
+    if force or status_col not in source_df.columns:
+        return ready_df
+    done = source_df.index[source_df[status_col] == "OK"]
+    return ready_df.drop(ready_df.index.intersection(done))
+
+
 def _add_collect_args(parser: ArgumentParser) -> None:
-    """Add the flags shared by every collector (``--dir-label`` + ``--force``)."""
+    """Add the flags shared by every collector (``--dir-label`` + ``--force``).
+
+    Collect takes no ``--input-column``: it reads the column the run recorded in the
+    out_dir sidecar (see ``CollectCtx.ready``), so run and collect can't disagree.
+    """
     parser.add_argument(
         "-l",
         "--dir-label",
@@ -79,19 +226,12 @@ def _add_collect_args(parser: ArgumentParser) -> None:
     )
 
 
-def collect_argparser(description: str) -> ArgumentParser:
-    """Parser shared by all collectors (``--database`` + ``--dir-label`` + ``--force``)."""
-    parser = ArgumentParser(parents=[base_parser()], description=description)
-    _add_collect_args(parser)
-    return parser
-
-
 def build_collect_parser(
     metadata: "ToolMetadata",
     add_extra_args_fn: AddArgsFn | None = None,
 ) -> ArgumentParser:
     """Build a reusable (``add_help=False``) parent parser holding every collect flag
-    for a tool. Used by ``collect`` (standalone) and by the ``ppl`` CLI as
+    for a tool. Used by ``collect`` (standalone) and by the ``sapia`` CLI as
     ``parents=[...]`` of each ``collect <tool>`` subparser.
     """
     parser = ArgumentParser(add_help=False, parents=[base_parser()])
@@ -123,6 +263,10 @@ def _finalize_create(
             )
         for row in updates.values():
             row[PARENT_DB] = database.parent_db_name
+    else:
+        # Root db (no parent): overwrite any PARENT_NAME with pd.NA
+        for row in updates.values():
+            row[PARENT_NAME] = pd.NA
     for row in updates.values():
         row.setdefault(GEN, database.gen)
 
@@ -143,23 +287,16 @@ def _finalize_update(
 
 def collect_from_args(
     metadata: ToolMetadata,
-    collect_fn: CollectFn[ArgsT],
+    collect_fn: CollectorFactory[ArgsT],
     args: ArgsT,
 ) -> None:
-    """Execute a collect from already-parsed args (shared by standalone and ``ppl``)."""
+    """Execute a collect from already-parsed args (shared by standalone and ``sapia``)."""
     db_name = args.database
 
     with DataManager(args.run_dir) as (dm, (read_frame, save_frame), registry):
         # Get database and output directory name
         output_db = registry.get_database(db_name)
         out_dir = resolve_dir_name(args, output_db, metadata)
-
-        if metadata.is_root and output_db.parent_db_name is not None:
-            raise ValueError(
-                f"Root tool {metadata.name!r} expects a root db, but {db_name!r} has "
-                f"parent {output_db.parent_db_name!r} in the registry. Pass the root db reserved by "
-                f"run_{metadata.name}.py as --database."
-            )
 
         # Read parent DataFrame or create one
         parent_df = (
@@ -171,16 +308,21 @@ def collect_from_args(
         # Read source DataFrame
         df = read_frame(db_name)
 
+        leaf = out_dir.name
         ctx = CollectCtx(
             df=df,
             args=args,
             db_name=db_name,
             out_dir=out_dir,
+            status_col=status_column(leaf),
+            path_col=path_column(leaf),
             parent_db=output_db.parent_db_name,
             parent_df=parent_df,
             lookup=partial(dm.lookup, df),
+            creates_db=metadata.creates_db,
+            default_input_column=metadata.default_input_column,
         )
-        updates = collect_fn(ctx)
+        updates = by_design(collect_fn)(ctx)
 
         if metadata.creates_db:
             _finalize_create(updates, output_db, parent_df)

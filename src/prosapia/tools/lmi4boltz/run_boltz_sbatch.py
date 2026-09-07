@@ -10,8 +10,8 @@ The template CIF, chain layout, and number of subunits are hardcoded at the
 top of this file -- edit them there.
 
 Usage:
-    python run_boltz_batch.py outputs/20260420_123035_grow_hairpin
-    python run_boltz_batch.py outputs/20260420_123035_grow_hairpin --shard-size 20 --devices 4
+    sapia run boltz outputs/20260420_123035_grow_hairpin --database db1_..._mpnn_seqs
+    sapia run boltz outputs/20260420_123035_grow_hairpin --database db1_..._mpnn_seqs --shard-size 20 --devices 4
 """
 
 import os
@@ -29,7 +29,7 @@ load_dotenv()  # Load environment variables from .env file
 # ------------ Boltz template config -----------------------------------------
 N_SUBUNITS = 11
 CHAIN_IDS = list("ABCDEFGHIJK")[:N_SUBUNITS]
-TEMPLATE_CIF = os.getenv("TEMPLATE_CIF", "data/7ojg.cif")  # set in .env
+TEMPLATE_CIF = os.getenv("TEMPLATE_CIF", "")  # set in .env
 TEMPLATE_THRESHOLD = os.getenv("TEMPLATE_THRESHOLD", 2.0)  # set in .env
 USE_MSA = os.getenv("USE_MSA", False)  # set in .env
 # -----------------------------------------------------------------------------
@@ -85,41 +85,30 @@ def _add_boltz_args(parser: ArgumentParser) -> None:
 
 
 def build_boltz_manifest(ctx: ManifestCtx[BoltzArgs]):
-    df, args, out_dir = ctx.df, ctx.args, ctx.out_dir
-    if args.devices > 1:
-        args.gpus_per_task = args.devices
+    if ctx.args.devices > 1:
+        ctx.args.gpus_per_task = ctx.args.devices
 
-    yaml_dir = out_dir / "boltz_inputs"
+    yaml_dir = ctx.out_dir / "boltz_inputs"
     yaml_dir.mkdir(parents=True, exist_ok=True)
 
-    ready = df[
-        df[args.input_column].notna()
-        & (df[args.input_column] != "")
-        & ~df.index.astype(str).str.endswith("_f0")
-    ]
-
-    output_status_col = f"{out_dir.name}_status"
-    if output_status_col in ready.columns:
-        ready = ready[ready[output_status_col] != "OK"]
-
     yaml_paths: list[Path] = []
-    for name in ready.index:
+    for name in ctx.ready.index:
         name = cast(str, name)
-        sequence = str(ready.at[name, args.input_column])
+        sequence = str(ctx.ready.at[name, ctx.args.input_column])
         yaml_path = yaml_dir / f"{name}.yml"
         write_boltz_yaml(yaml_path, sequence)
         yaml_paths.append(yaml_path)
 
-    shards_dir = out_dir / "boltz_shards"
+    shards_dir = ctx.out_dir / "boltz_shards"
     shards_dir.mkdir(parents=True, exist_ok=True)
 
     manifest_rows: list[tuple[str, ...]] = []
-    for i in range(0, len(yaml_paths), args.shard_size):
-        shard_idx = i // args.shard_size
+    for i in range(0, len(yaml_paths), ctx.args.shard_size):
+        shard_idx = i // ctx.args.shard_size
         shard = shards_dir / f"shard_{shard_idx}"
         shard.mkdir(parents=True, exist_ok=True)
-        for yaml_path in yaml_paths[i : i + args.shard_size]:
+        for yaml_path in yaml_paths[i : i + ctx.args.shard_size]:
             copy2(yaml_path, shard / yaml_path.name)
-        manifest_rows.append((str(shard), str(args.devices)))
+        manifest_rows.append((str(shard), str(ctx.args.devices)))
 
     return manifest_rows

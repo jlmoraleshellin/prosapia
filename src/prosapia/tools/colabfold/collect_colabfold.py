@@ -15,19 +15,19 @@ Output structure expected (per task directory):
         ...
 
 Usage:
-    python collect_colabfold.py outputs/RUN --database db1_..._mpnn_seqs
-    python collect_colabfold.py outputs/RUN --database db1_..._mpnn_seqs --force
+    sapia collect colabfold outputs/RUN --database db1_..._mpnn_seqs
+    sapia collect colabfold outputs/RUN --database db1_..._mpnn_seqs --force
 """
 
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, Iterable, List
 
 import numpy as np
 import pandas as pd
 
-from prosapia.core import CollectCtx, CollectResult
+from prosapia.core import Collected, CollectCtx, CollectEach, DesignCtx
 
 
 def _build_design_file_map(
@@ -81,72 +81,35 @@ def load_metrics(prefix: str, json_path: Path) -> Dict[str, Any]:
     }
 
 
-def collect_colabfold(ctx: CollectCtx) -> CollectResult:
-    df, args, cf_dir = ctx.df, ctx.args, ctx.out_dir
-
-    prefix = cf_dir.name
-    path_col = f"{prefix}_path"
-    status_col = f"{prefix}_status"
-    metrics_cols: List[str] = [
-        f"{prefix}_{m}" for m in ("avg_plddt", "ptm", "iptm", "max_pae")
-    ]
-
-    if df.empty:
+def collect_colabfold(ctx: CollectCtx) -> CollectEach:
+    """Per-design ColabFold collector. The framework iterates ready designs and
+    stamps status/path; this only locates + parses one design's rank-1 output."""
+    if ctx.df.empty:
         raise RuntimeError(
-            f"Database {args.database!r} is empty or missing in {args.run_dir}."
+            f"Database {ctx.args.database!r} is empty or missing in {ctx.args.run_dir}."
         )
 
-    ready = df[
-        df["sequence"].notna()
-        & (df["sequence"] != "")
-        & ~df.index.astype(str).str.endswith("_f0")
+    design_files = _build_design_file_map(ctx.out_dir)
+    metrics_cols: List[str] = [
+        f"{ctx.out_dir.name}_{m}" for m in ("avg_plddt", "ptm", "iptm", "max_pae")
     ]
+    na_metrics: Dict[str, Any] = {k: pd.NA for k in metrics_cols}
 
-    if not args.force and path_col in df.columns:
-        existing = df.loc[ready.index, path_col]
-        already_done = ready.index[existing.notna() & (existing != "")]
-        if len(already_done) > 0:
-            print(
-                f"Skipping {len(already_done)} already-collected design(s) "
-                f"(use --force to re-collect)"
-            )
-            ready = ready.drop(already_done)
-
-    design_files = _build_design_file_map(cf_dir)
-
-    updates: CollectResult = {}
-    n_filled = 0
-    n_missing = 0
-    for design_name in ready.index:
-        design_name = cast(str, design_name)
-        files = design_files.get(design_name)
-
+    def one(d: DesignCtx) -> Iterable[Collected]:
+        files = design_files.get(d.name)
         if files is None:
-            row: Dict[str, Any] = {status_col: "missing", path_col: pd.NA}
-            row.update({k: pd.NA for k in metrics_cols})
-            updates[design_name] = row
-            n_missing += 1
-            continue
+            yield Collected(status="missing", data=na_metrics)
+            return
 
         scores_path, model_path = files
         try:
-            metrics = load_metrics(prefix, scores_path)
+            metrics = load_metrics(d.leaf, scores_path)
         except (OSError, json.JSONDecodeError) as exc:
-            row = {
-                status_col: f"error: {exc.__class__.__name__}: {exc}",
-                path_col: pd.NA,
-            }
-            row.update({k: pd.NA for k in metrics_cols})
-            updates[design_name] = row
-            n_missing += 1
-            continue
+            yield Collected(
+                status=f"error: {exc.__class__.__name__}: {exc}", data=na_metrics
+            )
+            return
 
-        row = {status_col: "OK", path_col: str(model_path)}
-        row.update(metrics)
-        updates[design_name] = row
-        n_filled += 1
+        yield Collected(data=metrics, path=model_path)
 
-    print(
-        f"Done. filled={n_filled}, missing={n_missing}, total_considered={len(ready)}"
-    )
-    return updates
+    return one

@@ -7,63 +7,44 @@ by make_symmdef.sbatch, and merges the symm status + path back into the
 specified database as <prefix>_status / <prefix>_path columns.
 
 Usage:
-    python collect_make_symmdef.py outputs/RUN \
+    sapia collect make_symmdef outputs/RUN \
         --database db1_..._assembled
 """
 
+from typing import Iterable
+
 import pandas as pd
 
-from prosapia.core import CollectCtx, CollectResult
+from prosapia.core import Collected, CollectCtx, CollectEach, DesignCtx
 
 
-def collect_make_symmdef(ctx: CollectCtx) -> CollectResult:
-    df, args, out_dir = ctx.df, ctx.args, ctx.out_dir
+def collect_make_symmdef(ctx: CollectCtx) -> CollectEach:
+    """Per-design make_symmdef collector. The framework iterates ready designs and
+    stamps status/path (keyed by the tool leaf); this reads one design's one-row
+    <name>.tsv. Variants are distinguished via --dir-label, matching the output dir."""
 
-    # Columns are keyed by the tool leaf (make_symmdef[_<dir_label>]); variants
-    # are distinguished via --dir-label, matching the output dir.
-    prefix = out_dir.name
-    status_col = f"{prefix}_status"
-    path_col = f"{prefix}_path"
+    def one(d: DesignCtx) -> Iterable[Collected]:
+        tsv_path = ctx.out_dir / f"{d.name}.tsv"
 
-    tsvs = sorted(ctx.out_dir.glob("*.tsv"))
-    print(f"Found {len(tsvs)} result file(s) in {ctx.out_dir}")
+        if not tsv_path.is_file():
+            yield Collected(status="missing", path="")
+            return
 
-    updates: CollectResult = {}
-    n_ok = 0
-    n_err = 0
-    n_skipped = 0
-
-    for tsv_path in tsvs:
         result_df = pd.read_csv(tsv_path, sep="\t")
         if result_df.empty:
-            n_err += 1
-            continue
+            yield Collected(status="error: empty tsv", path="")
+            return
 
         row_data = result_df.iloc[0]
-        name = str(row_data["name"])
         status = str(row_data["status"])
-
-        if (
-            not args.force
-            and status_col in df.columns
-            and name in df.index
-            and not pd.isna(df.at[name, status_col])
-            and df.at[name, status_col] == "OK"
-        ):
-            n_skipped += 1
-            continue
 
         if status == "OK":
             symm_path = row_data["symm_path"]
-            updates[name] = {
-                status_col: status,
-                path_col: "" if pd.isna(symm_path) else str(symm_path),
-            }
-            n_ok += 1
+            yield Collected(
+                status=status,
+                path="" if pd.isna(symm_path) else str(symm_path),
+            )
         else:
-            updates[name] = {status_col: status, path_col: ""}
-            n_err += 1
+            yield Collected(status=status, path="")
 
-    skipped_msg = f", skipped={n_skipped}" if n_skipped else ""
-    print(f"Done. ok={n_ok}, errors={n_err}{skipped_msg}")
-    return updates
+    return one

@@ -8,64 +8,49 @@ axis-quality metric back into the database as <prefix>_status / <prefix>_path /
 <prefix>_max_dev_deg columns.
 
 Usage:
-    python collect_align_symm_axis.py outputs/RUN --database db
+    sapia collect align_symm_axis outputs/RUN --database db
 """
+
+from typing import Iterable
 
 import pandas as pd
 
-from prosapia.core import CollectCtx, CollectResult
+from prosapia.core import Collected, CollectCtx, CollectEach, DesignCtx
 
 
-def collect_align_symm_axis(ctx: CollectCtx) -> CollectResult:
-    df, args, out_dir = ctx.df, ctx.args, ctx.out_dir
+def collect_align_symm_axis(ctx: CollectCtx) -> CollectEach:
+    """Per-design align_symm_axis collector. The framework iterates ready designs and
+    stamps status/path (keyed by the tool leaf); this reads one design's one-row
+    <name>.tsv and adds the axis-quality metric column."""
+    # The axis-quality column is keyed by the tool leaf (output dir name).
+    max_dev_col = f"{ctx.out_dir.name}_max_dev_deg"
 
-    # Columns are keyed by the tool leaf (output dir name)
-    prefix = out_dir.name
-    status_col = f"{prefix}_status"
-    path_col = f"{prefix}_path"
-    max_dev_col = f"{prefix}_max_dev_deg"
+    def one(d: DesignCtx) -> Iterable[Collected]:
+        tsv_path = ctx.out_dir / f"{d.name}.tsv"
 
-    tsvs = sorted(ctx.out_dir.glob("*.tsv"))
-    print(f"Found {len(tsvs)} result file(s) in {ctx.out_dir}")
+        if not tsv_path.is_file():
+            yield Collected(status="missing", path="", data={max_dev_col: None})
+            return
 
-    updates: CollectResult = {}
-    n_ok = 0
-    n_err = 0
-    n_skipped = 0
-
-    for tsv_path in tsvs:
         result_df = pd.read_csv(tsv_path, sep="\t")
         if result_df.empty:
-            n_err += 1
-            continue
+            yield Collected(
+                status="error: empty tsv", path="", data={max_dev_col: None}
+            )
+            return
 
         row_data = result_df.iloc[0]
-        name = str(row_data["name"])
         status = str(row_data["status"])
-
-        if (
-            not args.force
-            and status_col in df.columns
-            and name in df.index
-            and not pd.isna(df.at[name, status_col])
-            and df.at[name, status_col] == "OK"
-        ):
-            n_skipped += 1
-            continue
 
         if status == "OK":
             aligned_path = row_data["aligned_path"]
             max_dev = row_data["max_dev_deg"]
-            updates[name] = {
-                status_col: status,
-                path_col: "" if pd.isna(aligned_path) else str(aligned_path),
-                max_dev_col: None if pd.isna(max_dev) else float(max_dev),
-            }
-            n_ok += 1
+            yield Collected(
+                status=status,
+                path="" if pd.isna(aligned_path) else str(aligned_path),
+                data={max_dev_col: None if pd.isna(max_dev) else float(max_dev)},
+            )
         else:
-            updates[name] = {status_col: status, path_col: "", max_dev_col: None}
-            n_err += 1
+            yield Collected(status=status, path="", data={max_dev_col: None})
 
-    skipped_msg = f", skipped={n_skipped}" if n_skipped else ""
-    print(f"Done. ok={n_ok}, errors={n_err}{skipped_msg}")
-    return updates
+    return one

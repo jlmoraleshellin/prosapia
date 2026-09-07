@@ -8,23 +8,18 @@
 #SBATCH --mem=32G
 
 set -uo pipefail
-set -a
-source .env # Load CONDA_PREFIX and FOUNDRY_ENV_NAME
-set +a
 
-# Positional args from submit_sbatch_array:
-#   $1 = manifest file (tab-separated: shard_json \t rfd3_overrides)
-#   $2 = output dir (e.g. <run_dir>/<db>/rfdiffusion3)
-MANIFEST=$1
-OUT_DIR=$2
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
+source "${SAPIA_PRELUDE:?}"
 
-LINE=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$MANIFEST")
-SHARD_JSON=$(echo "$LINE" | cut -f1)
-OVERRIDES=$(echo "$LINE" | cut -f2)
+# Site-specific activation (required) — see docs/configuration.md.
+# Must put `rfd3` on PATH (e.g. `conda activate <env>` and export FOUNDRY_CHECKPOINT_DIRS).
+set +u
+source "${SAPIA_ACTIVATE_RFDIFFUSION3:?set SAPIA_ACTIVATE_RFDIFFUSION3 in your .env to a tool activation script}"
+set -u
 
-source "$CONDA_PREFIX/etc/profile.d/conda.sh"
-conda activate "$FOUNDRY_ENV_NAME"
- export FOUNDRY_CHECKPOINT_DIRS="/data/groups/csb/anastassia.vorobieva/softwares/foundry"
+SHARD_JSON=$(echo "$SAPIA_LINE" | cut -f1)
+OVERRIDES=$(echo "$SAPIA_LINE" | cut -f2)
 
 SHARD_OUT_DIR=$OUT_DIR/results_$(basename "$SHARD_JSON" .json)
 mkdir -p "$SHARD_OUT_DIR"

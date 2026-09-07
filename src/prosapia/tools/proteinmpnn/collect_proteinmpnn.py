@@ -15,8 +15,8 @@ Lineage is derived from the directory structure:
     symlinks each input as ``<design_name>.pdb``, so the stem IS the immediate
     parent-db row -- stamped as ``parent_name``.
 
-Each row carries only ``parent_name``; ancestor values (worms parent, diffused
-parent, boltz metrics) are resolved on demand by walking the lineage with
+Each row carries only ``parent_name``; ancestor values (diffused parent,
+boltz metrics) are resolved on demand by walking the lineage with
 ``DataManager.lookup`` / ``trace_lineage``, so nothing is propagated here.
 
 The db was reserved by the run script (``run_proteinmpnn_sbatch.py --db-label``),
@@ -25,23 +25,24 @@ to resolve lineage) comes from the registry, so there is no ``--parent-db`` flag
 
 Usage:
     # Round 1 (after diffusion -> mpnn); db reserved as e.g. db1_<label>_mpnn_seqs:
-    python collect_proteinmpnn2.py outputs/20260430_170523_grow_hairpin_nofilter \\
+    sapia collect mpnn_seqs outputs/20260430_170523_grow_hairpin_nofilter \\
         --database db1_<label>_mpnn_seqs
 
     # Round 2 (after boltz -> mpnn):
-    python collect_proteinmpnn2.py outputs/20260430_170523_grow_hairpin_nofilter \\
+    sapia collect mpnn_seqs outputs/20260430_170523_grow_hairpin_nofilter \\
         --database db2_<label>_mpnn_seqs_r2
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
 import pandas as pd
 
 from prosapia.core import (
-    PARENT_NAME,
+    Collected,
     CollectCtx,
-    CollectResult,
+    CollectEach,
+    DesignCtx,
 )
 
 HEADER_FIELDS: Dict[str, type] = {
@@ -89,71 +90,44 @@ def parse_fasta(fasta_path: Path) -> List[Tuple[str, str]]:
     return entries
 
 
-def collect_mpnn(ctx: CollectCtx) -> CollectResult:
-    args, mpnn_dir = ctx.args, ctx.out_dir
-
-    status_col = f"{mpnn_dir.name}_status"
-    path_col = f"{mpnn_dir.name}_path"
-    output_df = ctx.df
-
+def collect_mpnn(ctx: CollectCtx) -> CollectEach:
+    """Per-parent ProteinMPNN collector. mpnn is a create tool: the framework iterates
+    the ready parents and this mints one child row (``<parent>_f<i>``) per sampled
+    sequence, carrying ``parent`` for lineage. The framework stamps status/path/
+    parent_name from each Collected; child rows are discovered on disk, so re-running
+    rebuilds them (idempotent)."""
     # Each grp_<g>/ output dir holds seqs/<design>.fa, where the staged input was
     # symlinked as <design>.pdb -- so the FASTA stem IS the parent-db row name.
-    subdirs = sorted(p for p in mpnn_dir.iterdir() if p.is_dir())
-    print(f"Scanning {len(subdirs)} subdirectory(ies) in {mpnn_dir}")
-
-    updates: CollectResult = {}
-    n_rows = 0
-    n_skipped = 0
-    n_error = 0
-
-    for subdir in subdirs:
-        input_name = subdir.name
+    fasta_by_parent: Dict[str, Path] = {}
+    for subdir in sorted(p for p in ctx.out_dir.iterdir() if p.is_dir()):
+        if subdir.name in ("proteinmpnn_logs", "proteinmpnn_tasks"):
+            continue
         seqs_dir = subdir / "seqs"
-
-        if (
-            subdir.name == "proteinmpnn_logs" or subdir.name == "proteinmpnn_tasks"
-        ):  # Skip log  and tasks folder
-            continue
-
         if not seqs_dir.is_dir():
-            print(f"{input_name}: no seqs/ directory (skipping)")
-            n_error += 1
             continue
+        for fasta_path in seqs_dir.glob("*.fa"):
+            fasta_by_parent[fasta_path.stem] = fasta_path
 
-        fastas = sorted(seqs_dir.glob("*.fa"))
-        if not fastas:
-            print(f"{input_name}: no .fa files in seqs/ (skipping)")
-            n_error += 1
-            continue
+    def one(d: DesignCtx) -> Iterable[Collected]:
+        fasta_path = fasta_by_parent.get(d.name)
+        if fasta_path is None:
+            print(f"{d.name}: no FASTA found (skipping)")
+            return
 
-        for fasta_path in fastas:
-            parent_name = fasta_path.stem
-            entries = parse_fasta(fasta_path)
+        for i, (header, sequence) in enumerate(parse_fasta(fasta_path)):
+            # entries[0] is ProteinMPNN's echo of the native input sequence
+            # (the old <parent>_f0). Skip it: only the sampled designs (_f1+)
+            # are real outputs, so downstream predictors need no _f0 guard.
+            if i == 0:
+                continue
 
-            for i, (header, sequence) in enumerate(entries):
-                row_name = f"{parent_name}_f{i}"
+            data: Dict[str, Any] = {"iteration": i, "sequence": sequence}
+            data.update(parse_mpnn_header(header))
+            yield Collected(
+                name=f"{d.name}_f{i}",
+                parent=d.name,
+                path=fasta_path,
+                data=data,
+            )
 
-                if (
-                    not args.force
-                    and status_col in output_df.columns
-                    and row_name in output_df.index
-                    and output_df.at[row_name, status_col] == "OK"
-                ):
-                    n_skipped += 1
-                    continue
-
-                row: Dict[str, Any] = {
-                    PARENT_NAME: parent_name,  # immediate parent row in parent_db
-                    "iteration": i,
-                    status_col: "OK",
-                    path_col: str(fasta_path),
-                    "sequence": sequence,
-                }
-                row.update(parse_mpnn_header(header))
-
-                updates[row_name] = row
-                n_rows += 1
-
-    skipped_msg = f", skipped={n_skipped}" if n_skipped else ""
-    print(f"Done. wrote={n_rows}, errors={n_error}{skipped_msg}")
-    return updates
+    return one

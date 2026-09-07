@@ -9,12 +9,14 @@
 #SBATCH --mem=8G
 
 set -euo pipefail
-set -a
-source .env # PROTEIN_MPNN (repo root), PROTEIN_MPNN_PYTHON (its interpreter)
-set +a
 
-MANIFEST=$1
-OUTDIR=$2
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
+source "${SAPIA_PRELUDE:?}"
+
+# Site-specific activation (required) — see docs/configuration.md.
+set +u
+source "${SAPIA_ACTIVATE_MPNN_SEQS:?set SAPIA_ACTIVATE_MPNN_SEQS in your .env to a tool activation script}"
+set -u
 
 PROTEIN_MPNN_PYTHON=${PROTEIN_MPNN_PYTHON:-python}
 
@@ -82,7 +84,7 @@ run_one_group() {
         ${extra[@]+"${extra[@]}"}
 }
 
-SUBMANIFEST=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$MANIFEST" | cut -f1)
+SUBMANIFEST=$(printf '%s' "$SAPIA_LINE" | cut -f1)
 
 while IFS= read -r row || [ -n "$row" ]; do
     [ -z "$row" ] && continue

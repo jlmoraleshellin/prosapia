@@ -9,20 +9,21 @@
 # Inputs are already staged to PDB at manifest-build time.
 
 set -uo pipefail
-set -a
-source .env # USALIGN_BIN (optional; defaults to `USalign` on PATH)
-set +a
 
-MANIFEST=$1
-OUT_DIR=$2
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
+source "${SAPIA_PRELUDE:?}"
 
-LINE=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$MANIFEST")
-NAME=$(echo "$LINE" | cut -f1)
-PDB_A=$(echo "$LINE" | cut -f2)
-PDB_B=$(echo "$LINE" | cut -f3)
-COL_A=$(echo "$LINE" | cut -f4)
-COL_B=$(echo "$LINE" | cut -f5)
-PREFIX=$(echo "$LINE" | cut -f6)
+# Site-specific activation (required) — see docs/configuration.md.
+set +u
+source "${SAPIA_ACTIVATE_USALIGN:?set SAPIA_ACTIVATE_USALIGN in your .env to a tool activation script}"
+set -u
+
+NAME=$(echo "$SAPIA_LINE" | cut -f1)
+PDB_A=$(echo "$SAPIA_LINE" | cut -f2)
+PDB_B=$(echo "$SAPIA_LINE" | cut -f3)
+COL_A=$(echo "$SAPIA_LINE" | cut -f4)
+COL_B=$(echo "$SAPIA_LINE" | cut -f5)
+PREFIX=$(echo "$SAPIA_LINE" | cut -f6)
 
 USALIGN_BIN=${USALIGN_BIN:-USalign}
 # 9 USalign metrics, in the order collect_usalign.py expects.

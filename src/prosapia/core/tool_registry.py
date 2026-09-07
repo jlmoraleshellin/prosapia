@@ -5,6 +5,8 @@ from pathlib import Path
 
 from .tool import Tool
 
+BUILTIN_TOOLS_DIR = Path(__file__).parent.parent / "tools"
+
 
 def _load(spec_py: Path) -> Tool:
     """Load a tool's ``spec.py`` as a submodule of a synthetic package rooted at
@@ -12,7 +14,7 @@ def _load(spec_py: Path) -> Tool:
     ...``) without polluting ``sys.path`` or colliding with other tools' modules.
     """
     tool_dir = spec_py.parent
-    pkg_name = f"_pipeline_tool_{tool_dir.name}"
+    pkg_name = f"_sapia_tool_{tool_dir.name}"
 
     # Register the tool folder as a package whose ``__path__`` is the folder, so
     # its files resolve as namespaced submodules (``<pkg>.run``, ``<pkg>.collect``).
@@ -44,3 +46,9 @@ def discover(*tools_dirs: Path) -> dict[str, Tool]:
             if t := _load(f):
                 tools[t.name] = t
     return tools
+
+
+def get_builtin(tool_name: str) -> Tool:
+    """Return the built-in tool with the given name, or raise KeyError."""
+    tools = discover(BUILTIN_TOOLS_DIR)
+    return tools[tool_name]

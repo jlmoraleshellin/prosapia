@@ -17,19 +17,18 @@ from pathlib import Path
 import argcomplete
 
 from .completion import build_init_parser, init_from_args
-from .core.base_collect import build_collect_parser, collect_from_args
-from .core.base_sbatch import build_run_parser, run_from_args
-from .core.tool import Tool
-from .core.tool_registry import discover
+from ..core.base_collect import build_collect_parser, collect_from_args
+from ..core.base_sbatch import build_run_parser, run_from_args
+from ..core.tool import Tool
+from ..core.tool_registry import discover, BUILTIN_TOOLS_DIR
+from .fork_tool import build_fork_parser, fork_from_args
 from .new_run_dir import build_new_run_parser, new_run_from_args
-
-_BUILTIN_TOOLS_DIR = Path(__file__).parent / "tools"
 
 
 def _tools_dirs() -> list[Path]:
     """Built-in tools first, then user dirs from $PROSAPIA_TOOLS_DIR
     (os.pathsep-separated). Later dirs win, so user tools shadow built-ins."""
-    dirs = [_BUILTIN_TOOLS_DIR]
+    dirs = [BUILTIN_TOOLS_DIR]
     if env := os.environ.get("PROSAPIA_TOOLS_DIR", "tools"):
         dirs += [Path(p) for p in env.split(os.pathsep) if p]
     return dirs
@@ -53,6 +52,13 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
     )
     init_p.set_defaults(_dispatch=init_from_args)
 
+    fork_p = verbs.add_parser(
+        "fork-tool",
+        parents=[build_fork_parser()],
+        help="Copy a built-in tool into your tools dir to customize it.",
+    )
+    fork_p.set_defaults(_dispatch=fork_from_args)
+
     run_tools = verbs.add_parser(
         "run", help="Submit a tool's SLURM array."
     ).add_subparsers(dest="tool", required=True)
@@ -63,7 +69,8 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
     for name, tool in sorted(tools.items()):
         run_p = run_tools.add_parser(
             name,
-            help=tool.run_description,
+            help=tool.description,
+            description=tool.description,
             parents=[
                 build_run_parser(
                     tool.metadata,
@@ -74,13 +81,21 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
             ],
         )
         run_p.set_defaults(
-            _dispatch=lambda args, t=tool: run_from_args(t.metadata, t.build_fn, args)
+            _dispatch=lambda args, t=tool: run_from_args(
+                t.metadata, t.build_manifest_fn, args
+            )
         )
 
         collect_p = collect_tools.add_parser(
             name,
-            help=tool.collect_description,
-            parents=[build_collect_parser(tool.metadata, tool.add_collect_args_fn)],
+            help=tool.description,
+            description=tool.description,
+            parents=[
+                build_collect_parser(
+                    tool.metadata,
+                    tool.add_collect_args_fn,
+                )
+            ],
         )
         collect_p.set_defaults(
             _dispatch=lambda args, t=tool: collect_from_args(

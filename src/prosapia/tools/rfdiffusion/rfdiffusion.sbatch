@@ -8,20 +8,23 @@
 #SBATCH --mem=16G
 
 set -uo pipefail
-set -a
-source .env # RFDIFFUSION_ENV, RUN_INFERENCE
-set +a
 
-MANIFEST=$1
-OUTDIR=$2
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE. Our manifest line is a
+# path to this task's sub-manifest (one row per design); output locations are
+# baked into each design's output_prefix, so we never need OUT_DIR here.
+source "${SAPIA_PRELUDE:?}"
+
+# Site-specific activation (required) — see docs/configuration.md.
+set +u
+source "${SAPIA_ACTIVATE_RFDIFFUSION:?set SAPIA_ACTIVATE_RFDIFFUSION in your .env to a tool activation script}"
+set -u
 
 # Each array task gets its own sub-manifest (one row per design). With
 # --per-card N these N diffusions are launched together and time-share the
-# task's single GPU. Rows are prepared at manifest-build time (tab-separated):
+# task's single GPU. Rows are ACTIVATEd at manifest-build time (tab-separated):
 #   name  staged_input  output_prefix  contig  symmetry_token  global_extra
 # symmetry_token and global_extra may be empty and may contain spaces, so fields
 # are pulled with `cut` (which preserves empty fields, unlike `IFS=$'\t' read`).
-SUBMANIFEST=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$MANIFEST")
 
 export HYDRA_FULL_ERROR=1
 
@@ -35,9 +38,16 @@ run_one() {
     # optional overrides + --set) and $symmetry_token are intentionally unquoted
     # so their space-separated Hydra tokens each become a separate argv entry.
     # contigmap.contigs stays a single token (it may contain spaces).
+    # The interpreter defaults to `python` (made right by the Activation hook, or already
+    # on PATH); set RFDIFFUSION_PYTHON to point straight at a specific interpreter
+    # instead of activating the SE3nv environment.
     local cmd=(
-        "$RFDIFFUSION_ENV" "$RUN_INFERENCE" $global_extra
-        inference.input_pdb="$staged"
+        "${RFDIFFUSION_PYTHON:-python}" "$RUN_INFERENCE" $global_extra
+    )
+    # A root de-novo row carries an empty $staged: omit inference.input_pdb so
+    # RFdiffusion generates from scratch. When set, keep it a single quoted token.
+    [ -n "$staged" ] && cmd+=(inference.input_pdb="$staged")
+    cmd+=(
         inference.output_prefix="$prefix"
         contigmap.contigs="$contig"
         $symmetry_token
@@ -46,14 +56,14 @@ run_one() {
     "${cmd[@]}"
     local rc=$?
 
-    # Plain-text marker read by collect_diffusion.py to confirm the task ran
+    # Plain-text marker read by `sapia collect rfdiffusion` to confirm the task ran
     # (and record the exact command). Written whether or not diffusion succeeded.
     printf '%s\n' "${cmd[*]}" >"$design_dir/command.txt"
 
     return $rc
 }
 
-echo "Task ${SLURM_ARRAY_TASK_ID}: $(wc -l < "$SUBMANIFEST") diffusion(s) on one GPU"
+echo "Task ${SLURM_ARRAY_TASK_ID}: $(wc -l < "$SAPIA_LINE") diffusion(s) on one GPU"
 
 pids=()
 while IFS= read -r line || [ -n "$line" ]; do
@@ -67,7 +77,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     echo "Launching $name"
     run_one "$name" "$staged" "$prefix" "$contig" "$symmetry_token" "$global_extra" &
     pids+=($!)
-done < "$SUBMANIFEST"
+done < "$SAPIA_LINE"
 
 fail=0
 for pid in "${pids[@]}"; do

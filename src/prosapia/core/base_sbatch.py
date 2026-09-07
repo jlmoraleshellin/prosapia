@@ -1,5 +1,5 @@
 # PYTHON_ARGCOMPLETE_OK
-"""Generic SLURM array submission (``submit_sbatch_array``).
+"""Generic SLURM array submission.
 
 Every batch-submission script delegates here, supplying a ``build_manifest_fn``
 (filters the db, returns one manifest row per array task) and optionally an
@@ -10,21 +10,27 @@ Every batch-submission script delegates here, supplying a ``build_manifest_fn``
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import subprocess
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Generic, Sequence, TypeVar
+from typing import TYPE_CHECKING, Callable, Generic, Sequence, TypeVar
 
 import pandas as pd
 from dotenv import load_dotenv
 from pandas import DataFrame
 
-from .base_cli import base_parser
-from .data_manager import Database, DataManager, RegistryManager
-from .naming import resolve_dir_name
+from .base_parser import base_parser
+from .data_manager import Database, DataManager, LookupFn, RegistryManager, filter_ready
+from .naming import (
+    RUN_META_FILENAME,
+    resolve_dir_name,
+    status_column,
+)
 
 if TYPE_CHECKING:
     from .tool import ToolMetadata
@@ -32,6 +38,9 @@ if TYPE_CHECKING:
 load_dotenv()
 
 SLURM_MAX_ARRAY_SIZE = int(os.getenv("SLURM_MAX_ARRAY_SIZE", 1000))
+
+# Sourced by every tool's .sbatch (via $SAPIA_PRELUDE) for shared task scaffolding. See core/sbatch/sapia_task_prelude.sh.
+PRELUDE_PATH = Path(__file__).parent / "sbatch" / "sapia_task_prelude.sh"
 
 
 ## ARGPARSER
@@ -48,6 +57,7 @@ class CommonArgs(Namespace):
     account: str | None
     max_gpu_fraction: float
     gpus_per_task: int
+    force: bool
 
 
 def _add_sbatch_args(
@@ -55,7 +65,7 @@ def _add_sbatch_args(
     default_sbatch: str,
     default_input_column: str,
 ) -> None:
-    """Add the SLURM-array flags shared by every run parser (standalone or ``ppl``)."""
+    """Add the SLURM-array flags shared by every run parser (standalone or ``sapia``)."""
     parser.add_argument(
         "-s",
         "--sbatch-script",
@@ -127,20 +137,12 @@ def _add_sbatch_args(
         "Scripts like run_boltz_batch.py set this automatically from --devices. "
         "Defaults to 1.",
     )
-
-
-def sbatch_argparser(
-    description: str,
-    default_sbatch: str,
-    default_input_column: str,
-    require_database: bool = True,
-) -> ArgumentParser:
-    parser = ArgumentParser(
-        parents=[base_parser(require_database=require_database)],
-        description=description,
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-submit designs this tool already completed (skips the resume "
+        "filter that drops rows whose <leaf>_status is already 'OK').",
     )
-    _add_sbatch_args(parser, default_sbatch, default_input_column)
-    return parser
 
 
 def build_run_parser(
@@ -153,12 +155,12 @@ def build_run_parser(
     a tool: base args + batch flags + ``--db-label`` (create tools) + tool extras.
 
     Used both by ``submit_sbatch_array`` (as the sole parent of a standalone parser)
-    and by the ``ppl`` CLI (as ``parents=[...]`` of each ``run <tool>`` subparser), so
+    and by the ``sapia`` CLI (as ``parents=[...]`` of each ``run <tool>`` subparser), so
     a single ``argcomplete`` call at the top sees the full argument tree.
     """
     parser = ArgumentParser(
         add_help=False,
-        parents=[base_parser(require_database=not metadata.is_root)],
+        parents=[base_parser(require_database=not metadata.creates_db)],
     )
     _add_sbatch_args(parser, default_sbatch, default_input_column)
     if metadata.creates_db:
@@ -182,7 +184,7 @@ def resolve_output_db(
     src_db: str | None,
     db_label: str = "",
 ) -> Database:
-    """Resolve the db a run writes to: reserve a child/root for create/root, else return ``src_db``."""
+    """Resolve the db a run writes to: reserve a child/root for create, else return ``src_db``."""
     if not tool.creates_db:
         if src_db is None:
             raise ValueError(
@@ -190,12 +192,6 @@ def resolve_output_db(
                 f"requires --database; none was given."
             )
         return registry.get_database(src_db)
-    if tool.is_root and src_db is not None:
-        raise ValueError(
-            f"Root tool {tool.name!r} creates a root database and takes no "
-            f"parent; got --database {src_db!r}. Drop --database, or declare the "
-            f"tool action='create' if it should build on an existing db."
-        )
     output_db = registry.derive_new_db(src_db, db_label)
     output_db.tool_name = tool.name  # provenance: the tool that creates this db
     registry.register_database(output_db)
@@ -225,10 +221,6 @@ def _get_filter_fn_from_module(module_path: Path) -> FilterFn:
 ManifestRow = Sequence[str]
 AddArgsFn = Callable[[ArgumentParser], None]
 
-# Read-only lineage lookup handed to builders: lookup(name, column) -> value,
-# walking parent_db/parent_name. No write access to the DataManager is exposed.
-LookupFn = Callable[[str, str], Any]
-
 ArgsT = TypeVar("ArgsT", bound=CommonArgs)
 
 
@@ -240,6 +232,23 @@ class ManifestCtx(Generic[ArgsT]):
     args: ArgsT
     out_dir: Path
     lookup: LookupFn
+
+    @property
+    def ready(self) -> pd.DataFrame:
+        """The designs this run should submit: rows with a present ``--input-column``,
+        minus those this tool already finished (``<leaf>_status == "OK"``) unless
+        ``--force``.
+
+        The already-OK skip is the framework's resume-on-rerun: it fires only when
+        the output status column is present in the source frame, i.e. for ``update``
+        tools (which annotate the same db). For ``create`` tools the column lives in
+        the child db, so the skip is a no-op and every ready design is submitted. #TODO maybe check child db too?
+        """
+        ready = filter_ready(self.df, self.args.input_column)
+        out_status = status_column(self.out_dir.name)
+        if not self.args.force and out_status in ready.columns:
+            ready = ready[ready[out_status] != "OK"]
+        return ready
 
 
 BuildManifestFn = Callable[[ManifestCtx[ArgsT]], Sequence[ManifestRow]]
@@ -278,6 +287,18 @@ def _write_manifest(path: Path, rows: Sequence[ManifestRow]) -> None:
             f.write("\t".join(str(v) for v in row) + "\n")
 
 
+def write_run_meta(out_dir: Path, metadata: ToolMetadata, args: CommonArgs) -> None:
+    """Record this run's parameters into the out_dir sidecar"""
+    meta = {
+        "tool": metadata.name,
+        "input_column": args.input_column,
+        "dir_label": args.dir_label,
+        "filter": str(args.filter) if args.filter else None,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    (out_dir / RUN_META_FILENAME).write_text(json.dumps(meta, indent=2))
+
+
 def _submit_array(
     args: CommonArgs,
     manifest: Path,
@@ -301,7 +322,10 @@ def _submit_array(
     ]
     cmd = [c for c in cmd if c]  # Remove empty arguments
     print("Submitting:", " ".join(cmd))
-    result = subprocess.run(cmd)
+    result = subprocess.run(
+        cmd,
+        env={**os.environ, "SAPIA_PRELUDE": str(PRELUDE_PATH)},
+    )
     if result.returncode != 0:
         raise RuntimeError(f"sbatch exited {result.returncode}")
 
@@ -406,22 +430,21 @@ def run_from_args(
     build_manifest_fn: BuildManifestFn[ArgsT],
     args: ArgsT,
 ) -> None:
-    """Execute a run from already-parsed args (shared by standalone and ``ppl``)."""
-    # Only new_run_dir mints run dirs. Guard here because resolve_output_db writes
-    # the registry TSV before any dir is created, so a missing run_dir would
-    # otherwise fail cryptically deep inside the backend write.
+    """Execute a run from already-parsed args (shared by standalone and ``sapia``)."""
+    # Only new_run_dir mints run dirs.
     if not args.run_dir.is_dir():
         raise FileNotFoundError(
             f"run_dir {args.run_dir} does not exist. Create one first: "
-            f"new_run_dir --label <label>"
+            f"sapia new_run --label <label>"
         )
 
-    # Source database (the source rows the manifest iterates over). None for an
-    # root tool, which has no input db.
+    # Source database (the source rows the manifest iterates over). None for a create
+    # tool that starts a new lineage
     src_db = args.database
 
     with DataManager(args.run_dir) as (dm, (read_frame, save_frame), registry):
-        # CREATE/ROOT reserve a new db in the registry; UPDATE writes back to src_db.
+        # CREATE reserves a new db in the registry that gets created when collect is called;
+        # UPDATE writes back to src_db.
         output_db = resolve_output_db(
             registry, metadata, src_db or None, getattr(args, "db_label", "")
         )
@@ -431,6 +454,8 @@ def run_from_args(
         log_dir = out_dir / f"{args.sbatch_script.stem}_logs"
         out_dir.mkdir(parents=True, exist_ok=True)
         log_dir.mkdir(parents=True, exist_ok=True)
+
+        write_run_meta(out_dir, metadata, args)
 
         # A root tool has no source db: give an empty frame (for type security).
         df = read_frame(src_db) if src_db else pd.DataFrame()

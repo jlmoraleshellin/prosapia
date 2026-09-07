@@ -16,19 +16,21 @@ Output structure expected:
         <design_name>_ranking_scores.csv
 
 Usage:
-    python collect_alphafold3.py outputs/20260420_123035_grow_hairpin
-    python collect_alphafold3.py outputs/20260420_123035_grow_hairpin --force
+    sapia collect alphafold3 outputs/20260420_123035_grow_hairpin --database db1_..._mpnn_seqs
+    sapia collect alphafold3 outputs/20260420_123035_grow_hairpin --database db1_..._mpnn_seqs --force
 """
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, Iterable, List
 
 import pandas as pd
 
 from prosapia.core import (
+    Collected,
     CollectCtx,
-    CollectResult,
+    CollectEach,
+    DesignCtx,
 )
 
 AF3_JSON_KEYS: List[str] = [
@@ -66,91 +68,50 @@ def load_metrics(prefix: str, json_path: Path) -> Dict[str, Any]:
     return {f"{prefix}_{k}": data.get(k, pd.NA) for k in AF3_JSON_KEYS}
 
 
-def collect_af3(ctx: CollectCtx) -> CollectResult:
-    df, args, af3_dir = ctx.df, ctx.args, ctx.out_dir
-
-    path_col = f"{af3_dir.name}_path"
-    status_col = f"{af3_dir.name}_status"
-
-    if df.empty:
+def collect_af3(ctx: CollectCtx) -> CollectEach:
+    """Per-design AF3 collector. The framework iterates ready designs and stamps
+    status/path; this only locates + parses one design's output."""
+    if ctx.df.empty:
         raise RuntimeError(
-            f"Database {args.database!r} is empty or missing in {args.run_dir}."
+            f"Database {ctx.args.database!r} is empty or missing in {ctx.args.run_dir}."
         )
 
-    ready = df[
-        df["sequence"].notna()
-        & (df["sequence"] != "")
-        & ~df.index.astype(str).str.endswith("_f0")
-    ]
-
-    if not args.force and path_col in df.columns:
-        existing = df.loc[ready.index, path_col]
-        already_done = ready.index[existing.notna() & (existing != "")]
-        if len(already_done) > 0:
-            print(
-                f"Skipping {len(already_done)} already-collected design(s) "
-                f"(use --force to re-collect)"
-            )
-            ready = ready.drop(already_done)
-
+    # Index every predicted design dir once, up front.
     design_dirs: dict[str, Path] = {}
-    for shard_dir in sorted(af3_dir.glob("results_shard_*")):
+    for shard_dir in sorted(ctx.out_dir.glob("results_shard_*")):
         if not shard_dir.is_dir():
             continue
         for design_dir in shard_dir.iterdir():
             if design_dir.is_dir():
                 design_dirs[design_dir.name] = design_dir
 
-    updates: CollectResult = {}
-    n_filled = 0
-    n_missing = 0
-    for design_name in ready.index:
-        design_name = cast(str, design_name)
-        design_dir = design_dirs.get(design_name)
+    # Failure rows keep the metric columns present (as NA) so the frame's schema
+    # is stable even when every design fails.
+    na_metrics: Dict[str, Any] = {k: pd.NA for k in _get_af3_metrics(ctx.out_dir.name)}
 
+    def one(d: DesignCtx) -> Iterable[Collected]:
+        design_dir = design_dirs.get(d.name)
         if design_dir is None:
-            row: Dict[str, Any] = {
-                status_col: f"missing: no output dir for {design_name}",
-                path_col: pd.NA,
-            }
-            row.update({k: pd.NA for k in _get_af3_metrics(af3_dir.name)})
-            updates[design_name] = row
-            n_missing += 1
-            continue
+            yield Collected(
+                status=f"missing: no output dir for {d.name}", data=na_metrics
+            )
+            return
 
         summary_path, cif_path = find_prediction_files(design_dir)
-
         if summary_path is None or cif_path is None:
-            row = {
-                status_col: f"missing: no models in {design_dir}",
-                path_col: pd.NA,
-            }
-            row.update({k: pd.NA for k in _get_af3_metrics(af3_dir.name)})
-            updates[design_name] = row
-            n_missing += 1
-            continue
+            yield Collected(
+                status=f"missing: no models in {design_dir}", data=na_metrics
+            )
+            return
 
         try:
-            metrics = load_metrics(af3_dir.name, summary_path)
+            metrics = load_metrics(d.leaf, summary_path)
         except (OSError, json.JSONDecodeError) as exc:
-            row = {
-                status_col: f"error: {exc.__class__.__name__}: {exc}",
-                path_col: pd.NA,
-            }
-            row.update({k: pd.NA for k in _get_af3_metrics(af3_dir.name)})
-            updates[design_name] = row
-            n_missing += 1
-            continue
+            yield Collected(
+                status=f"error: {exc.__class__.__name__}: {exc}", data=na_metrics
+            )
+            return
 
-        row = {
-            status_col: "OK",
-            path_col: str(cif_path),
-        }
-        row.update(metrics)
-        updates[design_name] = row
-        n_filled += 1
+        yield Collected(data=metrics, path=cif_path)
 
-    print(
-        f"Done. filled={n_filled}, missing={n_missing}, total_considered={len(ready)}"
-    )
-    return updates
+    return one

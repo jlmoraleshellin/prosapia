@@ -10,12 +10,16 @@
 
 set -euo pipefail
 
-MANIFEST=$1
-OUT_DIR=$2
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
+source "${SAPIA_PRELUDE:?}"
 
-LINE=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$MANIFEST")
-NAME=$(echo "$LINE" | cut -f1)
-SRC=$(echo "$LINE" | cut -f2)
+# Site-specific activation (required) — see docs/configuration.md.
+set +u
+source "${SAPIA_ACTIVATE_SYMMDEF:?set SAPIA_ACTIVATE_SYMMDEF in your .env to a tool activation script}"
+set -u
+
+NAME=$(echo "$SAPIA_LINE" | cut -f1)
+SRC=$(echo "$SAPIA_LINE" | cut -f2)
 
 RESULT_TSV="$OUT_DIR/${NAME}.tsv"
 

@@ -6,13 +6,17 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=8G
 
-MANIFEST="$1"
-OUTDIR="$2"
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
+source "${SAPIA_PRELUDE:?}"
 
-line=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$MANIFEST")
-input=$(echo "$line" | cut -f1)
-symm=$(echo "$line" | cut -f2)
-hairpin_length=$(echo "$line" | cut -f3)
+# Site-specific activation (required) — see docs/configuration.md.
+set +u
+source "${SAPIA_ACTIVATE_RELAXED:?set SAPIA_ACTIVATE_RELAXED in your .env to a tool activation script}"
+set -u
+
+input=$(echo "$SAPIA_LINE" | cut -f1)
+symm=$(echo "$SAPIA_LINE" | cut -f2)
+hairpin_length=$(echo "$SAPIA_LINE" | cut -f3)
 
 name=$(basename "$input" _INPUT.pdb)
 tmd_range=1-${hairpin_length}
@@ -29,5 +33,5 @@ $ROSETTA/bin/rosetta_scripts.default.linuxgccrelease \
     -parser:protocol tools/rosetta_relax/fastrelax_ianalyzer.xml \
     -parser:script_vars symmfile="$symm" \
     -nstruct 10 \
-    -out:path:pdb "$OUTDIR/" \
-    -out:file:scorefile "$OUTDIR/${name}_scores.sc"
+    -out:path:pdb "$OUT_DIR/" \
+    -out:file:scorefile "$OUT_DIR/${name}_scores.sc"

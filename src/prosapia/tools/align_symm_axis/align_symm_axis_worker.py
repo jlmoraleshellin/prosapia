@@ -26,7 +26,10 @@ collect_align_symm_axis.py merges back into the database. Errors are recorded as
 data (a status starting with 'error:') rather than only crashing, so partial array
 runs still collect.
 
-Usage (single design):
+Normally invoked per array task by the align_symm_axis tool -- run
+``sapia run align_symm_axis`` rather than calling this directly.
+
+Usage (standalone, single design):
     pixi run python tools/align_symm_axis/align_symm_axis_worker.py \\
         --name foo --symm-pdb foo_symm.pdb --symm-def foo.symm \\
         --out-pdb foo_aligned.pdb --result-tsv foo.tsv

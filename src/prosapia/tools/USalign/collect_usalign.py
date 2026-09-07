@@ -6,22 +6,22 @@ Scans <run_dir>/USalign/<prefix>_results/ for per-design TSV files written
 by usalign.sbatch, and merges the metrics back into the specified database.
 
 Usage:
-    python collect_usalign.py outputs/RUN \
+    sapia collect USalign outputs/RUN \
         --database db1_..._mpnn_seqs \
         --col-a boltz_path --col-b openfold3_path
 
-    python collect_usalign.py outputs/RUN \
+    sapia collect USalign outputs/RUN \
         --database db1_..._mpnn_seqs \
         --output-prefix boltz_vs_openfold3
 """
 
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Iterable
 
 import pandas as pd
 
-from prosapia.core import CollectArgs, CollectCtx, CollectResult
+from prosapia.core import Collected, CollectArgs, CollectCtx, CollectEach, DesignCtx
 
 USALIGN_COLUMNS = ["TM1", "TM2", "RMSD", "ID1", "ID2", "IDali", "L1", "L2", "Lali"]
 
@@ -75,12 +75,16 @@ def _resolve_prefix(args: USalignCollectArgs) -> str:
     raise ValueError("Provide --output-prefix, or --col-a with --col-b or --ref.")
 
 
-def collect_usalign(ctx: CollectCtx) -> CollectResult:
-    df, args = ctx.df, ctx.args
+def collect_usalign(ctx: CollectCtx) -> CollectEach:
+    """Per-design USalign collector.
 
-    # The comparison prefix is the leaf *under* the USalign tool dir; it also
-    # prefixes the columns (e.g. boltz_vs_openfold3_TM1).
-    prefix = _resolve_prefix(args)
+    USalign's columns are *prefix*-keyed, not leaf-keyed: one output dir hosts
+    several named comparisons (e.g. ``boltz_vs_openfold3_TM1``), so it owns all of
+    its columns via ``Collected.data`` and sets ``status=None`` to suppress the
+    framework's ``<leaf>_status``/``<leaf>_path`` stamp. Each design writes one
+    ``<name>.tsv``; re-collecting is idempotent (same tsv -> same values), so this
+    relies on the framework's ready iteration rather than a per-prefix resume."""
+    prefix = _resolve_prefix(ctx.args)
     results_dir = ctx.out_dir / prefix
     if not results_dir.is_dir():
         raise FileNotFoundError(f"Results dir not found: {results_dir}")
@@ -88,50 +92,31 @@ def collect_usalign(ctx: CollectCtx) -> CollectResult:
     status_col = f"{prefix}_status"
     sup_path_col = f"{prefix}_sup_path"
 
-    tsvs = sorted(results_dir.glob("*.tsv"))
-    print(f"Found {len(tsvs)} result file(s) in {results_dir}")
+    def one(d: DesignCtx) -> Iterable[Collected]:
+        tsv_path = results_dir / f"{d.name}.tsv"
 
-    updates: CollectResult = {}
-    n_ok = 0
-    n_err = 0
-    n_skipped = 0
+        if not tsv_path.is_file():
+            yield Collected(status=None, data={status_col: "missing"})
+            return
 
-    for tsv_path in tsvs:
         result_df = pd.read_csv(tsv_path, sep="\t")
         if result_df.empty:
-            n_err += 1
-            continue
+            yield Collected(status=None, data={status_col: "error: empty tsv"})
+            return
 
         row_data = result_df.iloc[0]
-        name = str(row_data["name"])
         status = str(row_data["status"])
-
-        if (
-            not args.force
-            and status_col in df.columns
-            and name in df.index
-            and not pd.isna(df.at[name, status_col])
-            and df.at[name, status_col] == "OK"
-        ):
-            n_skipped += 1
-            continue
-
-        update: Dict[str, Any] = {status_col: status}
+        data: Dict[str, Any] = {status_col: status}
 
         if status == "OK":
-            update[sup_path_col] = row_data["sup_path"]
+            data[sup_path_col] = row_data["sup_path"]
             for col in USALIGN_COLUMNS:
                 if col in row_data.index:
                     try:
-                        update[f"{prefix}_{col}"] = float(row_data[col])
+                        data[f"{prefix}_{col}"] = float(row_data[col])
                     except (ValueError, TypeError):
-                        update[f"{prefix}_{col}"] = pd.NA
-            n_ok += 1
-        else:
-            n_err += 1
+                        data[f"{prefix}_{col}"] = pd.NA
 
-        updates[name] = update
+        yield Collected(status=None, data=data)
 
-    skipped_msg = f", skipped={n_skipped}" if n_skipped else ""
-    print(f"Done. ok={n_ok}, errors={n_err}{skipped_msg}")
-    return updates
+    return one

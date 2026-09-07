@@ -4,24 +4,18 @@
 #SBATCH --time=04:00:00
 #SBATCH --job-name=colabfold
 
-set -a
-source .env
-set +a
-
 set -euo pipefail
 
-# Positional args from submit_sbatch_array:
-#   $1 = manifest file (one column: fasta_path)
-#   $2 = output dir (e.g. <run_dir>/colabfold)
-MANIFEST=$1
-OUT_DIR=$2
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
+# Manifest line is one column: fasta_path.
+source "${SAPIA_PRELUDE:?}"
 
-LINE=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$MANIFEST")
-FASTA_PATH=$(echo "$LINE" | cut -f1)
-
+# Site-specific activation (required) — see docs/configuration.md.
 set +u
-source $COLABFOLD_ACTIVATE
+source "${SAPIA_ACTIVATE_COLABFOLD:?set SAPIA_ACTIVATE_COLABFOLD in your .env to a tool activation script}"
 set -u
+
+FASTA_PATH=$(echo "$SAPIA_LINE" | cut -f1)
 
 TASK_OUT_DIR=$OUT_DIR/task_${SLURM_ARRAY_TASK_ID}
 mkdir -p "$TASK_OUT_DIR"

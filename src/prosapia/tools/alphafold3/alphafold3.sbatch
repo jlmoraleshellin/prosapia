@@ -5,22 +5,19 @@
 #SBATCH --job-name=alphafold3
 
 set -euo pipefail
-set -a
-source .env
-set +a
 
-# Positional args from submit_sbatch_array:
-#   $1 = manifest file (tab-separated: shard_dir)
-#   $2 = output dir (e.g. <run_dir>/alphafold3)
-MANIFEST=$1
-OUT_DIR=$2
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
+# Manifest line is tab-separated: shard_dir.
+source "${SAPIA_PRELUDE:?}"
 
-LINE=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$MANIFEST")
-SHARD_DIR=$(echo "$LINE" | cut -f1)
+# Site-specific activation (required; e.g. `ml purge`, `module load singularity`) — see docs/configuration.md.
+set +u
+source "${SAPIA_ACTIVATE_ALPHAFOLD3:?set SAPIA_ACTIVATE_ALPHAFOLD3 in your .env to a tool activation script}"
+set -u
+
+SHARD_DIR=$(echo "$SAPIA_LINE" | cut -f1)
 SHARD_OUT_DIR=$OUT_DIR/results_$(basename "$SHARD_DIR")
 mkdir -p "$SHARD_OUT_DIR"
-
-ml purge
 
 echo "[$(date +%T)] task $SLURM_ARRAY_TASK_ID: predicting shard $SHARD_DIR"
 singularity exec \
