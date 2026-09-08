@@ -48,7 +48,7 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
     init_p = verbs.add_parser(
         "init",
         parents=[build_init_parser()],
-        help="Set up shell tab-completion for sapia.",
+        help="Set up shell tab-completion, or scaffold starter config (--config).",
     )
     init_p.set_defaults(_dispatch=init_from_args)
 

@@ -49,27 +49,32 @@ sapia init          # one-time: install shell completion
 
 prosapia ships the tool *implementations* but not the software behind them: you install each binary or environment yourself (RFdiffusion, ProteinMPNN, Rosetta, …) and **bind** it to prosapia. Each tool needs a minimal **activation** shell snippet, sourced by its `.sbatch` to make the binary, environment, or input paths available to the SLURM job.
 
-To bind a tool:
+### Quick guide to bind a tool:
 
-1. **Write its activation script.** Runnable templates for every tool live in [`examples/activation/`](examples/activation/) — copy one and edit the paths.
+See **[docs/configuration.md](docs/configuration.md)** for the full activation-script model and complete guide.
+
+1. **Scaffold the starter config.** `sapia init --config` writes a `.env` seed and an `activation/` dir of runnable per-tool templates into the current directory.
 
    ```bash
-   # examples/activation/rfdiffusion.sh
+   sapia init --config
+   ```
+
+2. **Edit the tool's activation script** (`activation/<name>.sh`) to point at your install.
+
+   ```bash
+   # activation/rfdiffusion.sh
    source "$CONDA_PREFIX/etc/profile.d/conda.sh"
    conda activate SE3nv
    export RUN_INFERENCE="/path/to/RFdiffusion/scripts/run_inference.py"
    ```
 
-2. **Point `SAPIA_ACTIVATE_<NAME>` at it** from your `.env` (`<NAME>` = the tool's `sapia run` name, upper-cased).
+3. **Point `SAPIA_ACTIVATE_<NAME>` at it from your `.env`**
 
    ```bash
-   cp .env.example .env
    $EDITOR .env   # SAPIA_ACTIVATE_RFDIFFUSION → the script above
    ```
 
 `.env` itself holds only global settings, those `SAPIA_ACTIVATE_<NAME>` pointers, and the few values prosapia reads at submit time.
-
-See **[docs/configuration.md](docs/configuration.md)** for the activation-script model.
 
 ### Sharing custom tools across environments
 
