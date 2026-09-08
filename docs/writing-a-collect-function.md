@@ -6,8 +6,11 @@ database. This guide is only about collect.
 
 You write **one small function**. The framework does the rest: it iterates the
 designs that are ready to collect, calls your function once per design, and writes
-the results into the database — including the `<leaf>_status` and `<leaf>_path`
-bookkeeping columns. **You never touch those column names.**
+the results into the database — stamping the `<leaf>_status` / `<leaf>_path`
+bookkeeping columns and **prefixing every column you return with the tool leaf**
+(`<leaf>_<your_column>`). So you return **bare column names** and never worry
+about namespacing — two variants of the same tool (a `-l/--dir-label` fork) can't
+collide.
 
 ## The shape
 
@@ -45,7 +48,6 @@ The inner function receives one design at a time:
 | --- | --- |
 | `d.name` | the design's row name (an existing row for an `update` tool; the *parent* row for a `create` tool). |
 | `d.out_dir` | this run's output directory (same as `ctx.out_dir`). |
-| `d.leaf` | the tool's column prefix — use it to name your own columns, e.g. `f"{d.leaf}_ptm"`. |
 | `d.lookup` | read a value from this design or any ancestor: `d.lookup(d.name, "n_subunits")`. |
 
 Anything constant across designs — `ctx.args`, an index you built — you capture in
@@ -57,7 +59,7 @@ Yield one `Collected` per output row. Everything except `data` is optional:
 
 | Field | Goes to | Default |
 | --- | --- | --- |
-| `data` | your tool-specific columns, written as-is | `{}` |
+| `data` | your tool-specific columns (bare names; the driver leaf-prefixes each) | `{}` |
 | `path` | the `<leaf>_path` column | not written |
 | `status` | the `<leaf>_status` column | `"OK"` |
 | `name` | overrides the row key (for `create` tools minting child rows) | the design's name |
@@ -88,7 +90,7 @@ def collect_af3(ctx: CollectCtx) -> CollectEach:
             if design_dir.is_dir():
                 design_dirs[design_dir.name] = design_dir
 
-    na_metrics = {k: pd.NA for k in _get_af3_metrics(ctx.out_dir.name)}
+    na_metrics = {k: pd.NA for k in AF3_JSON_KEYS}   # bare metric names
 
     def one(d: DesignCtx) -> Iterable[Collected]:
         design_dir = design_dirs.get(d.name)
@@ -101,16 +103,17 @@ def collect_af3(ctx: CollectCtx) -> CollectEach:
             yield Collected(status=f"missing: no models in {design_dir}", data=na_metrics)
             return
 
-        metrics = load_metrics(d.leaf, summary)      # {f"{d.leaf}_ptm": ..., ...}
+        metrics = load_metrics(summary)              # {"ptm": ..., "iptm": ..., ...}
         yield Collected(data=metrics, path=cif)      # status defaults to "OK"
 
     return one
 ```
 
-Note what is *not* here: no `<leaf>_status` / `<leaf>_path` strings, no results
-dict, no iteration over the database. You return values; the driver stamps
-`alphafold3_status` / `alphafold3_path` and writes the row. (Yielding NA metrics on
-a failure keeps those columns present even when every design fails — optional, but
+Note what is *not* here: no `<leaf>_status` / `<leaf>_path` strings, no leaf
+prefixes on your metric names, no iteration over the database. You return bare
+values; the driver stamps `alphafold3_status` / `alphafold3_path` and prefixes
+your metrics to `alphafold3_ptm`, `alphafold3_iptm`, … (Yielding NA metrics on a
+failure keeps those columns present even when every design fails — optional, but
 tidy.)
 
 ## Example — a `create` tool (ProteinMPNN)
@@ -145,17 +148,21 @@ def collect_mpnn(ctx: CollectCtx) -> CollectEach:
 The framework validates that each child's `parent` exists in the parent database
 and stamps `parent_db` / `gen` for you — you only supply `parent`.
 
-## The rare case — columns that aren't leaf-keyed
+## The rare case — per-comparison status (`status=None`)
 
-Almost every tool's status/path columns are keyed by the tool leaf, and the
-defaults above handle that. If instead a single output directory hosts several
-*named* results (e.g. one alignment tool that writes `boltz_vs_openfold3_TM1`,
-`boltz_vs_af3_TM1`, …), put **every** column in `data` and set `status=None` to
-suppress the leaf `<leaf>_status` stamp:
+Your `data` columns are *always* leaf-prefixed; that's not something you opt out
+of. The one thing you can suppress is the single `<leaf>_status` stamp — for a
+tool whose one output directory hosts several *named* results, each needing its
+own status (e.g. an alignment tool comparing `boltz_vs_openfold3`,
+`boltz_vs_af3`, …). Carry each comparison's status as its own `data` column and
+set `status=None`:
 
 ```python
 yield Collected(status=None, data={f"{prefix}_status": "OK", f"{prefix}_TM1": tm})
 ```
+
+The inner `prefix` distinguishes the comparisons; the driver still nests them
+under the leaf, so these land as `<leaf>_<prefix>_status`, `<leaf>_<prefix>_TM1`.
 
 ## Rules the framework enforces
 
@@ -173,7 +180,7 @@ yield Collected(status=None, data={f"{prefix}_status": "OK", f"{prefix}_TM1": tm
    return `one(d)`.
 2. In `one`, locate this design's output and `yield Collected(...)` per row — or
    yield nothing if there's none.
-3. Name your own columns with `d.leaf`; never write `<leaf>_status` / `<leaf>_path`
-   yourself.
+3. Return **bare** column names; the driver leaf-prefixes them and stamps
+   `<leaf>_status` / `<leaf>_path` — never write those prefixes yourself.
 4. `create`: set `name` + `parent`. `update`: yield one row for `d.name`.
 5. Wire `collect_fn=collect_<name>` in `spec.py`.

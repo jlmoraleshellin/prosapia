@@ -9,7 +9,7 @@ from .run_usalign_sbatch import (
 )
 
 TOOL = Tool(
-    name="USalign",
+    name="usalign",
     action="update",
     description="Compare structures using USalign.",
     default_sbatch=str(Path(__file__).parent / "usalign.sbatch"),

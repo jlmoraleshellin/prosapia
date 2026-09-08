@@ -47,12 +47,12 @@ Try two ProteinMPNN settings on the same backbones in `db0`:
 
 ```bash
 # fork A: low sampling temperature
-sapia run     mpnn_seqs "$RUN_DIR" -d db0 --db-label lowT ...
-sapia collect mpnn_seqs "$RUN_DIR" -d db1_lowT
+sapia run     proteinmpnn "$RUN_DIR" -d db0 --db-label lowT ...
+sapia collect proteinmpnn "$RUN_DIR" -d db1_lowT
 
 # fork B: high sampling temperature
-sapia run     mpnn_seqs "$RUN_DIR" -d db0 --db-label highT ...
-sapia collect mpnn_seqs "$RUN_DIR" -d db1_highT
+sapia run     proteinmpnn "$RUN_DIR" -d db0 --db-label highT ...
+sapia collect proteinmpnn "$RUN_DIR" -d db1_highT
 ```
 
 Both children record `db0` as their parent in the registry, so lineage stays intact. Two things to note:
@@ -65,8 +65,8 @@ Both children record `db0` as their parent in the registry, so lineage stays int
 The two are orthogonal — `--db-label` picks *which lineage*, `-l` separates *variants within it*:
 
 ```bash
-sapia run     mpnn_seqs "$RUN_DIR" -d db0 --db-label lowT -l test_set ...
-sapia collect mpnn_seqs "$RUN_DIR" -d db1_lowT -l retry
+sapia run     proteinmpnn "$RUN_DIR" -d db0 --db-label lowT -l test_set ...
+sapia collect proteinmpnn "$RUN_DIR" -d db1_lowT -l retry
 ```
 
-→ `run_dir/db1_lowT/mpnn_seqs_retry/`, columns `mpnn_seqs_retry_*` in `db1_lowT`.
+→ `run_dir/db1_lowT/proteinmpnn_retry/`, columns `proteinmpnn_retry_*` in `db1_lowT`.

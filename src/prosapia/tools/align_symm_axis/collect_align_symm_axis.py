@@ -22,8 +22,8 @@ def collect_align_symm_axis(ctx: CollectCtx) -> CollectEach:
     """Per-design align_symm_axis collector. The framework iterates ready designs and
     stamps status/path (keyed by the tool leaf); this reads one design's one-row
     <name>.tsv and adds the axis-quality metric column."""
-    # The axis-quality column is keyed by the tool leaf (output dir name).
-    max_dev_col = f"{ctx.out_dir.name}_max_dev_deg"
+    # Bare column name; the driver leaf-prefixes it.
+    max_dev_col = "max_dev_deg"
 
     def one(d: DesignCtx) -> Iterable[Collected]:
         tsv_path = ctx.out_dir / f"{d.name}.tsv"

@@ -1,14 +1,19 @@
-"""``sapia init`` -- set up shell tab-completion for the ``sapia`` CLI.
+"""``sapia init`` -- shell tab-completion and starter-config scaffolding.
 
-Completion is powered by ``argcomplete``. ``sapia init`` installs the completion
-hook for you. By default it drops an autoloaded completion file into your shell's
-standard completion directory -- no rc edit, lazily loaded on first use, and zero
-shell-startup cost:
+``sapia init`` does two jobs. By default it sets up **tab-completion** for the
+``sapia`` CLI (via ``argcomplete``); with ``--config`` it instead scaffolds the
+**starter config** (a ``.env`` seed and per-tool activation templates) into a
+directory (see :mod:`prosapia.cli.scaffold` and docs/configuration.md):
 
     sapia init                 # auto-detect shell, install the completion file
     sapia init --shell zsh     # force a shell
     sapia init --rc            # instead, append a marked block to your shell rc
     sapia init --print         # just emit the shellcode (for `eval "$(sapia init --print)"`)
+    sapia init --config        # scaffold .env + activation/ templates into the cwd
+
+The completion install drops an autoloaded completion file into your shell's
+standard completion directory -- no rc edit, lazily loaded on first use, and zero
+shell-startup cost.
 
 The default writes to (honoring ``$XDG_DATA_HOME``, default ``~/.local/share``):
     bash -> <data>/bash-completion/completions/sapia
@@ -25,6 +30,8 @@ import os
 from pathlib import Path
 
 import argcomplete
+
+from .scaffold import scaffold_config
 
 _SUPPORTED = ("bash", "zsh")
 _RC_FILE = {"bash": "~/.bashrc", "zsh": "~/.zshrc"}
@@ -101,6 +108,23 @@ def build_init_parser() -> argparse.ArgumentParser:
     """Parent parser for the ``init`` verb."""
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument(
+        "--config",
+        action="store_true",
+        help="Instead of installing completion, scaffold the starter config "
+        "(.env + activation/ templates) into --dir. See docs/configuration.md.",
+    )
+    parser.add_argument(
+        "--dir",
+        type=Path,
+        default=Path("."),
+        help="Destination for --config scaffolding. Defaults to the current dir.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="With --config, overwrite existing files instead of skipping them.",
+    )
+    parser.add_argument(
         "--shell",
         choices=_SUPPORTED,
         default=None,
@@ -152,7 +176,11 @@ def _install_rc_block(shell: str) -> None:
 
 
 def init_from_args(args: argparse.Namespace) -> None:
-    """Dispatch for ``sapia init``: print, write an rc block, or install a file."""
+    """Dispatch for ``sapia init``: scaffold config, or set up shell completion."""
+    if args.config:
+        scaffold_config(args.dir, args.force)
+        return
+
     shell = args.shell or _detect_shell()
     if shell is None:
         raise SystemExit(

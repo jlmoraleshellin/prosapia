@@ -15,8 +15,8 @@ Requires ``n_subunits`` and (optionally) ``prebundle_length`` columns available
 up the input db's lineage (resolved via ``DataManager.lookup``).
 
 Usage:
-    sapia run colabfold outputs/20260420_123035_grow_hairpin --database db1_..._mpnn_seqs
-    sapia run colabfold outputs/20260420_123035_grow_hairpin --database db1_..._mpnn_seqs --queries-per-task 20 --devices 4
+    sapia run colabfold outputs/20260420_123035_grow_hairpin --database db1
+    sapia run colabfold outputs/20260420_123035_grow_hairpin --database db1 --queries-per-task 20 --devices 4
 """
 
 from argparse import ArgumentParser

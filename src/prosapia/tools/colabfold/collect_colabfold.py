@@ -15,14 +15,14 @@ Output structure expected (per task directory):
         ...
 
 Usage:
-    sapia collect colabfold outputs/RUN --database db1_..._mpnn_seqs
-    sapia collect colabfold outputs/RUN --database db1_..._mpnn_seqs --force
+    sapia collect colabfold outputs/RUN --database db1
+    sapia collect colabfold outputs/RUN --database db1 --force
 """
 
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable
 
 import numpy as np
 import pandas as pd
@@ -65,19 +65,17 @@ def _build_design_file_map(
     return design_files
 
 
-def load_metrics(prefix: str, json_path: Path) -> Dict[str, Any]:
+def load_metrics(json_path: Path) -> Dict[str, Any]:
     with open(json_path) as f:
         data = json.load(f)
     plddt = data.get("plddt")
     avg_plddt = float(np.mean(plddt)) if plddt else pd.NA
+    # Bare column names; the driver leaf-prefixes them.
     return {
-        f"{prefix}_{metric}": value
-        for metric, value in [
-            ("avg_plddt", avg_plddt),
-            ("ptm", data.get("ptm", pd.NA)),
-            ("iptm", data.get("iptm", pd.NA)),
-            ("max_pae", data.get("max_pae", pd.NA)),
-        ]
+        "avg_plddt": avg_plddt,
+        "ptm": data.get("ptm", pd.NA),
+        "iptm": data.get("iptm", pd.NA),
+        "max_pae": data.get("max_pae", pd.NA),
     }
 
 
@@ -90,10 +88,10 @@ def collect_colabfold(ctx: CollectCtx) -> CollectEach:
         )
 
     design_files = _build_design_file_map(ctx.out_dir)
-    metrics_cols: List[str] = [
-        f"{ctx.out_dir.name}_{m}" for m in ("avg_plddt", "ptm", "iptm", "max_pae")
-    ]
-    na_metrics: Dict[str, Any] = {k: pd.NA for k in metrics_cols}
+    # Bare column names; the driver leaf-prefixes them.
+    na_metrics: Dict[str, Any] = {
+        m: pd.NA for m in ("avg_plddt", "ptm", "iptm", "max_pae")
+    }
 
     def one(d: DesignCtx) -> Iterable[Collected]:
         files = design_files.get(d.name)
@@ -103,7 +101,7 @@ def collect_colabfold(ctx: CollectCtx) -> CollectEach:
 
         scores_path, model_path = files
         try:
-            metrics = load_metrics(d.leaf, scores_path)
+            metrics = load_metrics(scores_path)
         except (OSError, json.JSONDecodeError) as exc:
             yield Collected(
                 status=f"error: {exc.__class__.__name__}: {exc}", data=na_metrics

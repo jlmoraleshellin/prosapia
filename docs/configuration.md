@@ -22,56 +22,53 @@ So `.env` itself holds only:
 
 ## Binding a tool
 
-**1. Create your `.env`.**
+Follow these instructions to bind a tool installation to prosapia (RFdiffusion is shown as an example).
+
+**1. Scaffold the starter config.** `sapia init --config` writes a `.env` seed and an `activation/` dir of runnable per-tool templates into the current directory (pass `--dir` for elsewhere, `--force` to overwrite):
 
 ```bash
-cp .env.example .env
-$EDITOR .env
+sapia init --config
 ```
 
-**2. Write the tool's activation script.** Runnable templates for every tool live in [`examples/activation/`](../examples/activation/). Copy one and edit the paths:
+**2. Edit the tool's activation script.** The scaffolded `activation/<name>.sh` is a template; edit in place or copy it for sharing across prosapia environments:
 
 ```bash
-cp examples/activation/rfdiffusion.sh /shared/lab/activation/rfdiffusion.sh
+cp activation/rfdiffusion.sh /shared/lab/activation/rfdiffusion.sh
 $EDITOR /shared/lab/activation/rfdiffusion.sh
 ```
 
-There are two ways an activation script makes a tool available:
+The goal of the activation script is to make the tool available to the SLURM job's shell. There are two ways to do it:
 
-1. **Activate an environment** — the common case: activate a conda env / load a module, then export the tool's input paths.
-2. **Point straight at an interpreter/binary.** Some tools take an optional path variable that defaults to a command on `PATH` — `RFDIFFUSION_PYTHON`, `PROTEIN_MPNN_PYTHON`, `USALIGN_BIN`, `PIPELINE_PYTHON`. Export it from the activation script when the binary isn't already on `PATH`.
+1. **Activate an environment** — the common option: activate a conda env / load a module / source a script, then export the tool's input paths.
+2. **Point straight at an interpreter/binary.** — the raw option. Some tools take an optional path variable that defaults to a command on `PATH`: `RFDIFFUSION_PYTHON`, `PROTEIN_MPNN_PYTHON`, `USALIGN_BIN`, `PIPELINE_PYTHON`. This allows for direct execution without conda/module activation. Export it from the activation script when the binary isn't already on `PATH`.
 
-An activation script is also the natural place for any per-tool runtime setup the job needs — pointing framework caches at node-local scratch, exporting extra env vars, etc.
-
-**3. Point `SAPIA_ACTIVATE_<NAME>` at your script** in `.env`:
 
 ```bash
-# in .env:
-SAPIA_ACTIVATE_RFDIFFUSION="/shared/lab/activation/rfdiffusion.sh"
-```
+# /shared/lab/activation/rfdiffusion.sh
 
-> [!NOTE] **Fork the tool** (`sapia fork-tool <name>`) and edit its `.sbatch` directly for changes deeper than activation and inputs.
-
-### An example activation script
-
-RFdiffusion's activation script ([`examples/activation/rfdiffusion.sh`](../examples/activation/rfdiffusion.sh)),
-pointed at by `SAPIA_ACTIVATE_RFDIFFUSION` handles environment activation plus tool input declaration:
-
-```bash
-# activation
+# RFdiffusion accepts both activation ways
+## Option 1: activate an environment
 source "$CONDA_PREFIX/etc/profile.d/conda.sh" # or any command that puts conda on PATH
-conda activate SE3nv
+conda activate SE3nv # or module load RFdiffusion, or whatever your system accepts
 
-# tool input
+## Option 2: point to binary (system activation-agnostic)
+export RFDIFFUSION_PYTHON="/path/to/SE3nv/python"
+
+## Tool input
 export RUN_INFERENCE="/path/to/RFdiffusion/scripts/run_inference.py"
 ```
 
-Then in `.env`:
+An activation script is also the natural place for any per-tool runtime setup the job needs — pointing framework caches at node-local scratch, exporting extra env vars, etc.
+
+**3. Point `SAPIA_ACTIVATE_<NAME>` at your script in `.env`**. The tool's `.sbatch` script will source it before running the tool.
 
 ```bash
-CONDA_PREFIX="/path/to/miniconda3"
+# .env
 SAPIA_ACTIVATE_RFDIFFUSION="/shared/lab/activation/rfdiffusion.sh"
 ```
+
+> [!NOTE]
+> **Fork the tool** (`sapia fork-tool <name>`) and edit its `.sbatch` directly for changes deeper than activation and inputs.
 
 ## Global settings
 
@@ -86,7 +83,7 @@ Each tool below shows the `SAPIA_ACTIVATE_*` variable to set, the template to st
 
 ### RFdiffusion — `SAPIA_ACTIVATE_RFDIFFUSION`
 
-Template: `examples/activation/rfdiffusion.sh`.
+Template: `activation/rfdiffusion.sh`.
 
 | Variable | Where | Required | Meaning |
 | --- | --- | --- | --- |
@@ -95,15 +92,15 @@ Template: `examples/activation/rfdiffusion.sh`.
 
 ### RFdiffusion3 / foundry — `SAPIA_ACTIVATE_RFDIFFUSION3`
 
-Template: `examples/activation/rfdiffusion3.sh`. Do `conda activate <env>` and `export FOUNDRY_CHECKPOINT_DIRS=…` there; the sbatch then calls `rfd3`.
+Template: `activation/rfdiffusion3.sh`. Do `conda activate <env>` and `export FOUNDRY_CHECKPOINT_DIRS=…` there; the sbatch then calls `rfd3`.
 
 | Variable | Where | Required | Meaning |
 | --- | --- | --- | --- |
 | `RFD3_CKPT` | `.env` (submit time) | no | Explicit checkpoint override. Optional — foundry auto-discovers checkpoints after `foundry install rfd3`. #TODO make it an arg instead |
 
-### ProteinMPNN — `SAPIA_ACTIVATE_MPNN_SEQS`
+### ProteinMPNN — `SAPIA_ACTIVATE_PROTEINMPNN`
 
-Template: `examples/activation/mpnn.sh`. Activate env and point `PROTEIN_MPNN` to the install path. The sbatch calls its scripts from there.
+Template: `activation/proteinmpnn.sh`. Activate env and point `PROTEIN_MPNN` to the install path. The sbatch calls its scripts from there.
 
 | Variable | Where | Required | Meaning |
 | --- | --- | --- | --- |
@@ -112,7 +109,7 @@ Template: `examples/activation/mpnn.sh`. Activate env and point `PROTEIN_MPNN` t
 
 ### AlphaFold3 — `SAPIA_ACTIVATE_ALPHAFOLD3`
 
-Template: `examples/activation/alphafold3.sh`. Put module setup (`ml purge`, `module load singularity`) there; the sbatch runs `singularity exec … "$AF3_CONTAINER"`.
+Template: `activation/alphafold3.sh`. Put module setup (`ml purge`, `module load singularity`) there; the sbatch runs `singularity exec … "$AF3_CONTAINER"`.
 
 | Variable | Where | Required | Meaning |
 | --- | --- | --- | --- |
@@ -122,15 +119,15 @@ Template: `examples/activation/alphafold3.sh`. Put module setup (`ml purge`, `mo
 
 ### ColabFold — `SAPIA_ACTIVATE_COLABFOLD`
 
-Template: `examples/activation/colabfold.sh`. Activation script must put `colabfold_batch` on `PATH`.
+Template: `activation/colabfold.sh`. Activation script must put `colabfold_batch` on `PATH`.
 
 ### OpenFold3 — `SAPIA_ACTIVATE_OPENFOLD3`
 
-Template: `examples/activation/openfold3.sh`. Activation script must put `run_openfold` on `PATH`.
+Template: `activation/openfold3.sh`. Activation script must put `run_openfold` on `PATH`.
 
 ### Boltz — `SAPIA_ACTIVATE_BOLTZ`
 
-Template `examples/activation/boltz.sh`. Activation script must put `boltz` on `PATH`. The template also shows the optional framework-cache setup in the sbatch.
+Template `activation/boltz.sh`. Activation script must put `boltz` on `PATH`. The template also shows the optional framework-cache setup in the sbatch.
 
 | Variable | Where | Required | Meaning |
 | --- | --- | --- | --- |
@@ -140,7 +137,7 @@ Template `examples/activation/boltz.sh`. Activation script must put `boltz` on `
 
 ### USalign — `SAPIA_ACTIVATE_USALIGN`
 
-Template: `examples/activation/usalign.sh`.
+Template: `activation/usalign.sh`.
 
 | Variable | Where | Required | Meaning |
 | --- | --- | --- | --- |
@@ -148,7 +145,7 @@ Template: `examples/activation/usalign.sh`.
 
 ### Rosetta — `SAPIA_ACTIVATE_RELAXED` (rosetta_relax), `SAPIA_ACTIVATE_SYMMDEF` (make_symmdef)
 
-One template serves both: `examples/activation/rosetta.sh`; point both variables at your copy.
+One template serves both: `activation/rosetta.sh`; point both variables at your copy.
 
 | Variable | Where | Required | Meaning |
 | --- | --- | --- | --- |
@@ -156,7 +153,7 @@ One template serves both: `examples/activation/rosetta.sh`; point both variables
 
 ### align_symm_axis — `SAPIA_ACTIVATE_ALIGN_SYMM_AXIS`
 
-Template: `examples/activation/align_symm_axis.sh`.
+Template: `activation/align_symm_axis.sh`.
 
 | Variable | Where | Required | Meaning |
 | --- | --- | --- | --- |

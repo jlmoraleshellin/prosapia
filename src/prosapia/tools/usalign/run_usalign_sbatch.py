@@ -4,7 +4,7 @@ Submit a SLURM array to compare two predicted structures per design using USalig
 
 Both structures are converted to PDB (via gemmi) here at manifest-build time and
 cached under <run_dir>/.cif_to_pdb/; each array task then just runs USalign and
-writes per-design metrics to a TSV file. Use ``sapia collect USalign`` to merge
+writes per-design metrics to a TSV file. Use ``sapia collect usalign`` to merge
 results back into the database.
 
 --col-b is resolved per design by lineage (the row's own value if set, else the
@@ -12,17 +12,17 @@ nearest ancestor db's value), so a child db's structure can be compared against
 its parent's (e.g. boltz_path vs the parent's diffused_path).
 
 Usage:
-    sapia run USalign outputs/20260420_123035_grow_hairpin \
-        --database mpnn_seqs_db \
+    sapia run usalign outputs/20260420_123035_grow_hairpin \
+        --database db1 \
         --col-a boltz_path --col-b openfold3_path
 
     # Compare each child's boltz_path against its parent's diffused_path:
-    sapia run USalign outputs/20260420_123035_grow_hairpin \
+    sapia run usalign outputs/20260420_123035_grow_hairpin \
         --database db2_child \
         --col-a boltz_path --col-b diffused_path
 
-    sapia run USalign outputs/20260420_123035_grow_hairpin \
-        --database mpnn_seqs_db \
+    sapia run usalign outputs/20260420_123035_grow_hairpin \
+        --database db1 \
         --col-a boltz_path --col-b openfold3_path \
         --output-prefix boltz_vs_openfold3
 """
@@ -103,7 +103,9 @@ def build_usalign_manifest(ctx: ManifestCtx[USalignArgs]) -> list[tuple[str, ...
     # itself rather than using ctx.ready; the resume skip mirrors ctx.ready.
     ready = ctx.df[ctx.df[col_a].notna() & (ctx.df[col_a] != "")]
 
-    status_col = f"{prefix}_status"
+    # collect writes this under the tool leaf (the driver leaf-prefixes data),
+    # so match that here: <leaf>_<prefix>_status.
+    status_col = f"{ctx.out_dir.name}_{prefix}_status"
     if ctx.args.force:
         print("Re-running USalign for all designs (including those with status OK).")
     elif status_col in ready.columns:
