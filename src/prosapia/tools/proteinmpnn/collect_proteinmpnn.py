@@ -24,13 +24,13 @@ so collect only fills it: pass that db as ``--database``. Its parent (read only,
 to resolve lineage) comes from the registry, so there is no ``--parent-db`` flag.
 
 Usage:
-    # Round 1 (after diffusion -> mpnn); db reserved as e.g. db1_<label>_mpnn_seqs:
-    sapia collect mpnn_seqs outputs/20260430_170523_grow_hairpin_nofilter \\
-        --database db1_<label>_mpnn_seqs
+    # Round 1 (after diffusion -> mpnn); db reserved as e.g. db1_<label>:
+    sapia collect proteinmpnn outputs/20260430_170523_grow_hairpin_nofilter \\
+        --database db1_<label>
 
     # Round 2 (after boltz -> mpnn):
-    sapia collect mpnn_seqs outputs/20260430_170523_grow_hairpin_nofilter \\
-        --database db2_<label>_mpnn_seqs_r2
+    sapia collect proteinmpnn outputs/20260430_170523_grow_hairpin_nofilter \\
+        --database db2_<label>
 """
 
 from pathlib import Path
@@ -121,8 +121,11 @@ def collect_mpnn(ctx: CollectCtx) -> CollectEach:
             if i == 0:
                 continue
 
-            data: Dict[str, Any] = {"iteration": i, "sequence": sequence}
-            data.update(parse_mpnn_header(header))
+            # Key the tool's own columns by the leaf so same-tool variants
+            # (a -l/--dir-label fork into the same db) don't overwrite each other.
+            raw: Dict[str, Any] = {"iteration": i, "sequence": sequence}
+            raw.update(parse_mpnn_header(header))
+            data: Dict[str, Any] = {f"{d.leaf}_{k}": v for k, v in raw.items()}
             yield Collected(
                 name=f"{d.name}_f{i}",
                 parent=d.name,

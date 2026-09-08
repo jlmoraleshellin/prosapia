@@ -13,8 +13,8 @@ Output structure expected:
         <design_name>_seed_<x>_sample_<N>_confidences_aggregated.json
 
 Usage:
-    sapia collect openfold3 outputs/RUN --database db1_..._mpnn_seqs
-    sapia collect openfold3 outputs/RUN --database db1_..._mpnn_seqs --force
+    sapia collect openfold3 outputs/RUN --database db1
+    sapia collect openfold3 outputs/RUN --database db1 --force
 """
 
 import json

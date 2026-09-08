@@ -13,7 +13,7 @@ its parent's (e.g. boltz_path vs the parent's diffused_path).
 
 Usage:
     sapia run USalign outputs/20260420_123035_grow_hairpin \
-        --database mpnn_seqs_db \
+        --database db1 \
         --col-a boltz_path --col-b openfold3_path
 
     # Compare each child's boltz_path against its parent's diffused_path:
@@ -22,7 +22,7 @@ Usage:
         --col-a boltz_path --col-b diffused_path
 
     sapia run USalign outputs/20260420_123035_grow_hairpin \
-        --database mpnn_seqs_db \
+        --database db1 \
         --col-a boltz_path --col-b openfold3_path \
         --output-prefix boltz_vs_openfold3
 """

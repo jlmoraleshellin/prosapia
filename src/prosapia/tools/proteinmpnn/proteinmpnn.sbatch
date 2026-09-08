@@ -15,7 +15,7 @@ source "${SAPIA_PRELUDE:?}"
 
 # Site-specific activation (required) — see docs/configuration.md.
 set +u
-source "${SAPIA_ACTIVATE_MPNN_SEQS:?set SAPIA_ACTIVATE_MPNN_SEQS in your .env to a tool activation script}"
+source "${SAPIA_ACTIVATE_PROTEINMPNN:?set SAPIA_ACTIVATE_PROTEINMPNN in your .env to a tool activation script}"
 set -u
 
 PROTEIN_MPNN_PYTHON=${PROTEIN_MPNN_PYTHON:-python}

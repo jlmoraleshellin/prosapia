@@ -12,8 +12,8 @@ Supports both per-design results (boltz_results_<row>/) and shard results
 (boltz_results_shard_i/). Writes the metrics + path into the row.
 
 Usage:
-    sapia collect boltz outputs/RUN --database db1_..._mpnn_seqs
-    sapia collect boltz outputs/RUN --database db1_..._mpnn_seqs --force
+    sapia collect boltz outputs/RUN --database db1
+    sapia collect boltz outputs/RUN --database db1 --force
 """
 
 import json

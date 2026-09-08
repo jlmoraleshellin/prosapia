@@ -16,8 +16,8 @@ Output structure expected:
         <design_name>_ranking_scores.csv
 
 Usage:
-    sapia collect alphafold3 outputs/20260420_123035_grow_hairpin --database db1_..._mpnn_seqs
-    sapia collect alphafold3 outputs/20260420_123035_grow_hairpin --database db1_..._mpnn_seqs --force
+    sapia collect alphafold3 outputs/20260420_123035_grow_hairpin --database db1_..._proteinmpnn
+    sapia collect alphafold3 outputs/20260420_123035_grow_hairpin --database db1_..._proteinmpnn --force
 """
 
 import json

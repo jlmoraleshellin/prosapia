@@ -10,7 +10,7 @@ This is the per-design worker; the USalign tool drives it. Normally you run
 
 Usage (standalone, one db):
     pixi run python USalign_structures.py outputs/20260420_123035_grow_hairpin \
-        --database mpnn_seqs_db --col-a boltz_path --col-b openfold3_path \
+        --database db1 --col-a boltz_path --col-b openfold3_path \
         [--output-prefix boltz_vs_openfold3]
 """
 

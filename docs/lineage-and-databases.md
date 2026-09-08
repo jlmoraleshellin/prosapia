@@ -41,7 +41,7 @@ flowchart TD
     A[("db1<br/>sequences")]
 
     S -->|"create: rfdiffusion"| R
-    R -->|"create: mpnn_seqs<br/>1 backbone → N sequences"| A
+    R -->|"create: proteinmpnn<br/>1 backbone → N sequences"| A
     A -->|"update: alphafold3<br/>predict + score in place"| A
 
     classDef db fill:#e8f0fe,stroke:#4285f4,color:#111;
@@ -58,8 +58,8 @@ sapia run     rfdiffusion "$RUN_DIR" ...
 sapia collect rfdiffusion "$RUN_DIR" -d db0
 
 # design sequences for those backbones → a child database
-sapia run     mpnn_seqs   "$RUN_DIR" -d db0 ...
-sapia collect mpnn_seqs   "$RUN_DIR" -d db1
+sapia run     proteinmpnn   "$RUN_DIR" -d db0 ...
+sapia collect proteinmpnn   "$RUN_DIR" -d db1
 
 # predict structures and score them *in place* on the sequence database
 sapia run     alphafold3  "$RUN_DIR" -d db1 ...

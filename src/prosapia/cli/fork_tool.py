@@ -31,7 +31,7 @@ def _builtin_folders() -> dict[str, Path]:
     """Map each built-in tool's ``name`` to its source folder.
 
     The registry keys tools by ``Tool.name``, which may differ from the folder
-    name (e.g. ``mpnn_seqs`` lives in ``proteinmpnn/``), so we load each spec to
+    name (e.g. ``boltz`` lives in ``lmi4boltz/``), so we load each spec to
     read its name.
     """
     folders: dict[str, Path] = {}

@@ -10,8 +10,8 @@ Requires ``n_subunits`` column available up the input db's lineage
 (resolved via ``DataManager.lookup``).
 
 Usage:
-    sapia run alphafold3 outputs/20260420_123035_grow_hairpin --database db1_..._mpnn_seqs
-    sapia run alphafold3 outputs/20260420_123035_grow_hairpin --database db1_..._mpnn_seqs --shard-size 20
+    sapia run alphafold3 outputs/20260420_123035_grow_hairpin --database db1_..._proteinmpnn
+    sapia run alphafold3 outputs/20260420_123035_grow_hairpin --database db1_..._proteinmpnn --shard-size 20
 """
 
 import json

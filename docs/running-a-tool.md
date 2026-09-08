@@ -94,8 +94,8 @@ run_dir/<db>/<leaf>/<script>_logs/
 
 ```
 Submitting 128 designs
-Output:  run_dir/db1_seqs/mpnn_seqs
-Logs:    run_dir/db1_seqs/mpnn_seqs/mpnn_seqs_logs
+Output:  run_dir/db1_seqs/proteinmpnn
+Logs:    run_dir/db1_seqs/proteinmpnn/proteinmpnn_logs
 ```
 
 When a task fails, its `.err` file under that folder is the first place to look.

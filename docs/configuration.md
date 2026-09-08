@@ -101,9 +101,9 @@ Template: `examples/activation/rfdiffusion3.sh`. Do `conda activate <env>` and `
 | --- | --- | --- | --- |
 | `RFD3_CKPT` | `.env` (submit time) | no | Explicit checkpoint override. Optional — foundry auto-discovers checkpoints after `foundry install rfd3`. #TODO make it an arg instead |
 
-### ProteinMPNN — `SAPIA_ACTIVATE_MPNN_SEQS`
+### ProteinMPNN — `SAPIA_ACTIVATE_PROTEINMPNN`
 
-Template: `examples/activation/mpnn.sh`. Activate env and point `PROTEIN_MPNN` to the install path. The sbatch calls its scripts from there.
+Template: `examples/activation/proteinmpnn.sh`. Activate env and point `PROTEIN_MPNN` to the install path. The sbatch calls its scripts from there.
 
 | Variable | Where | Required | Meaning |
 | --- | --- | --- | --- |

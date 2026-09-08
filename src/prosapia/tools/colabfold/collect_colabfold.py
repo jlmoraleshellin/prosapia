@@ -15,8 +15,8 @@ Output structure expected (per task directory):
         ...
 
 Usage:
-    sapia collect colabfold outputs/RUN --database db1_..._mpnn_seqs
-    sapia collect colabfold outputs/RUN --database db1_..._mpnn_seqs --force
+    sapia collect colabfold outputs/RUN --database db1
+    sapia collect colabfold outputs/RUN --database db1 --force
 """
 
 import json

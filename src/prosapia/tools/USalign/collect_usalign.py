@@ -7,11 +7,11 @@ by usalign.sbatch, and merges the metrics back into the specified database.
 
 Usage:
     sapia collect USalign outputs/RUN \
-        --database db1_..._mpnn_seqs \
+        --database db1 \
         --col-a boltz_path --col-b openfold3_path
 
     sapia collect USalign outputs/RUN \
-        --database db1_..._mpnn_seqs \
+        --database db1 \
         --output-prefix boltz_vs_openfold3
 """
 
