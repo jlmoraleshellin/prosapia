@@ -1,7 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=proteinmpnn
 #SBATCH --time=01:00:00
-#SBATCH --partition=ampere_gpu,hopper_gpu
 #SBATCH --nodes=1
 #SBATCH --gpus=1
 #SBATCH --ntasks=1

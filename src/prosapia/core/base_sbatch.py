@@ -57,6 +57,9 @@ class CommonArgs(Namespace):
     account: str | None
     max_gpu_fraction: float
     gpus_per_task: int
+    cpus_per_task: int | None
+    time: str | None
+    mem: str | None
     force: bool
 
 
@@ -98,7 +101,7 @@ def _add_sbatch_args(
         "applied to the DataFrame before the manifest is built.",
     )
     parser.add_argument(
-        "-c",
+        "-C",
         "--max-concurrent",
         type=int,
         default=40,
@@ -136,6 +139,29 @@ def _add_sbatch_args(
         help="GPUs requested per array task (--gres=gpu:N). Can be 0 for CPU-only tasks."
         "Scripts like run_boltz_batch.py set this automatically from --devices. "
         "Defaults to 1.",
+    )
+    parser.add_argument(
+        "-c",
+        "--cpus-per-task",
+        type=int,
+        default=None,
+        help="CPUs per array task (--cpus-per-task=N). Overrides the #SBATCH "
+        "directive in the tool's .sbatch. Default is unset (use the script's value).",
+    )
+    parser.add_argument(
+        "-t",
+        "--time",
+        type=str,
+        default=None,
+        help="Wall-time limit per array task (--time, e.g. '04:00:00'). Overrides "
+        "the #SBATCH directive in the tool's .sbatch. Default is unset.",
+    )
+    parser.add_argument(
+        "--mem",
+        type=str,
+        default=None,
+        help="Memory per array task (--mem, e.g. '32G'). Overrides the #SBATCH "
+        "directive in the tool's .sbatch. Default is unset.",
     )
     parser.add_argument(
         "--force",
@@ -314,6 +340,9 @@ def _submit_array(
         f"--array=1-{n_tasks}%{max_concurrent}",
         f"--partition={partition}" if partition else "",
         f"--gres=gpu:{args.gpus_per_task}" if args.gpus_per_task > 0 else "",
+        f"--cpus-per-task={args.cpus_per_task}" if args.cpus_per_task else "",
+        f"--time={args.time}" if args.time else "",
+        f"--mem={args.mem}" if args.mem else "",
         f"--output={log_dir}/{args.sbatch_script.stem}_%A_%a.out",
         f"--error={log_dir}/{args.sbatch_script.stem}_%A_%a.err",
         str(args.sbatch_script),
