@@ -89,7 +89,6 @@ def collect_relax(ctx: CollectCtx) -> CollectEach:
             return
 
         pdb_file = next((f for f in all_pdb_files if d.name in f.name), None)
-        data = metrics  # bare column names; the driver leaf-prefixes them
         print(
             f"{d.name}: dG_sep={metrics.get('dG_separated', float('nan')):7.2f}  "
             f"fa_rep={metrics.get('fa_rep', float('nan')):8.2f}  "
@@ -97,8 +96,8 @@ def collect_relax(ctx: CollectCtx) -> CollectEach:
         )
         if pdb_file is None:
             print(f"{d.name}: scores parsed but no relaxed PDB found")
-            yield Collected(status="OK_no_pdb", data=data)
+            yield Collected(status="OK_no_pdb", data=metrics)
         else:
-            yield Collected(status="OK", path=pdb_file, data=data)
+            yield Collected(status="OK", path=pdb_file, data=metrics)
 
     return one

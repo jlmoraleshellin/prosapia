@@ -6,7 +6,7 @@ USalign in multi-chain mode, and writes the metrics plus the superposed-structur
 path back to the db under ``<prefix>_*`` columns.
 
 This is the per-design worker; the USalign tool drives it. Normally you run
-``sapia run USalign`` (which submits the array) rather than calling this directly.
+``sapia run usalign`` (which submits the array) rather than calling this directly.
 
 Usage (standalone, one db):
     pixi run python USalign_structures.py outputs/20260420_123035_grow_hairpin \
