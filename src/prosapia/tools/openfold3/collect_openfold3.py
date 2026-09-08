@@ -35,7 +35,6 @@ OPENFOLD3_JSON_KEYS: List[str] = [
     "sample_ranking_score",
 ]
 
-OPENFOLD3_METRICS: List[str] = [f"openfold_{k}" for k in OPENFOLD3_JSON_KEYS]
 
 
 def find_best_model(design_dir: Path) -> tuple[Path | None, Path | None]:
@@ -77,7 +76,8 @@ def find_best_model(design_dir: Path) -> tuple[Path | None, Path | None]:
 def load_metrics(json_path: Path) -> Dict[str, Any]:
     with open(json_path) as f:
         data = json.load(f)
-    return {f"openfold_{k}": data.get(k, pd.NA) for k in OPENFOLD3_JSON_KEYS}
+    # Bare column names; the driver leaf-prefixes them.
+    return {k: data.get(k, pd.NA) for k in OPENFOLD3_JSON_KEYS}
 
 
 def collect_openfold3(ctx: CollectCtx) -> CollectEach:
@@ -97,7 +97,7 @@ def collect_openfold3(ctx: CollectCtx) -> CollectEach:
             if design_dir.is_dir():
                 design_dirs[design_dir.name] = design_dir
 
-    na_metrics: Dict[str, Any] = {k: pd.NA for k in OPENFOLD3_METRICS}
+    na_metrics: Dict[str, Any] = {k: pd.NA for k in OPENFOLD3_JSON_KEYS}
 
     def one(d: DesignCtx) -> Iterable[Collected]:
         design_dir = design_dirs.get(d.name)

@@ -107,15 +107,18 @@ CollectFn = Callable[[CollectCtx[ArgsT]], CollectResult]
 class Collected:
     """One collected row's payload -- what a tool returns, sans framework bookkeeping.
 
-    ``data`` are the tool-specific columns. The framework stamps the rest:
-    ``path`` -> the tool's ``<leaf>_path`` column, ``status`` -> ``<leaf>_status``.
-    ``name`` overrides the row key -- omit it for an update (the row is keyed by the
-    design), set it for a create tool that mints child rows. ``parent`` -> the row's
-    ``parent_name`` (create tools linking a child to its parent).
+    ``data`` are the tool-specific columns, given as **bare names** -- the driver
+    leaf-prefixes every key (``<leaf>_<key>``), so same-tool variants never collide.
+    The framework stamps the rest: ``path`` -> the tool's ``<leaf>_path`` column,
+    ``status`` -> ``<leaf>_status``. ``name`` overrides the row key -- omit it for an
+    update (the row is keyed by the design), set it for a create tool that mints child
+    rows. ``parent`` -> the row's ``parent_name`` (create tools linking a child to its
+    parent).
 
-    ``status=None`` suppresses the ``<leaf>_status`` stamp entirely: for the rare tool
-    whose status/path columns are not leaf-keyed (e.g. one output dir hosting several
-    named comparisons), put every column in ``data`` and set ``status=None``.
+    ``status=None`` suppresses the ``<leaf>_status`` stamp only (it does not affect
+    the leaf-prefixing of ``data``): for the rare tool with per-comparison status --
+    one output dir hosting several named comparisons -- carry each comparison's status
+    as its own ``data`` column and set ``status=None``.
     """
 
     data: Mapping[str, Any] = field(default_factory=dict)
@@ -132,7 +135,6 @@ class DesignCtx:
 
     name: str
     out_dir: Path
-    leaf: str
     lookup: LookupFn
 
 
@@ -147,9 +149,10 @@ def by_design(make: CollectorFactory) -> CollectFn:
     """Adapt a tool's per-design collector factory into a full ``CollectFn``.
 
     Iterates the run's ready designs, calls the tool's ``one(design)`` for each, and
-    folds every emitted ``Collected`` into the ``CollectResult`` -- stamping
-    ``<leaf>_status`` / ``<leaf>_path`` / ``parent_name`` here so no tool has to. This
-    is the *only* place that knows those column names.
+    folds every emitted ``Collected`` into the ``CollectResult`` -- leaf-prefixing
+    every ``data`` column and stamping ``<leaf>_status`` / ``<leaf>_path`` /
+    ``parent_name`` here so no tool has to. This is the *only* place that knows those
+    column names.
 
     Empty emission means "nothing on disk for this design": an update tool marks the
     existing row ``missing``; a create tool has no row to mark, so it is skipped.
@@ -164,7 +167,6 @@ def by_design(make: CollectorFactory) -> CollectFn:
                     DesignCtx(
                         name,
                         ctx.out_dir,
-                        ctx.out_dir.name,
                         ctx.lookup,
                     )
                 )
@@ -173,8 +175,9 @@ def by_design(make: CollectorFactory) -> CollectFn:
                 if not ctx.creates_db:  # update: flag the existing row
                     updates[name] = {ctx.status_col: "missing"}
                 continue  # create: nothing to mark
+            leaf = ctx.out_dir.name
             for c in emitted:
-                row = dict(c.data)
+                row = {f"{leaf}_{k}": v for k, v in c.data.items()}
                 if c.status is not None:
                     row[ctx.status_col] = c.status
                 if c.path is not None:

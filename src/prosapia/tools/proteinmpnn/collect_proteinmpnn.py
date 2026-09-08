@@ -115,17 +115,13 @@ def collect_mpnn(ctx: CollectCtx) -> CollectEach:
             return
 
         for i, (header, sequence) in enumerate(parse_fasta(fasta_path)):
-            # entries[0] is ProteinMPNN's echo of the native input sequence
-            # (the old <parent>_f0). Skip it: only the sampled designs (_f1+)
-            # are real outputs, so downstream predictors need no _f0 guard.
+            # entries[0] is ProteinMPNN's echo of the native input sequence. Skip it.
             if i == 0:
                 continue
 
-            # Key the tool's own columns by the leaf so same-tool variants
-            # (a -l/--dir-label fork into the same db) don't overwrite each other.
-            raw: Dict[str, Any] = {"iteration": i, "sequence": sequence}
-            raw.update(parse_mpnn_header(header))
-            data: Dict[str, Any] = {f"{d.leaf}_{k}": v for k, v in raw.items()}
+            # Bare column names; the driver leaf-prefixes them.
+            data: Dict[str, Any] = {"iteration": i, "sequence": sequence}
+            data.update(parse_mpnn_header(header))
             yield Collected(
                 name=f"{d.name}_f{i}",
                 parent=d.name,

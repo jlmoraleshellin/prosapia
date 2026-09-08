@@ -56,7 +56,8 @@ def test_collect_update_in_place(tmp_path, monkeypatch):
         assert ctx.parent_df.empty
 
         def one(d: DesignCtx):
-            # status defaults to "OK" -> <leaf>_status; extra columns via data.
+            # status defaults to "OK" -> <leaf>_status; data columns are
+            # leaf-prefixed by the driver.
             yield Collected(data={"score": 1.5})
 
         return one
@@ -66,7 +67,7 @@ def test_collect_update_in_place(tmp_path, monkeypatch):
 
     out = DataManager(tmp_path).read_frame("db0")
     assert out.at["r1", "alphafold3_status"] == "OK"
-    assert out.at["r1", "score"] == 1.5
+    assert out.at["r1", "alphafold3_score"] == 1.5
 
 
 def test_collect_update_ready_skips_already_ok(tmp_path, monkeypatch):
@@ -216,7 +217,7 @@ def test_collect_requires_output_dir(tmp_path, monkeypatch):
 
 def test_by_design_stamps_path_and_status(tmp_path, monkeypatch):
     # A Collected's path/status land in the leaf-keyed <leaf>_path / <leaf>_status
-    # columns; data lands as-is.
+    # columns; data columns are leaf-prefixed too.
     dm = DataManager(tmp_path)
     dm.write_frame("db0", dm.update(dm.read_frame("db0"), "r1", {"sequence": "AAA"}))
     _make_out_dir(tmp_path, "db0", UPDATE.name)
@@ -231,12 +232,12 @@ def test_by_design_stamps_path_and_status(tmp_path, monkeypatch):
     out = DataManager(tmp_path).read_frame("db0")
     assert out.at["r1", "alphafold3_status"] == "OK"
     assert out.at["r1", "alphafold3_path"] == str(model)
-    assert out.at["r1", "ptm"] == 0.9
+    assert out.at["r1", "alphafold3_ptm"] == 0.9
 
 
 def test_by_design_status_none_suppresses_leaf_status(tmp_path, monkeypatch):
-    # status=None: the tool owns all its columns via data (e.g. prefix-keyed
-    # comparison columns), and no <leaf>_status column is written.
+    # status=None suppresses only the <leaf>_status stamp; data columns are still
+    # leaf-prefixed by the driver (the tool's inner keys nest under the leaf).
     dm = DataManager(tmp_path)
     dm.write_frame("db0", dm.update(dm.read_frame("db0"), "r1", {"sequence": "AAA"}))
     _make_out_dir(tmp_path, "db0", UPDATE.name)
@@ -250,9 +251,30 @@ def test_by_design_status_none_suppresses_leaf_status(tmp_path, monkeypatch):
     collect(metadata=UPDATE, collect_fn=collect_fn)
 
     out = DataManager(tmp_path).read_frame("db0")
-    assert "alphafold3_status" not in out.columns  # suppressed
-    assert out.at["r1", "cmp_status"] == "OK"
-    assert out.at["r1", "cmp_TM1"] == 0.87
+    assert "alphafold3_status" not in out.columns  # status stamp suppressed
+    assert out.at["r1", "alphafold3_cmp_status"] == "OK"
+    assert out.at["r1", "alphafold3_cmp_TM1"] == 0.87
+
+
+def test_by_design_leaf_prefix_isolates_dir_label_variants(tmp_path, monkeypatch):
+    # Two -l/--dir-label variants of the same tool into the same db write distinct
+    # leaf-prefixed columns, so one variant never overwrites the other.
+    dm = DataManager(tmp_path)
+    dm.write_frame("db0", dm.update(dm.read_frame("db0"), "r1", {"sequence": "AAA"}))
+    _make_out_dir(tmp_path, "db0", "alphafold3_seedA")
+    _make_out_dir(tmp_path, "db0", "alphafold3_seedB")
+
+    def make(score):
+        return lambda ctx: (lambda d: [Collected(data={"ptm": score})])
+
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-d", "db0", "-l", "seedA"])
+    collect(metadata=UPDATE, collect_fn=make(0.5))
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-d", "db0", "-l", "seedB"])
+    collect(metadata=UPDATE, collect_fn=make(0.9))
+
+    out = DataManager(tmp_path).read_frame("db0")
+    assert out.at["r1", "alphafold3_seedA_ptm"] == 0.5
+    assert out.at["r1", "alphafold3_seedB_ptm"] == 0.9
 
 
 def test_by_design_create_mints_multiple_children(tmp_path, monkeypatch):
@@ -278,4 +300,4 @@ def test_by_design_create_mints_multiple_children(tmp_path, monkeypatch):
         assert df.at[row, PARENT_NAME] == "S0"
         assert df.at[row, PARENT_DB] == "db0_worms"
         assert df.at[row, GEN] == 1
-        assert df.at[row, "iteration"] == i
+        assert df.at[row, "diffused_iteration"] == i

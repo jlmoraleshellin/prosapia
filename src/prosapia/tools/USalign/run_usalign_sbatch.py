@@ -103,7 +103,9 @@ def build_usalign_manifest(ctx: ManifestCtx[USalignArgs]) -> list[tuple[str, ...
     # itself rather than using ctx.ready; the resume skip mirrors ctx.ready.
     ready = ctx.df[ctx.df[col_a].notna() & (ctx.df[col_a] != "")]
 
-    status_col = f"{prefix}_status"
+    # collect writes this under the tool leaf (the driver leaf-prefixes data),
+    # so match that here: <leaf>_<prefix>_status.
+    status_col = f"{ctx.out_dir.name}_{prefix}_status"
     if ctx.args.force:
         print("Re-running USalign for all designs (including those with status OK).")
     elif status_col in ready.columns:

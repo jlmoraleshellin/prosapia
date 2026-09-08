@@ -42,8 +42,6 @@ AF3_JSON_KEYS: List[str] = [
 ]
 
 
-def _get_af3_metrics(prefix: str) -> List[str]:
-    return [f"{prefix}_{k}" for k in AF3_JSON_KEYS]
 
 
 def find_prediction_files(
@@ -62,10 +60,11 @@ def find_prediction_files(
     return summary, cif
 
 
-def load_metrics(prefix: str, json_path: Path) -> Dict[str, Any]:
+def load_metrics(json_path: Path) -> Dict[str, Any]:
     with open(json_path) as f:
         data = json.load(f)
-    return {f"{prefix}_{k}": data.get(k, pd.NA) for k in AF3_JSON_KEYS}
+    # Bare column names; the driver leaf-prefixes them.
+    return {k: data.get(k, pd.NA) for k in AF3_JSON_KEYS}
 
 
 def collect_af3(ctx: CollectCtx) -> CollectEach:
@@ -87,7 +86,7 @@ def collect_af3(ctx: CollectCtx) -> CollectEach:
 
     # Failure rows keep the metric columns present (as NA) so the frame's schema
     # is stable even when every design fails.
-    na_metrics: Dict[str, Any] = {k: pd.NA for k in _get_af3_metrics(ctx.out_dir.name)}
+    na_metrics: Dict[str, Any] = {k: pd.NA for k in AF3_JSON_KEYS}
 
     def one(d: DesignCtx) -> Iterable[Collected]:
         design_dir = design_dirs.get(d.name)
@@ -105,7 +104,7 @@ def collect_af3(ctx: CollectCtx) -> CollectEach:
             return
 
         try:
-            metrics = load_metrics(d.leaf, summary_path)
+            metrics = load_metrics(summary_path)
         except (OSError, json.JSONDecodeError) as exc:
             yield Collected(
                 status=f"error: {exc.__class__.__name__}: {exc}", data=na_metrics

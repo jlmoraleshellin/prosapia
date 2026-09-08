@@ -75,7 +75,7 @@ def load_metrics(json_path: Path) -> Dict[str, Any]:
     """Read the configured top-level scalar metrics from a boltz confidence JSON."""
     with open(json_path) as f:
         data = json.load(f)
-    return {f"boltz_{k}": data.get(k, pd.NA) for k in BOLTZ_METRICS}
+    return {k: data.get(k, pd.NA) for k in BOLTZ_METRICS}
 
 
 def collect_boltz(ctx: CollectCtx) -> CollectEach:
@@ -96,7 +96,7 @@ def collect_boltz(ctx: CollectCtx) -> CollectEach:
             if design_dir.is_dir():
                 prediction_dirs[design_dir.name] = design_dir
 
-    na_metrics: Dict[str, Any] = {f"boltz_{k}": pd.NA for k in BOLTZ_METRICS}
+    na_metrics: Dict[str, Any] = {k: pd.NA for k in BOLTZ_METRICS}
 
     def one(d: DesignCtx) -> Iterable[Collected]:
         json_path, cif_path, _plddt_path = find_prediction_files(
