@@ -6,8 +6,8 @@ next to each .symm file. The manifest contains (input_pdb, symm_path,
 hairpin_length) per design.
 
 Usage:
-    sapia run relaxed outputs/20260420_123035_grow_hairpin --database db1_...
-    sapia run relaxed outputs/20260420_123035_grow_hairpin --database db1_... --max-concurrent 10
+    sapia run relaxed outputs/20260420_123035_grow_hairpin --table table1_...
+    sapia run relaxed outputs/20260420_123035_grow_hairpin --table table1_... --max-concurrent 10
 """
 
 from pathlib import Path

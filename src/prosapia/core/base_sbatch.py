@@ -2,7 +2,7 @@
 """Generic SLURM array submission.
 
 Every batch-submission script delegates here, supplying a ``build_manifest_fn``
-(filters the db, returns one manifest row per array task) and optionally an
+(filters the table, returns one manifest row per array task) and optionally an
 ``add_extra_args_fn`` for extra CLI flags. An optional ``--filter`` module's
 ``apply_filter(df) -> df`` runs before the manifest is built.
 """
@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 from pandas import DataFrame
 
 from .base_parser import base_parser
-from .data_manager import Database, DataManager, LookupFn, RegistryManager, filter_ready
+from .data_manager import Table, DataManager, LookupFn, RegistryManager, filter_ready
 from .naming import (
     RUN_META_FILENAME,
     resolve_dir_name,
@@ -46,11 +46,11 @@ PRELUDE_PATH = Path(__file__).parent / "sbatch" / "sapia_task_prelude.sh"
 ## ARGPARSER
 class CommonArgs(Namespace):
     run_dir: Path
-    database: str | None
+    table: str | None
     sbatch_script: Path
     input_column: str
     dir_label: str
-    db_label: str
+    table_label: str
     filter: Path | None
     max_concurrent: int
     partitions: str | None
@@ -81,7 +81,7 @@ def _add_sbatch_args(
         "--input-column",
         type=str,
         default=default_input_column,
-        help=f"Input column from database. \
+        help=f"Input column from table. \
         Defaults to '{default_input_column}'",
     )
     parser.add_argument(
@@ -149,7 +149,7 @@ def _add_sbatch_args(
         "directive in the tool's .sbatch. Default is unset (use the script's value).",
     )
     parser.add_argument(
-        "-t",
+        "-T",
         "--time",
         type=str,
         default=None,
@@ -178,7 +178,7 @@ def build_run_parser(
     add_extra_args_fn: AddArgsFn | None = None,
 ) -> ArgumentParser:
     """Build a reusable (``add_help=False``) parent parser holding every run flag for
-    a tool: base args + batch flags + ``--db-label`` (create tools) + tool extras.
+    a tool: base args + batch flags + ``--table-label`` (create tools) + tool extras.
 
     Used both by ``submit_sbatch_array`` (as the sole parent of a standalone parser)
     and by the ``sapia`` CLI (as ``parents=[...]`` of each ``run <tool>`` subparser), so
@@ -186,42 +186,42 @@ def build_run_parser(
     """
     parser = ArgumentParser(
         add_help=False,
-        parents=[base_parser(require_database=not metadata.creates_db)],
+        parents=[base_parser(require_table=not metadata.creates_table)],
     )
     _add_sbatch_args(parser, default_sbatch, default_input_column)
-    if metadata.creates_db:
+    if metadata.creates_table:
         parser.add_argument(
-            "--db-label",
+            "--table-label",
             type=str,
             default="",
-            help="Optional label for the child database this run creates "
-            "(append rule: db<gen>_<parent_label>_<db_label>). Omit for an "
-            "unlabelled child (db<gen>); pass one to disambiguate a fork.",
+            help="Optional label for the child table this run creates "
+            "(append rule: table<gen>_<parent_label>_<table_label>). Omit for an "
+            "unlabelled child (table<gen>); pass one to disambiguate a fork.",
         )
     if add_extra_args_fn is not None:
         add_extra_args_fn(parser)
     return parser
 
 
-## OUTPUT DATABASE RESOLUTION
-def resolve_output_db(
+## OUTPUT TABLE RESOLUTION
+def resolve_output_table(
     registry: RegistryManager,
     tool: ToolMetadata,
-    src_db: str | None,
-    db_label: str = "",
-) -> Database:
-    """Resolve the db a run writes to: reserve a child/root for create, else return ``src_db``."""
-    if not tool.creates_db:
-        if src_db is None:
+    src_table: str | None,
+    table_label: str = "",
+) -> Table:
+    """Resolve the table a run writes to: reserve a child/root for create, else return ``src_table``."""
+    if not tool.creates_table:
+        if src_table is None:
             raise ValueError(
-                f"Update tool {tool.name!r} annotates an existing db in place and "
-                f"requires --database; none was given."
+                f"Update tool {tool.name!r} annotates an existing table in place and "
+                f"requires --table; none was given."
             )
-        return registry.get_database(src_db)
-    output_db = registry.derive_new_db(src_db, db_label)
-    output_db.tool_name = tool.name  # provenance: the tool that creates this db
-    registry.register_database(output_db)
-    return output_db
+        return registry.get_table(src_table)
+    output_table = registry.derive_new_table(src_table, table_label)
+    output_table.tool_name = tool.name  # provenance: the tool that creates this table
+    registry.register_table(output_table)
+    return output_table
 
 
 ## FILTERING
@@ -267,8 +267,8 @@ class ManifestCtx(Generic[ArgsT]):
 
         The already-OK skip is the framework's resume-on-rerun: it fires only when
         the output status column is present in the source frame, i.e. for ``update``
-        tools (which annotate the same db). For ``create`` tools the column lives in
-        the child db, so the skip is a no-op and every ready design is submitted. #TODO maybe check child db too?
+        tools (which annotate the same table). For ``create`` tools the column lives in
+        the child table, so the skip is a no-op and every ready design is submitted. #TODO maybe check child table too?
         """
         ready = filter_ready(self.df, self.args.input_column)
         out_status = status_column(self.out_dir.name)
@@ -467,27 +467,27 @@ def run_from_args(
             f"sapia new_run --label <label>"
         )
 
-    # Source database (the source rows the manifest iterates over). None for a create
+    # Source table (the source rows the manifest iterates over). None for a create
     # tool that starts a new lineage
-    src_db = args.database
+    src_table = args.table
 
     with DataManager(args.run_dir) as (dm, (read_frame, save_frame), registry):
-        # CREATE reserves a new db in the registry that gets created when collect is called;
-        # UPDATE writes back to src_db.
-        output_db = resolve_output_db(
-            registry, metadata, src_db or None, getattr(args, "db_label", "")
+        # CREATE reserves a new table in the registry that gets created when collect is called;
+        # UPDATE writes back to src_table.
+        output_table = resolve_output_table(
+            registry, metadata, src_table or None, getattr(args, "table_label", "")
         )
 
         # Dirs (created below, so resolve without the existence guard).
-        out_dir = resolve_dir_name(args, output_db, metadata, must_exist=False)
+        out_dir = resolve_dir_name(args, output_table, metadata, must_exist=False)
         log_dir = out_dir / f"{args.sbatch_script.stem}_logs"
         out_dir.mkdir(parents=True, exist_ok=True)
         log_dir.mkdir(parents=True, exist_ok=True)
 
         write_run_meta(out_dir, metadata, args)
 
-        # A root tool has no source db: give an empty frame (for type security).
-        df = read_frame(src_db) if src_db else pd.DataFrame()
+        # A root tool has no source table: give an empty frame (for type security).
+        df = read_frame(src_table) if src_table else pd.DataFrame()
 
         # Filter
         if args.filter:

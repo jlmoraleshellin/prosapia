@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from prosapia.core import (
-    Database,
+    Table,
     ToolMetadata,
     build_tool_leaf,
     drop_collected,
@@ -25,45 +25,45 @@ def _args(run_dir, *, dir_label=""):
 
 
 def test_resolve_dir_name_update(tmp_path):
-    # The leaf is keyed by the *running* tool, not the db's creating tool: an update
-    # tool annotating a worms-created db writes to run_dir/<db>/<update_tool>/.
-    d = tmp_path / "db2_worms" / "alphafold3"
+    # The leaf is keyed by the *running* tool, not the table's creating tool: an update
+    # tool annotating a worms-created table writes to run_dir/<table>/<update_tool>/.
+    d = tmp_path / "table2_worms" / "alphafold3"
     d.mkdir(parents=True)
-    db = Database(db_name="db2_worms", tool_name="worms")  # creator != running tool
+    table = Table(table_name="table2_worms", tool_name="worms")  # creator != running tool
     assert (
-        resolve_dir_name(_args(tmp_path), db, ToolMetadata("alphafold3", "update")) == d
+        resolve_dir_name(_args(tmp_path), table, ToolMetadata("alphafold3", "update")) == d
     )
 
 
 def test_resolve_dir_name_with_label(tmp_path):
-    d = tmp_path / "db2_worms" / "alphafold3_seed42"
+    d = tmp_path / "table2_worms" / "alphafold3_seed42"
     d.mkdir(parents=True)
-    db = Database(db_name="db2_worms")
+    table = Table(table_name="table2_worms")
     args = _args(tmp_path, dir_label="seed42")
-    assert resolve_dir_name(args, db, ToolMetadata("alphafold3", "update")) == d
+    assert resolve_dir_name(args, table, ToolMetadata("alphafold3", "update")) == d
 
 
 def test_resolve_dir_name_create_uses_child(tmp_path):
-    # For a create tool the run script reserved the child db and keyed the output
-    # dir by its name, so collect resolves the dir under the child db name.
-    d = tmp_path / "db1_worms_hl" / "mpnn"
+    # For a create tool the run script reserved the child table and keyed the output
+    # dir by its name, so collect resolves the dir under the child table name.
+    d = tmp_path / "table1_worms_hl" / "mpnn"
     d.mkdir(parents=True)
-    db = Database(db_name="db1_worms_hl")
-    assert resolve_dir_name(_args(tmp_path), db, ToolMetadata("mpnn", "create")) == d
+    table = Table(table_name="table1_worms_hl")
+    assert resolve_dir_name(_args(tmp_path), table, ToolMetadata("mpnn", "create")) == d
 
 
 def test_resolve_dir_name_missing_dir(tmp_path):
-    db = Database(db_name="db2_worms")
+    table = Table(table_name="table2_worms")
     with pytest.raises(FileNotFoundError):
-        resolve_dir_name(_args(tmp_path), db, ToolMetadata("alphafold3", "update"))
+        resolve_dir_name(_args(tmp_path), table, ToolMetadata("alphafold3", "update"))
 
 
 def test_resolve_dir_name_must_exist_false(tmp_path):
     # The run script computes the path before creating it -> no existence guard.
-    db = Database(db_name="db2_worms")
-    expected = tmp_path / "db2_worms" / "alphafold3"
+    table = Table(table_name="table2_worms")
+    expected = tmp_path / "table2_worms" / "alphafold3"
     got = resolve_dir_name(
-        _args(tmp_path), db, ToolMetadata("alphafold3", "update"), must_exist=False
+        _args(tmp_path), table, ToolMetadata("alphafold3", "update"), must_exist=False
     )
     assert got == expected
 

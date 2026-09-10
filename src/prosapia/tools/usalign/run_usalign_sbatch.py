@@ -5,24 +5,24 @@ Submit a SLURM array to compare two predicted structures per design using USalig
 Both structures are converted to PDB (via gemmi) here at manifest-build time and
 cached under <run_dir>/.cif_to_pdb/; each array task then just runs USalign and
 writes per-design metrics to a TSV file. Use ``sapia collect usalign`` to merge
-results back into the database.
+results back into the table.
 
 --col-b is resolved per design by lineage (the row's own value if set, else the
-nearest ancestor db's value), so a child db's structure can be compared against
+nearest ancestor table's value), so a child table's structure can be compared against
 its parent's (e.g. boltz_path vs the parent's diffused_path).
 
 Usage:
     sapia run usalign outputs/20260420_123035_grow_hairpin \
-        --database db1 \
+        --table table1 \
         --col-a boltz_path --col-b openfold3_path
 
     # Compare each child's boltz_path against its parent's diffused_path:
     sapia run usalign outputs/20260420_123035_grow_hairpin \
-        --database db2_child \
+        --table table2_child \
         --col-a boltz_path --col-b diffused_path
 
     sapia run usalign outputs/20260420_123035_grow_hairpin \
-        --database db1 \
+        --table table1 \
         --col-a boltz_path --col-b openfold3_path \
         --output-prefix boltz_vs_openfold3
 """
@@ -49,14 +49,14 @@ def _add_usalign_args(parser: ArgumentParser) -> None:
         "--col-a",
         type=str,
         required=True,
-        help="Database column containing the path to structure A.",
+        help="Table column containing the path to structure A.",
     )
     parser.add_argument(
         "--col-b",
         type=str,
         default=None,
         help="Column containing the path to structure B. Resolved per design by "
-        "lineage: the row's own value if set, otherwise the nearest ancestor db's "
+        "lineage: the row's own value if set, otherwise the nearest ancestor table's "
         "value (matched by parent), so e.g. a child's boltz_path can be compared "
         "against its parent's diffused_path.",
     )

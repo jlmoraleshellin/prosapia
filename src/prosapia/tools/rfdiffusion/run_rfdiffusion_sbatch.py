@@ -7,7 +7,7 @@ to RFdiffusion's own Hydra config plus whatever overrides the user supplies. Thi
 keeps it general: symmetric or not, partial or full diffusion.
 
 Contigs are authored in RFdiffusion's native contig syntax, with ``{expr}``
-placeholders resolved per-design against the database lineage (integers, bare
+placeholders resolved per-design against the table lineage (integers, bare
 column names, and + - * // arithmetic; see resolve_expr):
 
     --contigs '[A1-{prebundle_length}/0 B1-{prebundle_length}/0]'
@@ -32,11 +32,11 @@ each array task runs its N diffusions concurrently on a single GPU.
 
 Usage:
     # general run, config-driven
-    sapia run rfdiffusion outputs/RUN --database db \\
+    sapia run rfdiffusion outputs/RUN --table table \\
         --contigs '[A1-{prebundle_length}/0]' --config-name base
 
     # reproduce the old partial-symmetric behavior
-    sapia run rfdiffusion outputs/RUN --database db \\
+    sapia run rfdiffusion outputs/RUN --table table \\
         --contigs '[A1-{prebundle_length}/0 B1-{prebundle_length}/0]' \\
         --symmetry auto --partial-T 20 --num-designs 10 \\
         --ckpt "$RFDIFFUSION/models/Complex_base_ckpt.pt"
@@ -59,7 +59,7 @@ from prosapia.utils import resolve_template
 _CHAIN_REF = re.compile(r"\b([A-Z])(\d)")
 
 # A {expr} placeholder island in the contig template, resolved per-design up the
-# db lineage. Meaningless in a root run (no db), so we reject it there explicitly.
+# table lineage. Meaningless in a root run (no table), so we reject it there explicitly.
 _HAS_PLACEHOLDER = re.compile(r"\{[^}]*\}")
 
 
@@ -93,7 +93,7 @@ def add_extra_args_rfdiffusion(parser: ArgumentParser):
         type=str,
         required=True,
         help="RFdiffusion contig template (contigmap.contigs). May embed {expr} "
-        "placeholders resolved per-design up the lineage: integers, bare db column "
+        "placeholders resolved per-design up the lineage: integers, bare table column "
         "names, and + - * // arithmetic. "
         "E.g. '[A1-{prebundle_length}/0 B1-{prebundle_length}/0]'. "
         "With --replicate, author a single chain's unit and mark its fixed "
@@ -105,8 +105,8 @@ def add_extra_args_rfdiffusion(parser: ArgumentParser):
         type=Path,
         default=None,
         help="Single input structure to diffuse when starting a ROOT run (no "
-        "--database): motif/partial diffusion of one PDB that isn't in any db yet. "
-        "Only valid without --database (with a db, inputs come from --input-column). "
+        "--table): motif/partial diffusion of one PDB that isn't in any table yet. "
+        "Only valid without --table (with a table, inputs come from --input-column). "
         "Omit for pure de-novo generation. The design group is named after this "
         "file's stem.",
     )
@@ -313,7 +313,7 @@ def _assemble_design(
 def _build_create_designs(
     ctx: ManifestCtx[RFDiffArgs], global_extra: str
 ) -> list[tuple[str, ...]]:
-    """Iterate the input db's --input-column: one diffusion per ready design row."""
+    """Iterate the input table's --input-column: one diffusion per ready design row."""
     ready = ctx.ready
 
     designs: list[tuple[str, ...]] = []
@@ -346,19 +346,19 @@ def _build_create_designs(
 def _build_root_designs(
     ctx: ManifestCtx[RFDiffArgs], global_extra: str
 ) -> list[tuple[str, ...]]:
-    """Root run (no --database): a single design group, from --input-pdb or de-novo.
+    """Root run (no --table): a single design group, from --input-pdb or de-novo.
 
-    Root means "start a fresh lineage without iterating a db column" -- NOT
+    Root means "start a fresh lineage without iterating a table column" -- NOT
     necessarily de-novo. With --input-pdb we diffuse that one structure (motif /
-    partial diffusion of a PDB not yet in any db); without it we generate de-novo.
+    partial diffusion of a PDB not yet in any table); without it we generate de-novo.
     Either way it's one group -> one SLURM task.
     """
-    # {expr} placeholders resolve up the db lineage, which a root run doesn't have.
+    # {expr} placeholders resolve up the table lineage, which a root run doesn't have.
     if _HAS_PLACEHOLDER.search(ctx.args.contigs):
         raise ValueError(
             "--contigs contains a {expr} placeholder, but this is a root run "
-            "(no --database) with no db lineage to resolve it against. Use literal "
-            "contigs, or run with --database to diffuse existing db rows."
+            "(no --table) with no table lineage to resolve it against. Use literal "
+            "contigs, or run with --table to diffuse existing table rows."
         )
 
     if ctx.args.input_pdb is not None:
@@ -384,13 +384,13 @@ def _build_root_designs(
 def build_rfdiff_manifest(ctx: ManifestCtx[RFDiffArgs]) -> list[tuple[str, ...]]:
     global_extra = _global_extra(ctx.args)
 
-    if ctx.args.database is None:
+    if ctx.args.table is None:
         designs = _build_root_designs(ctx, global_extra)
     else:
         if ctx.args.input_pdb is not None:
             raise ValueError(
-                "--input-pdb is only valid for a root run (no --database); with "
-                "--database, inputs come from the db's --input-column. Drop one of them."
+                "--input-pdb is only valid for a root run (no --table); with "
+                "--table, inputs come from the table's --input-column. Drop one of them."
             )
         designs = _build_create_designs(ctx, global_extra)
 

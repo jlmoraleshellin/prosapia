@@ -2,8 +2,8 @@
 """Shared entry-point for every ``collect_*`` script.
 
 A collect function stays pure (reads a ``CollectCtx``, returns row updates keyed by
-name); all db mutation happens here. Given ``--database <db>``, it scans
-``run_dir/<db>/<tool_leaf>/`` and writes rows into ``<db>.tsv``. ``Tool.action``
+name); all table mutation happens here. Given ``--table <table>``, it scans
+``run_dir/<table>/<tool_leaf>/`` and writes rows into ``<table>.tsv``. ``Tool.action``
 decides the contract: a create validates + stamps row lineage, an update only
 writes rows back.
 """
@@ -21,10 +21,10 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from .base_parser import base_parser
-from .data_manager import Database, DataManager, LookupFn, filter_ready
+from .data_manager import Table, DataManager, LookupFn, filter_ready
 from .naming import (
     GEN,
-    PARENT_DB,
+    PARENT_TABLE,
     PARENT_NAME,
     RUN_META_FILENAME,
     path_column,
@@ -41,7 +41,7 @@ load_dotenv()
 # ARGS FUNCTION
 class CollectArgs(Namespace):
     run_dir: Path
-    database: str
+    table: str
     dir_label: str
     force: bool
 
@@ -60,14 +60,14 @@ class CollectCtx(Generic[ArgsT]):
 
     df: pd.DataFrame
     args: ArgsT
-    db_name: str
+    table_name: str
     out_dir: Path
     status_col: str
     path_col: str
-    parent_db: str | None
+    parent_table: str | None
     parent_df: pd.DataFrame
     lookup: LookupFn
-    creates_db: bool
+    creates_table: bool
     default_input_column: str
 
     def _meta(self) -> dict | None:
@@ -83,8 +83,8 @@ class CollectCtx(Generic[ArgsT]):
 
     @property
     def ready(self) -> pd.DataFrame:
-        """The designs a collect should iterate over. Create-collect uses the parent db's ready designs,
-        update-collect uses this db's ready designs. A design is ready when it has a present input column.
+        """The designs a collect should iterate over. Create-collect uses the parent table's ready designs,
+        update-collect uses this table's ready designs. A design is ready when it has a present input column.
         """
         meta = self._meta()
         col = (
@@ -92,9 +92,9 @@ class CollectCtx(Generic[ArgsT]):
             if meta and "input_column" in meta
             else self.default_input_column
         )
-        frame = self.parent_df if self.creates_db else self.df
+        frame = self.parent_df if self.creates_table else self.df
         ready = filter_ready(frame, col)
-        if self.creates_db:
+        if self.creates_table:
             return ready
         return drop_collected(ready, self.df, self.status_col, self.args.force)
 
@@ -172,7 +172,7 @@ def by_design(make: CollectorFactory) -> CollectFn:
                 )
             )
             if not emitted:
-                if not ctx.creates_db:  # update: flag the existing row
+                if not ctx.creates_table:  # update: flag the existing row
                     updates[name] = {ctx.status_col: "missing"}
                 continue  # create: nothing to mark
             leaf = ctx.out_dir.name
@@ -246,11 +246,11 @@ def build_collect_parser(
 
 def _finalize_create(
     updates: CollectResult,
-    database: Database,
+    table: Table,
     parent_df: pd.DataFrame,
 ) -> None:
-    """Stamp ``parent_db``/``gen`` on a create tool's rows and validate the parent edge."""
-    if database.parent_db_name is not None:
+    """Stamp ``parent_table``/``gen`` on a create tool's rows and validate the parent edge."""
+    if table.parent_table_name is not None:
         index = parent_df.index
         bad = [
             name
@@ -260,30 +260,30 @@ def _finalize_create(
         if bad:
             preview = ", ".join(map(str, bad[:5])) + (" ..." if len(bad) > 5 else "")
             raise ValueError(
-                f"{len(bad)} row(s) in create-collect for {database.db_name!r} are missing a "
-                f"PARENT_NAME present in parent db {database.parent_db_name!r}: {preview}. Each "
-                f"child-create row must set PARENT_NAME to a row in the parent db."
+                f"{len(bad)} row(s) in create-collect for {table.table_name!r} are missing a "
+                f"PARENT_NAME present in parent table {table.parent_table_name!r}: {preview}. Each "
+                f"child-create row must set PARENT_NAME to a row in the parent table."
             )
         for row in updates.values():
-            row[PARENT_DB] = database.parent_db_name
+            row[PARENT_TABLE] = table.parent_table_name
     else:
-        # Root db (no parent): overwrite any PARENT_NAME with pd.NA
+        # Root table (no parent): overwrite any PARENT_NAME with pd.NA
         for row in updates.values():
             row[PARENT_NAME] = pd.NA
     for row in updates.values():
-        row.setdefault(GEN, database.gen)
+        row.setdefault(GEN, table.gen)
 
 
 def _finalize_update(
-    updates: CollectResult, database: Database, df: pd.DataFrame
+    updates: CollectResult, table: Table, df: pd.DataFrame
 ) -> None:
-    """Warn (don't fail) when an update collect produces rows not already in the db."""
+    """Warn (don't fail) when an update collect produces rows not already in the table."""
     new = [name for name in updates if name not in df.index]
     if new:
         preview = ", ".join(map(str, new[:5])) + (" ..." if len(new) > 5 else "")
         print(
-            f"WARNING: update-collect for {database.db_name!r} produced {len(new)} row(s) not "
-            f"already in the db: {preview}. An update annotates existing rows; if this "
+            f"WARNING: update-collect for {table.table_name!r} produced {len(new)} row(s) not "
+            f"already in the table: {preview}. An update annotates existing rows; if this "
             f"tool creates entities, declare it action='create'."
         )
 
@@ -294,47 +294,47 @@ def collect_from_args(
     args: ArgsT,
 ) -> None:
     """Execute a collect from already-parsed args (shared by standalone and ``sapia``)."""
-    db_name = args.database
+    table_name = args.table
 
     with DataManager(args.run_dir) as (dm, (read_frame, save_frame), registry):
-        # Get database and output directory name
-        output_db = registry.get_database(db_name)
-        out_dir = resolve_dir_name(args, output_db, metadata)
+        # Get table and output directory name
+        output_table = registry.get_table(table_name)
+        out_dir = resolve_dir_name(args, output_table, metadata)
 
         # Read parent DataFrame or create one
         parent_df = (
-            read_frame(output_db.parent_db_name)
-            if output_db.parent_db_name
+            read_frame(output_table.parent_table_name)
+            if output_table.parent_table_name
             else pd.DataFrame()
         )
 
         # Read source DataFrame
-        df = read_frame(db_name)
+        df = read_frame(table_name)
 
         leaf = out_dir.name
         ctx = CollectCtx(
             df=df,
             args=args,
-            db_name=db_name,
+            table_name=table_name,
             out_dir=out_dir,
             status_col=status_column(leaf),
             path_col=path_column(leaf),
-            parent_db=output_db.parent_db_name,
+            parent_table=output_table.parent_table_name,
             parent_df=parent_df,
             lookup=partial(dm.lookup, df),
-            creates_db=metadata.creates_db,
+            creates_table=metadata.creates_table,
             default_input_column=metadata.default_input_column,
         )
         updates = by_design(collect_fn)(ctx)
 
-        if metadata.creates_db:
-            _finalize_create(updates, output_db, parent_df)
+        if metadata.creates_table:
+            _finalize_create(updates, output_table, parent_df)
         else:
-            _finalize_update(updates, output_db, df)
+            _finalize_update(updates, output_table, df)
 
         # Write updates
         for name, row in updates.items():
             df = dm.update(df, name, row)
-        save_frame(db_name, df)
+        save_frame(table_name, df)
 
-    print(f"Collected {len(updates)} row(s) into {db_name}.")
+    print(f"Collected {len(updates)} row(s) into {table_name}.")

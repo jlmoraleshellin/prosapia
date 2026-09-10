@@ -6,13 +6,13 @@ Each array task runs align_symm_axis_worker.py on one design: it reads the Cn
 symmetry axis from the design's Rosetta .symm file and rigidly reorients the
 symmetric assembly so that axis lands on +Z at the origin -- the canonical frame
 RFdiffusion expects for symmetric motif scaffolding. Use collect_align_symm_axis.py
-to merge the results (aligned-PDB path + axis-quality metric) back into the db.
+to merge the results (aligned-PDB path + axis-quality metric) back into the table.
 
 The .symm file is derived by name from the symmetric-PDB column, the same way
 run_relax_sbatch.py does it (<stem without _symm>.symm next to it).
 
 Usage:
-    sapia run align_symm_axis outputs/RUN --database db \
+    sapia run align_symm_axis outputs/RUN --table table \
         --input-column make_symmdef_path
 """
 

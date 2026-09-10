@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-Collect USalign comparison results into the database.
+Collect USalign comparison results into the table.
 
 Scans <run_dir>/USalign/<prefix>_results/ for per-design TSV files written
-by usalign.sbatch, and merges the metrics back into the specified database.
+by usalign.sbatch, and merges the metrics back into the specified table.
 
 Usage:
     sapia collect usalign outputs/RUN \
-        --database db1 \
+        --table table1 \
         --col-a boltz_path --col-b openfold3_path
 
     sapia collect usalign outputs/RUN \
-        --database db1 \
+        --table table1 \
         --output-prefix boltz_vs_openfold3
 """
 
@@ -38,14 +38,14 @@ def _add_usalign_args(parser: ArgumentParser) -> None:
         "--col-a",
         type=str,
         default=None,
-        help="Database column for structure A (used to derive prefix when "
+        help="Table column for structure A (used to derive prefix when "
         "--output-prefix is not set).",
     )
     parser.add_argument(
         "--col-b",
         type=str,
         default=None,
-        help="Database column for structure B (used to derive prefix when "
+        help="Table column for structure B (used to derive prefix when "
         "--output-prefix is not set).",
     )
     parser.add_argument(

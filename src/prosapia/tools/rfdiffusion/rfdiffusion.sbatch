@@ -38,12 +38,21 @@ run_one() {
     # optional overrides + --set) and $symmetry_token are intentionally unquoted
     # so their space-separated Hydra tokens each become a separate argv entry.
     # contigmap.contigs stays a single token (it may contain spaces).
-    # The interpreter defaults to `python` (made right by the Activation hook, or already
-    # on PATH); set RFDIFFUSION_PYTHON to point straight at a specific interpreter
-    # instead of activating the SE3nv environment.
-    local cmd=(
-        "${RFDIFFUSION_PYTHON:-python}" "$RUN_INFERENCE" $global_extra
-    )
+    #
+    # Two invocation shapes, selected by whether RFDIFFUSION_PYTHON is set:
+    #   - unset (default): activate SE3nv (or otherwise put run_inference.py on
+    #     PATH) and we run it directly as an executable. RUN_INFERENCE need not be
+    #     set; it defaults to `run_inference.py`, resolved via PATH.
+    #   - set: pin a specific interpreter to skip activation/module loading. Then
+    #     RUN_INFERENCE MUST be an explicit path to run_inference.py, because
+    #     `python <script>` resolves the script relative to cwd, not via PATH.
+    local cmd=()
+    if [ -n "${RFDIFFUSION_PYTHON:-}" ]; then
+        cmd=( "$RFDIFFUSION_PYTHON" "${RUN_INFERENCE:?set RUN_INFERENCE to run_inference.py}" )
+    else
+        cmd=( "${RUN_INFERENCE:-run_inference.py}" )
+    fi
+    cmd+=( $global_extra )
     # A root de-novo row carries an empty $staged: omit inference.input_pdb so
     # RFdiffusion generates from scratch. When set, keep it a single quoted token.
     [ -n "$staged" ] && cmd+=(inference.input_pdb="$staged")

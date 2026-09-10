@@ -16,11 +16,11 @@ from .base_sbatch import (  # noqa: F401
     CommonArgs,
     ManifestCtx,
     build_run_parser,
-    resolve_output_db,
+    resolve_output_table,
     run_from_args,
 )
 from .data_manager import (  # noqa: F401
-    Database,
+    Table,
     DataManager,
     LookupFn,
     RegistryManager,
@@ -28,7 +28,7 @@ from .data_manager import (  # noqa: F401
 )
 from .naming import (  # noqa: F401
     GEN,
-    PARENT_DB,
+    PARENT_TABLE,
     PARENT_NAME,
     ROOT_PARENT,
     build_tool_leaf,

@@ -1,4 +1,4 @@
-"""Tests for pipeline_core.resolve_expr (integer arithmetic + db-column resolution)."""
+"""Tests for pipeline_core.resolve_expr (integer arithmetic + table-column resolution)."""
 
 import pytest
 

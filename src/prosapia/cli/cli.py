@@ -63,7 +63,7 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
         "run", help="Submit a tool's SLURM array."
     ).add_subparsers(dest="tool", required=True)
     collect_tools = verbs.add_parser(
-        "collect", help="Collect a tool's outputs into its database."
+        "collect", help="Collect a tool's outputs into its table."
     ).add_subparsers(dest="tool", required=True)
 
     for name, tool in sorted(tools.items()):

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Collect align_symm_axis results into the database.
+Collect align_symm_axis results into the table.
 
-Scans <run_dir>/<database>/align_symm_axis/ for the per-design TSV files written
+Scans <run_dir>/<table>/align_symm_axis/ for the per-design TSV files written
 by align_symm_axis.sbatch, and merges the alignment status, aligned-PDB path and
-axis-quality metric back into the database as <prefix>_status / <prefix>_path /
+axis-quality metric back into the table as <prefix>_status / <prefix>_path /
 <prefix>_max_dev_deg columns.
 
 Usage:
-    sapia collect align_symm_axis outputs/RUN --database db
+    sapia collect align_symm_axis outputs/RUN --table table
 """
 
 from typing import Iterable

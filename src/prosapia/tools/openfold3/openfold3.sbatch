@@ -11,7 +11,7 @@ set -euo pipefail
 source "${SAPIA_PRELUDE:?}"
 
 # Site-specific activation (required) — see docs/configuration.md.
-# Must put `run_openfold` on PATH and set TORCH_EXTENSIONS_DIR.
+# Must put `run_openfold` on PATH.
 set +u
 source "${SAPIA_ACTIVATE_OPENFOLD3:?set SAPIA_ACTIVATE_OPENFOLD3 in your .env to a tool activation script}"
 set -u

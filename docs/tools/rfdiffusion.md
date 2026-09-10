@@ -6,14 +6,14 @@
 
 ## Contigs, with `{expr}` placeholders
 
-Contigs are authored in RFdiffusion's native contig syntax. Any `{expr}` island is resolved **per design** against the db lineage. It accepts integers, bare column names, and `+ - * //` arithmetic:
+Contigs are authored in RFdiffusion's native contig syntax. Any `{expr}` island is resolved **per design** against the table lineage. It accepts integers, bare column names, and `+ - * //` arithmetic:
 
 ```bash
 --contigs '[A1-{prebundle_length}/0 B1-{prebundle_length}/0]'
 --contigs '{prepend_len},A1-{motif_end-1}'
 ```
 
-A `{expr}` needs a lineage to resolve against, so it is only valid **with** `-d/--database`; a root run must use literal contigs.
+A `{expr}` needs a lineage to resolve against, so it is only valid **with** `-t/--table`; a root run must use literal contigs.
 
 ### High-order symmetry: `--replicate`
 
@@ -39,8 +39,8 @@ They are commonly used together: `--replicate` writes out the per-chain contig, 
 
 ## Root vs. create
 
-- **Create** (with `-d/--database`): one diffusion per ready row, inputs from `--input-column`. Each input PDB is renumbered per-chain at submit time — RFdiffusion's continuous cross-chain numbering would otherwise break contig/symmetry parsing.
-- **Root** (no `-d`): a single design group. Pass `--input-pdb` to diffuse one structure not yet in any db (motif / partial), or omit it for pure de-novo. `--input-pdb` is root-only.
+- **Create** (with `-t/--table`): one diffusion per ready row, inputs from `--input-column`. Each input PDB is renumbered per-chain at submit time — RFdiffusion's continuous cross-chain numbering would otherwise break contig/symmetry parsing.
+- **Root** (no `-t`): a single design group. Pass `--input-pdb` to diffuse one structure not yet in any table (motif / partial), or omit it for pure de-novo. `--input-pdb` is root-only.
 
 ## How the array is distributed
 
@@ -60,8 +60,8 @@ The model-reload cost is paid **per process, not per design**: raise `--num-desi
 ## Example
 
 ```bash
-# partial-symmetric diffusion of existing db rows
-sapia run rfdiffusion outputs/RUN --database db \
+# partial-symmetric diffusion of existing table rows
+sapia run rfdiffusion outputs/RUN --table table \
     --contigs '[A1-{prebundle_length}/0 B1-{prebundle_length}/0]' \
     --symmetry auto --partial-T 20 --num-designs 10 \
     --ckpt "$RFDIFFUSION/models/Complex_base_ckpt.pt"

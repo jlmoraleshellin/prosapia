@@ -7,8 +7,11 @@ source "$CONDA_PREFIX/etc/profile.d/conda.sh" # or module load Minforge3 or simi
 conda activate SE3nv
 
 # --- tool inputs ---
-# RFdiffusion's inference entrypoint (required).
-export RUN_INFERENCE="/path/to/RFdiffusion/scripts/run_inference.py"
+# Activating SE3nv above already puts run_inference.py on PATH, so RUN_INFERENCE
+# is optional. Set it only if run_inference.py is not on PATH.
+# export RUN_INFERENCE="/path/to/RFdiffusion/scripts/run_inference.py"
 
-# Optional: pin the interpreter explicitly instead of the activated env's `python`.
+# Alternative to activation: pin the interpreter to skip conda/module loading.
+# When set, RUN_INFERENCE above becomes REQUIRED — `python <script>` resolves the
+# script by path, not via PATH.
 # export RFDIFFUSION_PYTHON="/path/to/conda_envs/SE3nv/bin/python"
