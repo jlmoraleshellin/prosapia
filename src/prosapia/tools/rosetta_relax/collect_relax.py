@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Parse Rosetta score files and append metrics to the run database.
+Parse Rosetta score files and append metrics to the run table.
 
 Usage:
-    sapia collect relaxed outputs/20260416_155345_grow_hairpin --database db1_...
+    sapia collect relaxed outputs/20260416_155345_grow_hairpin --table table1_...
 """
 
 from pathlib import Path

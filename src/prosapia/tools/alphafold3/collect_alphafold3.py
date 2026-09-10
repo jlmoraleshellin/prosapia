@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Collect AlphaFold3 prediction results into the database.
+Collect AlphaFold3 prediction results into the table.
 
 Scans results_shard directories for prediction outputs and writes metrics +
-model path into the database.  AF3 already selects the best-ranked model and
+model path into the table.  AF3 already selects the best-ranked model and
 places it directly in the design directory.
 
 Output structure expected:
@@ -16,8 +16,8 @@ Output structure expected:
         <design_name>_ranking_scores.csv
 
 Usage:
-    sapia collect alphafold3 outputs/20260420_123035_grow_hairpin --database db1_..._proteinmpnn
-    sapia collect alphafold3 outputs/20260420_123035_grow_hairpin --database db1_..._proteinmpnn --force
+    sapia collect alphafold3 outputs/20260420_123035_grow_hairpin --table table1_..._proteinmpnn
+    sapia collect alphafold3 outputs/20260420_123035_grow_hairpin --table table1_..._proteinmpnn --force
 """
 
 import json
@@ -72,7 +72,7 @@ def collect_af3(ctx: CollectCtx) -> CollectEach:
     status/path; this only locates + parses one design's output."""
     if ctx.df.empty:
         raise RuntimeError(
-            f"Database {ctx.args.database!r} is empty or missing in {ctx.args.run_dir}."
+            f"Table {ctx.args.table!r} is empty or missing in {ctx.args.run_dir}."
         )
 
     # Index every predicted design dir once, up front.

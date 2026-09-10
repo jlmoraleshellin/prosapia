@@ -2,7 +2,7 @@
 """
 Submit a SLURM array job to run boltz predictions on MPNN-designed sequences.
 
-Reads sequences from an MPNN database, writes one boltz YAML input per sequence,
+Reads sequences from an MPNN table, writes one boltz YAML input per sequence,
 groups them into shard directories, and submits a sbatch array where each task
 runs boltz on a whole shard (optionally on multiple GPUs via --devices).
 
@@ -10,8 +10,8 @@ The template CIF, chain layout, and number of subunits are hardcoded at the
 top of this file -- edit them there.
 
 Usage:
-    sapia run boltz outputs/20260420_123035_grow_hairpin --database db1
-    sapia run boltz outputs/20260420_123035_grow_hairpin --database db1 --shard-size 20 --devices 4
+    sapia run boltz outputs/20260420_123035_grow_hairpin --table table1
+    sapia run boltz outputs/20260420_123035_grow_hairpin --table table1 --shard-size 20 --devices 4
 """
 
 import os

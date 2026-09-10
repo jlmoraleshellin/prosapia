@@ -2,7 +2,7 @@
 """
 Submit a SLURM array job to run ColabFold predictions on MPNN-designed sequences.
 
-Reads sequences from an MPNN database, trims N-terminal residues based on
+Reads sequences from an MPNN table, trims N-terminal residues based on
 --start-at-column, groups them into FASTA query files (one per SLURM task),
 and submits an sbatch array.
 
@@ -12,11 +12,11 @@ gets its own ``task_<i>`` output directory.  The companion
 to design names.
 
 Requires ``n_subunits`` and (optionally) ``prebundle_length`` columns available
-up the input db's lineage (resolved via ``DataManager.lookup``).
+up the input table's lineage (resolved via ``DataManager.lookup``).
 
 Usage:
-    sapia run colabfold outputs/20260420_123035_grow_hairpin --database db1
-    sapia run colabfold outputs/20260420_123035_grow_hairpin --database db1 --queries-per-task 20 --devices 4
+    sapia run colabfold outputs/20260420_123035_grow_hairpin --table table1
+    sapia run colabfold outputs/20260420_123035_grow_hairpin --table table1 --queries-per-task 20 --devices 4
 """
 
 from argparse import ArgumentParser
@@ -73,7 +73,7 @@ def _add_colabfold_args(parser: ArgumentParser) -> None:
         type=int,
         default=None,
         help="Fixed number of subunits for all designs. "
-        "When set, overrides the 'n_subunits' DB column.",
+        "When set, overrides the 'n_subunits' table column.",
     )
     parser.add_argument(
         "--start-at-column",

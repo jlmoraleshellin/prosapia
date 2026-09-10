@@ -5,18 +5,18 @@ start. These pages go deeper.
 
 ## Start here
 
-- **[Architecture](architecture.md)** — the shared database and the two-phase
+- **[Architecture](architecture.md)** — the shared table and the two-phase
   SLURM driver.
 - **[Running a tool](running-a-tool.md)** — the `sapia run` flags and how they
   map to a SLURM array job.
 - **[Collecting a tool](collecting-a-tool.md)** — the `sapia collect` phase that
-  writes a tool's outputs back into the database.
-- **[Using labels](using-labels.md)** — `--dir-label` and `--db-label` for
+  writes a tool's outputs back into the table.
+- **[Using labels](using-labels.md)** — `--dir-label` and `--table-label` for
   same-tool variants and forking the lineage.
 - **[Using RFdiffusion](tools/rfdiffusion.md)** and **[Using
   ProteinMPNN](tools/proteinmpnn.md)** — guides to the two bundled tools with
   their own expression languages.
-- **[Lineage & databases](lineage-and-databases.md)** — `create` vs. `update`,
+- **[Lineage & tables](lineage-and-tables.md)** — `create` vs. `update`,
   roots, the lineage tree, and `lookup`.
 - **[Configuration](configuration.md)** — binding tools via activation scripts,
   the environment-variable reference, and tool discovery.

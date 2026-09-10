@@ -1,6 +1,6 @@
 # Using ProteinMPNN
 
-`sapia run proteinmpnn` designs sequences for backbones with ProteinMPNN, spawning a new child db. It is a terse, fully-explicit interface over ProteinMPNN's per-chain helper syntax: one small mini-language drives it and nothing is inferred from the structure.
+`sapia run proteinmpnn` designs sequences for backbones with ProteinMPNN, spawning a new child table. It is a terse, fully-explicit interface over ProteinMPNN's per-chain helper syntax: one small mini-language drives it and nothing is inferred from the structure.
 
 `sapia run proteinmpnn --help` is the authoritative flag list; this page covers that mini-language (chains, then positions) and how the array is distributed.
 
@@ -48,7 +48,7 @@ This is what keeps walltime down: the model-load cost is paid **per group, not p
 
 ```bash
 # homo-oligomer redesign after boltz, larger tasks
-sapia run proteinmpnn outputs/RUN --database boltz_db --db-label proteinmpnn_r2 \
+sapia run proteinmpnn outputs/RUN --table boltz_table --table-label proteinmpnn_r2 \
     --input-column boltz_path --filter filters/filter1_after_boltz.py \
     --symmetry --designs-per-task 20 --num-seq-per-target 10
 ```

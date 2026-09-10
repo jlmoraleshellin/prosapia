@@ -1,9 +1,9 @@
 # Writing a filter function
 
-A **filter** is an optional Python module you point `sapia run` at with `-f/--filter`. It exposes a single `apply_filter(df) -> df`, and the driver applies it to the source database **before the manifest is built**. This way you can subset, sample, threshold, or reorder designs at submit time without touching the database itself.
+A **filter** is an optional Python module you point `sapia run` at with `-f/--filter`. It exposes a single `apply_filter(df) -> df`, and the driver applies it to the source table **before the manifest is built**. This way you can subset, sample, threshold, or reorder designs at submit time without touching the table itself.
 
 ```bash
-sapia run <tool> <run_dir> -d <db> -f path/to/filter.py
+sapia run <tool> <run_dir> -d <table> -f path/to/filter.py
 ```
 
 ## The contract
@@ -18,12 +18,12 @@ def apply_filter(df: DataFrame) -> DataFrame:
     return df
 ```
 
-- **Input:** the source database as a pandas `DataFrame` — one row per design,   keyed by the design `name`, with each tool's outputs as columns.
+- **Input:** the source table as a pandas `DataFrame` — one row per design,   keyed by the design `name`, with each tool's outputs as columns.
 - **Output:** a `DataFrame`, typically a subset of the rows. Anything you can do   with pandas (and anything importable) is fair game.
 
 ## When it runs
 
-The filter runs at **submit time, in the `sapia` driver** (not on the cluster), and **before the manifest is computed**. So the framework's own filtering — the `--input-column` presence check and the resume skip (`<leaf>_status == "OK"`) applies *on top of* the frame you return. It sees the full source db. (For a root `create` run with no `-d`, there's no source db, so the frame is empty.)
+The filter runs at **submit time, in the `sapia` driver** (not on the cluster), and **before the manifest is computed**. So the framework's own filtering — the `--input-column` presence check and the resume skip (`<leaf>_status == "OK"`) applies *on top of* the frame you return. It sees the full source table. (For a root `create` run with no `-d`, there's no source table, so the frame is empty.)
 
 If your filter returns an empty frame, the run prints `No designs to submit.` and exits without submitting anything.
 

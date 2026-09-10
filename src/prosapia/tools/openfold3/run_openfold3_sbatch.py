@@ -2,16 +2,16 @@
 """
 Submit a SLURM array job to run OpenFold3 predictions on MPNN-designed sequences.
 
-Reads sequences from an MPNN database, trims N-terminal residues based on
+Reads sequences from an MPNN table, trims N-terminal residues based on
 --start-at-column, groups them into JSON query files (one per SLURM task),
 generates a shared runner YAML for device config, and submits an sbatch array.
 
 Requires ``n_subunits`` and (optionally) ``prebundle_length`` columns available
-up the input db's lineage (resolved via ``DataManager.lookup``).
+up the input table's lineage (resolved via ``DataManager.lookup``).
 
 Usage:
-    sapia run openfold3 outputs/20260420_123035_grow_hairpin --database db1
-    sapia run openfold3 outputs/20260420_123035_grow_hairpin --database db1 --queries-per-task 20 --devices 4
+    sapia run openfold3 outputs/20260420_123035_grow_hairpin --table table1
+    sapia run openfold3 outputs/20260420_123035_grow_hairpin --table table1 --queries-per-task 20 --devices 4
 """
 
 import json
@@ -92,7 +92,7 @@ def _add_openfold3_args(parser: ArgumentParser) -> None:
         type=int,
         default=None,
         help="Fixed number of subunits for all designs. "
-        "When set, overrides the 'n_subunits' DB column.",
+        "When set, overrides the 'n_subunits' table column.",
     )
 
 

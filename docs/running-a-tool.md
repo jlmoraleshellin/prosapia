@@ -1,6 +1,6 @@
 # Running a tool
 
-`sapia run` is the submit phase: it turns a database into a SLURM array job. Every tool inherits the **same base flags** from the shared driver (`base_sbatch`) and may add its **own flags** for tool-specific parameters on top.
+`sapia run` is the submit phase: it turns a table into a SLURM array job. Every tool inherits the **same base flags** from the shared driver (`base_sbatch`) and may add its **own flags** for tool-specific parameters on top.
 
 This page is the reference for the base set and, importantly, how it maps to (and departs from) plain SLURM.
 
@@ -8,12 +8,12 @@ This page is the reference for the base set and, importantly, how it maps to (an
 
 ```bash
 # submit the array
-sapia run     <tool> <run_dir> [-d <db>] [flags]  
-# read results into the output db
-sapia collect <tool> <run_dir> -d <db>            
+sapia run     <tool> <run_dir> [-d <table>] [flags]  
+# read results into the output table
+sapia collect <tool> <run_dir> -d <table>            
 ```
 
-A run does three things: it **resolves the output database** (the source db for an `update` tool, or a freshly reserved child/root for a `create` tool), builds a **manifest** — one line per *ready* design — and submits a **SLURM array** whose per-task `.sbatch` consumes that manifest. [`sapia collect`](collecting-a-tool.md) then closes the cycle. 
+A run does three things: it **resolves the output table** (the source table for an `update` tool, or a freshly reserved child/root for a `create` tool), builds a **manifest** — one line per *ready* design — and submits a **SLURM array** whose per-task `.sbatch` consumes that manifest. [`sapia collect`](collecting-a-tool.md) then closes the cycle. 
 
 See [the two-phase execution model](architecture.md#the-two-phase-execution-model) for the full flow.
 
@@ -30,16 +30,16 @@ These flags decide *which* designs are submitted and where their output lands.
 | Flag | Default | Meaning |
 | --- | --- | --- |
 | `run_dir` (positional) | — | The workflow directory, minted by `sapia new_run`. |
-| `-d`, `--database` | — | Source database in `run_dir` (name, no extension). **Required** for `update` tools; optional for `create` — omit it to start a fresh root lineage. |
-| `-i`, `--input-column` | tool's `default_input_column` | Which db column feeds the tool (e.g. `pdb_path`). |
-| `-l`, `--dir-label` | `""` | Suffix for the output dir, to run same-tool variants side by side (e.g. different seeds). Produces the leaf `<tool>_<dir_label>` and the dir `run_dir/<db>/<leaf>/`. See [Using labels](using-labels.md). |
-| `--db-label` | `""` | **`create` tools only.** Labels the child database this run reserves (append rule: `db<gen>_<parent_label>_<db_label>`). Use it to disambiguate a fork. See [Using labels](using-labels.md). |
+| `-d`, `--table` | — | Source table in `run_dir` (name, no extension). **Required** for `update` tools; optional for `create` — omit it to start a fresh root lineage. |
+| `-i`, `--input-column` | tool's `default_input_column` | Which table column feeds the tool (e.g. `pdb_path`). |
+| `-l`, `--dir-label` | `""` | Suffix for the output dir, to run same-tool variants side by side (e.g. different seeds). Produces the leaf `<tool>_<dir_label>` and the dir `run_dir/<table>/<leaf>/`. See [Using labels](using-labels.md). |
+| `--table-label` | `""` | **`create` tools only.** Labels the child table this run reserves (append rule: `table<gen>_<parent_label>_<table_label>`). Use it to disambiguate a fork. See [Using labels](using-labels.md). |
 | `-f`, `--filter` | none | Path to a Python module exposing `apply_filter(df) -> df`, applied to the source frame *before* the manifest is built. See [Writing a filter function](writing-a-filter-function.md). |
 | `--force` | off | Re-submit designs this tool already finished (skips the resume filter). |
 
 ### The ready set
 
-You never filter or resume by hand. The driver submits the **ready** designs: rows with a present `--input-column`, minus those this tool already completed (`<leaf>_status == "OK"`) unless `--force`. The already-OK skip is the framework's resume-on-rerun — rerun the same command after a partial failure and only the unfinished designs go back out. (The skip fires for `update` tools, whose status column lives in the same db; for `create` tools the column lives in the child db, so every ready design is submitted.)
+You never filter or resume by hand. The driver submits the **ready** designs: rows with a present `--input-column`, minus those this tool already completed (`<leaf>_status == "OK"`) unless `--force`. The already-OK skip is the framework's resume-on-rerun — rerun the same command after a partial failure and only the unfinished designs go back out. (The skip fires for `update` tools, whose status column lives in the same table; for `create` tools the column lives in the child table, so every ready design is submitted.)
 
 ## Scheduling flags → SLURM
 
@@ -91,7 +91,7 @@ Several things are **not** 1:1 SLURM passthroughs — the driver computes them:
 You don't have to set up logging, the driver does it. It creates a log folder **next to the run's output**, at `<out_dir>/<script>_logs/`, and points SLURM's `--output`/`--error` there. Each array task writes two files:
 
 ```
-run_dir/<db>/<leaf>/<script>_logs/
+run_dir/<table>/<leaf>/<script>_logs/
 ├── <jobid>_<taskid>.out   # stdout  (%A = array job id, %a = task index)
 └── <jobid>_<taskid>.err   # stderr
 ```
@@ -100,8 +100,8 @@ run_dir/<db>/<leaf>/<script>_logs/
 
 ```
 Submitting 128 designs
-Output:  run_dir/db1_seqs/proteinmpnn
-Logs:    run_dir/db1_seqs/proteinmpnn/proteinmpnn_logs
+Output:  run_dir/table1_seqs/proteinmpnn
+Logs:    run_dir/table1_seqs/proteinmpnn/proteinmpnn_logs
 ```
 
 When a task fails, its `.err` file under that folder is the first place to look.

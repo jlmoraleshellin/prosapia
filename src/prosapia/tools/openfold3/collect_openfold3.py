@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Collect OpenFold3 prediction results into the database.
+Collect OpenFold3 prediction results into the table.
 
 Scans task directories for prediction outputs, picks the best-scoring model
 per design (highest avg_plddt across all seeds/samples), and writes metrics
-+ model path into the database.
++ model path into the table.
 
 Output structure expected:
 
@@ -13,8 +13,8 @@ Output structure expected:
         <design_name>_seed_<x>_sample_<N>_confidences_aggregated.json
 
 Usage:
-    sapia collect openfold3 outputs/RUN --database db1
-    sapia collect openfold3 outputs/RUN --database db1 --force
+    sapia collect openfold3 outputs/RUN --table table1
+    sapia collect openfold3 outputs/RUN --table table1 --force
 """
 
 import json
@@ -85,7 +85,7 @@ def collect_openfold3(ctx: CollectCtx) -> CollectEach:
     stamps status/path; this only locates the best model for one design."""
     if ctx.df.empty:
         raise RuntimeError(
-            f"Database {ctx.args.database!r} is empty or missing in {ctx.args.run_dir}."
+            f"Table {ctx.args.table!r} is empty or missing in {ctx.args.run_dir}."
         )
 
     # Build a map of design_name -> design_dir across all task directories.

@@ -1,6 +1,6 @@
-"""Submit a SLURM array to run ProteinMPNN on designs, spawning a new child db.
+"""Submit a SLURM array to run ProteinMPNN on designs, spawning a new child table.
 
-Designs are taken from the source db as individuals. To keep the GPU busy, the
+Designs are taken from the source table as individuals. To keep the GPU busy, the
 submitter auto-groups designs whose params are identical -- the signature
 ``(chains, fixed_positions, tie_mode, tied_positions)`` -- so each group runs as a
 single batched ``protein_mpnn_run`` call (model loaded once). Groups are then
@@ -27,7 +27,7 @@ position flags below, to ``make_{fixed,tied}_positions_dict``.
 Position mini-language (``--fixed-positions`` / ``--tied-positions``): ``/`` breaks
 chains (its groups map one-to-one onto ``--chains-to-design``, in order), ``,``
 separates fragments within a chain, ``start:end`` expands inclusively, a single
-position passes through; db column expressions live in ``{...}`` islands (resolved
+position passes through; table column expressions live in ``{...}`` islands (resolved
 up the lineage with ``+ - * //`` arithmetic), everything else is a literal integer;
 outer ``[...]`` optional:
 
@@ -55,11 +55,11 @@ Other generalized knobs:
 
 Usage:
     # after diffusion, an explicit per-chain design (reproduces upstream example 5)
-    sapia run proteinmpnn outputs/<run> --database diffusion_db --db-label proteinmpnn \\
+    sapia run proteinmpnn outputs/<run> --table diffusion_table --table-label proteinmpnn \\
         --chains-to-design A,C --fixed-positions 9:23/10,11,18:20,22 --tied-positions 1:8/1:8
 
     # after boltz, a homo-oligomer (reproduces upstream example 6), larger tasks
-    sapia run proteinmpnn outputs/<run> --database proteinmpnn_db --db-label proteinmpnn_r2 \\
+    sapia run proteinmpnn outputs/<run> --table proteinmpnn_table --table-label proteinmpnn_r2 \\
         --input-column boltz_path --filter filters/filter1_after_boltz.py \\
         --symmetry --designs-per-task 20 --num-seq-per-target 10
 """
@@ -140,7 +140,7 @@ def _pos_int(tok: str, token: str, name: str) -> int:
     except ValueError:
         raise ValueError(
             f"design {name!r}: non-integer position {tok!r} in {token!r} "
-            f"(wrap db column expressions in braces, e.g. '{{motif_end}}')"
+            f"(wrap table column expressions in braces, e.g. '{{motif_end}}')"
         )
 
 
@@ -148,7 +148,7 @@ def _parse_positions(spec: str, lookup: LookupFn, name: str) -> str:
     """Expand the position mini-language into a ProteinMPNN ``--position_list``.
 
     Expressions live in ``{...}`` islands and are resolved first (integers, bare
-    db column names up the lineage, and ``+ - * //``); everything else is this
+    table column names up the lineage, and ``+ - * //``); everything else is this
     tool's own mini-language: ``/`` breaks chains (-> the comma between per-chain
     groups), ``,`` separates fragments within a chain (-> spaces), ``start:end``
     expands inclusively, a single position passes through; outer ``[...]`` optional.
@@ -384,7 +384,7 @@ def add_proteinmpnn_args(parser: ArgumentParser) -> None:
         default="",
         help="Positions to keep FIXED (not redesigned), as a position mini-language: "
         "'/' breaks chains (groups map one-to-one onto --chains-to-design, in order), "
-        "',' separates fragments within a chain, 'start:end' is an inclusive range; db "
+        "',' separates fragments within a chain, 'start:end' is an inclusive range; table "
         "column expressions go in {...} islands (resolved up the lineage with + - * // "
         "arithmetic), everything else is a literal integer. 1-indexed within each parsed "
         "chain. E.g. '9:23/10,11,18:20,22'. Empty (default): redesign everything.",

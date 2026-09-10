@@ -1,8 +1,8 @@
 """
 Create a fresh ``run_dir`` -- the container every pipeline tool operates inside.
 
-A ``run_dir`` holds a workflow's databases (``*.tsv`` + ``_registry.tsv``) and the
-tools' nested output dirs (``run_dir/<db>/<tool>/``). Creating one is deliberately
+A ``run_dir`` holds a workflow's tables (``*.tsv`` + ``_registry.tsv``) and the
+tools' nested output dirs (``run_dir/<table>/<tool>/``). Creating one is deliberately
 *decoupled* from any tool: a tool receives an existing ``run_dir``, it never mints
 one. Run this first, then hand the printed path to the root tool and
 everything downstream.

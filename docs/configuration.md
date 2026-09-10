@@ -4,7 +4,7 @@
 
 ## How binding works
 
-Every tool needs **activation**: making its binary available to the job, by activating a conda env, loading a module, or sourcing an activate script. Most tools also need their own **input paths** — a script path like `RUN_INFERENCE`, a checkout root like `PROTEIN_MPNN`, the AF3 container/params/db. Both live together in a per-tool **activation script**.
+Every tool needs **activation**: making its binary available to the job, by activating a conda env, loading a module, or sourcing an activate script. Most tools also need their own **input paths** — a script path like `RUN_INFERENCE`, a checkout root like `PROTEIN_MPNN`, the AF3 container/params/database. Both live together in a per-tool **activation script**.
 
 Each tool's `.sbatch` sources that script before it runs the tool. It finds the script through the variable **`SAPIA_ACTIVATE_<NAME>`**. The `.sbatch` sources it unconditionally; if the variable is unset the job fails fast with a clear message. That is the whole contract, open any tool's `.sbatch` and you will see the exact lines:
 

@@ -4,11 +4,11 @@ Submit a SLURM array to make symmetry definitions for assembled designs.
 
 Each array task runs Rosetta's make_symmdef_file.pl on one input PDB (read from
 --input-column) and writes a per-design TSV. Use collect_make_symmdef.py to
-merge the results (symm status + path) back into the database.
+merge the results (symm status + path) back into the table.
 
 Usage:
     sapia run make_symmdef outputs/20260416_155345_grow_hairpin \
-        --database db1_..._assembled \
+        --table table1_..._assembled \
         --input-column assembled_path
 """
 

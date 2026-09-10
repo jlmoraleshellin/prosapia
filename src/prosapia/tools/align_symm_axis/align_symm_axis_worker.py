@@ -22,7 +22,7 @@ are added, removed or re-symmetrized -- chains, numbering and each subunit's
 internal coordinates are preserved.
 
 Writes a one-row TSV (name, status, aligned_path, max_dev_deg) that
-collect_align_symm_axis.py merges back into the database. Errors are recorded as
+collect_align_symm_axis.py merges back into the table. Errors are recorded as
 data (a status starting with 'error:') rather than only crashing, so partial array
 runs still collect.
 

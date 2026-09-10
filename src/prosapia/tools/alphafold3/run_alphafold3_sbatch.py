@@ -6,12 +6,12 @@ Creates individual AF3 JSON input files, groups them into shard directories,
 and submits a sbatch array where each task runs AF3 on a whole shard
 (via --input_dir inside a singularity container).
 
-Requires ``n_subunits`` column available up the input db's lineage
+Requires ``n_subunits`` column available up the input table's lineage
 (resolved via ``DataManager.lookup``).
 
 Usage:
-    sapia run alphafold3 outputs/20260420_123035_grow_hairpin --database db1_..._proteinmpnn
-    sapia run alphafold3 outputs/20260420_123035_grow_hairpin --database db1_..._proteinmpnn --shard-size 20
+    sapia run alphafold3 outputs/20260420_123035_grow_hairpin --table table1_..._proteinmpnn
+    sapia run alphafold3 outputs/20260420_123035_grow_hairpin --table table1_..._proteinmpnn --shard-size 20
 """
 
 import json
@@ -85,7 +85,7 @@ def _add_af3_args(parser: ArgumentParser) -> None:
         type=int,
         default=None,
         help="Fixed number of subunits for all designs. "
-        "When set, overrides the 'n_subunits' DB column.",
+        "When set, overrides the 'n_subunits' table column.",
     )
     parser.add_argument(
         "--no-msa",

@@ -2,11 +2,11 @@
 
 A tool runs in two phases against a `run_dir`: the **run** fans designs out over
 a SLURM array, and the **collect** reads what landed on disk back into the tool's
-database. This guide is only about collect.
+table. This guide is only about collect.
 
 You write **one small function**. The framework does the rest: it iterates the
 designs that are ready to collect, calls your function once per design, and writes
-the results into the database — stamping the `<leaf>_status` / `<leaf>_path`
+the results into the table — stamping the `<leaf>_status` / `<leaf>_path`
 bookkeeping columns and **prefixing every column you return with the tool leaf**
 (`<leaf>_<your_column>`). So you return **bare column names** and never worry
 about namespacing — two variants of the same tool (a `-l/--dir-label` fork) can't
@@ -110,7 +110,7 @@ def collect_af3(ctx: CollectCtx) -> CollectEach:
 ```
 
 Note what is *not* here: no `<leaf>_status` / `<leaf>_path` strings, no leaf
-prefixes on your metric names, no iteration over the database. You return bare
+prefixes on your metric names, no iteration over the table. You return bare
 values; the driver stamps `alphafold3_status` / `alphafold3_path` and prefixes
 your metrics to `alphafold3_ptm`, `alphafold3_iptm`, … (Yielding NA metrics on a
 failure keeps those columns present even when every design fails — optional, but
@@ -145,8 +145,8 @@ def collect_mpnn(ctx: CollectCtx) -> CollectEach:
     return one
 ```
 
-The framework validates that each child's `parent` exists in the parent database
-and stamps `parent_db` / `gen` for you — you only supply `parent`.
+The framework validates that each child's `parent` exists in the parent table
+and stamps `parent_table` / `gen` for you — you only supply `parent`.
 
 ## The rare case — per-comparison status (`status=None`)
 
@@ -166,10 +166,10 @@ under the leaf, so these land as `<leaf>_<prefix>_status`, `<leaf>_<prefix>_TM1`
 
 ## Rules the framework enforces
 
-- **`create`**: each yielded row's `parent` must be a row in the parent database
-  (for a child db). Don't set `parent_db` / `gen` — the framework does. Don't copy
+- **`create`**: each yielded row's `parent` must be a row in the parent table
+  (for a child table). Don't set `parent_table` / `gen` — the framework does. Don't copy
   ancestor values into the child; read them later with `lookup`.
-- **`update`**: yield rows for designs already in the database. A brand-new `name`
+- **`update`**: yield rows for designs already in the table. A brand-new `name`
   triggers a warning — it usually means the tool should be `create`.
 - **Resume is automatic.** Designs already collected `"OK"` are skipped on a re-run
   unless `--force`; you don't implement that.
