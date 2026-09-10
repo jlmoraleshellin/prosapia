@@ -3,7 +3,7 @@
 prosapia bundles two kinds of starter template (under ``src/prosapia/templates/``):
 a ``.env`` seed and one activation-script template per tool. Because prosapia is
 installed into the user's own venv -- not run from a repo checkout -- these are
-shipped inside the package and copied out on demand rather than ``cp``-d from the
+shipped inside the package and copied out on demand rather than ``cp``-t from the
 source tree. ``scaffold_config`` writes them into a destination dir (default cwd):
 
     <dest>/.env                     # from templates/env.example

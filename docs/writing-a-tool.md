@@ -2,7 +2,7 @@
 
 ## What is a tool?
 
-A **tool** is anything that **creates or updates a database**. It carries **no orchestration logic**; the [drivers](architecture.md#the-drivers) supply that. A tool is just declarative metadata, two behavioral hooks, and a batch script.
+A **tool** is anything that **creates or updates a table**. It carries **no orchestration logic**; the [drivers](architecture.md#the-drivers) supply that. A tool is just declarative metadata, two behavioral hooks, and a batch script.
 
 prosapia bundles ready-made implementations for many popular tools (RFdiffusion, ProteinMPNN, AlphaFold3, and more), but it does **not install the underlying software** — you install and [bind](configuration.md) that yourself. When a tool you need isn't bundled, you write your own; when a bundled one nearly fits, you customize it. This guide covers both: the anatomy, the `.sbatch` contract, the [three ways to customize](#customizing-bundled-tools), and how tools are discovered.
 
@@ -50,7 +50,7 @@ TOOL = Tool(
     action="update",                        # or "create"
     description="What this tool does.",
     default_sbatch=str(Path(__file__).parent / "mytool.sbatch"),
-    default_input_column="pdb_path",        # which db column feeds the tool
+    default_input_column="pdb_path",        # which table column feeds the tool
     build_manifest_fn=build_mytool_manifest,
     collect_fn=collect_mytool,
     add_run_args_fn=_add_run_args,          # optional: extra `sapia run` flags
@@ -58,7 +58,7 @@ TOOL = Tool(
 )
 ```
 
-Pick `action` with the [lineage rule](lineage-and-databases.md) in mind: `create` if the tool produces **new entities** (a new database generation), `update` if it measures a **property** of designs that already exist.
+Pick `action` with the [lineage rule](lineage-and-tables.md) in mind: `create` if the tool produces **new entities** (a new table generation), `update` if it measures a **property** of designs that already exist.
 
 ### `build_manifest_fn`
 
@@ -117,7 +117,7 @@ out of `$SAPIA_LINE` and write results under `$OUT_DIR`.
 "${MYTOOL_BIN:-mytool}" "$input" --out "$OUT_DIR"
 ```
 
-The `:?` makes the variable required and fails the job with a clear message when it is unset. The `set +u` guard matters — activation scripts often reference unset vars. Keep genuine *inputs* (script paths, container/weights/db paths) as their own named variables read in the `.sbatch`; the user exports them from the same activation script alongside activation, which is also where any per-tool runtime setup (framework caches, extra env vars) belongs (see [Configuration](configuration.md)). The exception is any input you read in Python at **submit time** (e.g. `os.getenv` in your build-manifest step) — that runs before the activation script, so it must come from `.env`.
+The `:?` makes the variable required and fails the job with a clear message when it is unset. The `set +u` guard matters — activation scripts often reference unset vars. Keep genuine *inputs* (script paths, container/weights/database paths) as their own named variables read in the `.sbatch`; the user exports them from the same activation script alongside activation, which is also where any per-tool runtime setup (framework caches, extra env vars) belongs (see [Configuration](configuration.md)). The exception is any input you read in Python at **submit time** (e.g. `os.getenv` in your build-manifest step) — that runs before the activation script, so it must come from `.env`.
 
 ## Customizing bundled tools
 

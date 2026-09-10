@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Collect ProteinMPNN FASTA outputs into a database.
+Collect ProteinMPNN FASTA outputs into a table.
 
 Scans the output directory for per-design subdirectories, parses the FASTA
 files produced by ProteinMPNN, and writes one row per designed sequence.
@@ -13,24 +13,24 @@ Lineage is derived from the directory structure:
     sharing params, run in one protein_mpnn_run call).
   * fasta_stem  = the staged input filename ProteinMPNN processed. The submitter
     symlinks each input as ``<design_name>.pdb``, so the stem IS the immediate
-    parent-db row -- stamped as ``parent_name``.
+    parent-table row -- stamped as ``parent_name``.
 
 Each row carries only ``parent_name``; ancestor values (diffused parent,
 boltz metrics) are resolved on demand by walking the lineage with
 ``DataManager.lookup`` / ``trace_lineage``, so nothing is propagated here.
 
-The db was reserved by the run script (``run_proteinmpnn_sbatch.py --db-label``),
-so collect only fills it: pass that db as ``--database``. Its parent (read only,
-to resolve lineage) comes from the registry, so there is no ``--parent-db`` flag.
+The table was reserved by the run script (``run_proteinmpnn_sbatch.py --table-label``),
+so collect only fills it: pass that table as ``--table``. Its parent (read only,
+to resolve lineage) comes from the registry, so there is no ``--parent-table`` flag.
 
 Usage:
-    # Round 1 (after diffusion -> mpnn); db reserved as e.g. db1_<label>:
+    # Round 1 (after diffusion -> mpnn); table reserved as e.g. table1_<label>:
     sapia collect proteinmpnn outputs/20260430_170523_grow_hairpin_nofilter \\
-        --database db1_<label>
+        --table table1_<label>
 
     # Round 2 (after boltz -> mpnn):
     sapia collect proteinmpnn outputs/20260430_170523_grow_hairpin_nofilter \\
-        --database db2_<label>
+        --table table2_<label>
 """
 
 from pathlib import Path
@@ -97,7 +97,7 @@ def collect_mpnn(ctx: CollectCtx) -> CollectEach:
     parent_name from each Collected; child rows are discovered on disk, so re-running
     rebuilds them (idempotent)."""
     # Each grp_<g>/ output dir holds seqs/<design>.fa, where the staged input was
-    # symlinked as <design>.pdb -- so the FASTA stem IS the parent-db row name.
+    # symlinked as <design>.pdb -- so the FASTA stem IS the parent-table row name.
     fasta_by_parent: Dict[str, Path] = {}
     for subdir in sorted(p for p in ctx.out_dir.iterdir() if p.is_dir()):
         if subdir.name in ("proteinmpnn_logs", "proteinmpnn_tasks"):

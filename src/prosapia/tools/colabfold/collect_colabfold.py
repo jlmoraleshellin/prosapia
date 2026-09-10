@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Collect ColabFold prediction results into the database.
+Collect ColabFold prediction results into the table.
 
 ColabFold dumps all outputs flat into each task directory.  This script scans
 ``task_*/`` for score files, extracts the design name from each filename, and
@@ -15,8 +15,8 @@ Output structure expected (per task directory):
         ...
 
 Usage:
-    sapia collect colabfold outputs/RUN --database db1
-    sapia collect colabfold outputs/RUN --database db1 --force
+    sapia collect colabfold outputs/RUN --table table1
+    sapia collect colabfold outputs/RUN --table table1 --force
 """
 
 import json
@@ -84,7 +84,7 @@ def collect_colabfold(ctx: CollectCtx) -> CollectEach:
     stamps status/path; this only locates + parses one design's rank-1 output."""
     if ctx.df.empty:
         raise RuntimeError(
-            f"Database {ctx.args.database!r} is empty or missing in {ctx.args.run_dir}."
+            f"Table {ctx.args.table!r} is empty or missing in {ctx.args.run_dir}."
         )
 
     design_files = _build_design_file_map(ctx.out_dir)

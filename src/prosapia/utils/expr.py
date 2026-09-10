@@ -1,9 +1,9 @@
-"""Opt-in integer-expression evaluator with db-column resolution.
+"""Opt-in integer-expression evaluator with table-column resolution.
 
 ``resolve_expr`` evaluates a small whitelisted arithmetic language where bare
-identifiers are resolved as database columns via a lineage ``lookup``. Tools use
+identifiers are resolved as table columns via a lineage ``lookup``. Tools use
 it to let users write specs like ``hairpin_length - 1`` or ``{prebundle_length}``
-whose values are inherited per-design from the db.
+whose values are inherited per-design from the table.
 
 Only integers, bare column names, and ``+ - * //`` are allowed; calls,
 attributes, and every other node type are rejected.
@@ -48,7 +48,7 @@ def _resolve_column(column: str, lookup: LookupFn, name: str) -> int:
 def _safe_eval(node: ast.AST, lookup: LookupFn, name: str, expr: str) -> int:
     """Evaluate a whitelisted integer-arithmetic AST.
 
-    Bare identifiers are resolved as db columns via ``lookup``; calls, attributes
+    Bare identifiers are resolved as table columns via ``lookup``; calls, attributes
     and any other node type are rejected.
     """
     if isinstance(node, ast.Expression):
@@ -76,9 +76,9 @@ def _safe_eval(node: ast.AST, lookup: LookupFn, name: str, expr: str) -> int:
 
 
 def resolve_expr(expr: str, lookup: LookupFn, name: str) -> int:
-    """Evaluate an integer arithmetic expression, resolving bare names as db columns.
+    """Evaluate an integer arithmetic expression, resolving bare names as table columns.
 
-    ``expr`` may be an integer literal, a bare db column name (resolved up the
+    ``expr`` may be an integer literal, a bare table column name (resolved up the
     lineage for ``name`` via ``lookup``), or any ``+ - * //`` combination thereof.
     """
     try:
@@ -94,7 +94,7 @@ def resolve_template(template: str, lookup: LookupFn, name: str) -> str:
     This is the shared, tool-agnostic expression layer: text outside braces is a
     tool's native/mini-language (RFdiffusion contigs, ProteinMPNN position lists,
     ...) and is left verbatim; each ``{expr}`` is resolved via ``resolve_expr``
-    (integers, bare db column names, and ``+ - * //`` up the lineage for ``name``).
+    (integers, bare table column names, and ``+ - * //`` up the lineage for ``name``).
     """
     return _PLACEHOLDER.sub(
         lambda m: str(resolve_expr(m.group(1), lookup, name)), template

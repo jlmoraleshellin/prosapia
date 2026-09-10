@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Collect RFdiffusion3 outputs into the (child) diffusion database.
+Collect RFdiffusion3 outputs into the (child) diffusion table.
 
 ``rfd3 design`` writes, per design key, files named:
 
@@ -8,14 +8,14 @@ Collect RFdiffusion3 outputs into the (child) diffusion database.
     <shard_stem>_<key>_<batch>_model_<n>.json     (per-design metadata)
 
 into ``<out_dir>/results_<shard_stem>/``. This scans those dirs, matches files
-back to their parent design (the JSON key == a parent-db row name), converts each
+back to their parent design (the JSON key == a parent-table row name), converts each
 ``.cif.gz`` to PDB (downstream tools consume PDB), and registers one child row per
 output as ``<name>_<i>`` carrying ``parent_name`` for lineage.
 
 Safe to re-run: rows are rebuilt from the outputs on disk.
 
 Usage:
-    sapia collect rfdiffusion3 outputs/RUN --database db2
+    sapia collect rfdiffusion3 outputs/RUN --table table2
 """
 
 import json

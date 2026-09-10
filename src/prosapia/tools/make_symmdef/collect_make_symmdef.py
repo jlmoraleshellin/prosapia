@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Collect make_symmdef results into the database.
+Collect make_symmdef results into the table.
 
-Scans <run_dir>/<database>/make_symmdef/ for the per-design TSV files written
+Scans <run_dir>/<table>/make_symmdef/ for the per-design TSV files written
 by make_symmdef.sbatch, and merges the symm status + path back into the
-specified database as <prefix>_status / <prefix>_path columns.
+specified table as <prefix>_status / <prefix>_path columns.
 
 Usage:
     sapia collect make_symmdef outputs/RUN \
-        --database db1_..._assembled
+        --table table1_..._assembled
 """
 
 from typing import Iterable

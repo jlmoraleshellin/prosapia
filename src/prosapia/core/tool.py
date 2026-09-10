@@ -15,8 +15,8 @@ class ToolMetadata:
     default_input_column: str = ""
 
     @property
-    def creates_db(self) -> bool:
-        """True when the tool reserves a new db (a child *or* a root)."""
+    def creates_table(self) -> bool:
+        """True when the tool reserves a new table (a child *or* a root)."""
         return self.action == "create"
 
 

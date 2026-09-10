@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-Rebuild the diffusion database from a run directory's diffused/ outputs.
+Rebuild the diffusion table from a run directory's diffused/ outputs.
 
 For each parent design folder under <run_dir>/<diffused-dir-name>/, this looks
 for a command.txt marker file (written by rfdiffusion.sbatch once a task has
 run) and, if present, registers every <name>_<i>.pdb it finds as an OK row in the
-diffusion DB. Parents missing the marker file get an "error: no marker" row per
+diffusion table. Parents missing the marker file get an "error: no marker" row per
 expected iteration.
 
-Run this after the rfdiffusion SLURM array; it (re)builds the diffusion db by
-scanning the outputs, so it is safe to re-run to rebuild a corrupted db.
+Run this after the rfdiffusion SLURM array; it (re)builds the diffusion table by
+scanning the outputs, so it is safe to re-run to rebuild a corrupted table.
 
 Usage:
-    sapia collect rfdiffusion outputs/RUN --database db1
+    sapia collect rfdiffusion outputs/RUN --table table1
 """
 
 import re

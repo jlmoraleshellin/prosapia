@@ -3,14 +3,14 @@
 
 For each row with both structure paths set, converts both to PDB via gemmi, runs
 USalign in multi-chain mode, and writes the metrics plus the superposed-structure
-path back to the db under ``<prefix>_*`` columns.
+path back to the table under ``<prefix>_*`` columns.
 
 This is the per-design worker; the USalign tool drives it. Normally you run
 ``sapia run usalign`` (which submits the array) rather than calling this directly.
 
-Usage (standalone, one db):
+Usage (standalone, one table):
     pixi run python USalign_structures.py outputs/20260420_123035_grow_hairpin \
-        --database db1 --col-a boltz_path --col-b openfold3_path \
+        --table table1 --col-a boltz_path --col-b openfold3_path \
         [--output-prefix boltz_vs_openfold3]
 """
 
@@ -96,7 +96,7 @@ def run_usalign(path_a: Path, path_b: Path, sup_prefix: Path) -> dict[str, float
 
 class Args(argparse.Namespace):
     run_dir: Path
-    database: str
+    table: str
     col_a: str
     col_b: str
     output_prefix: str | None
@@ -112,13 +112,13 @@ def main():
         "--col-a",
         type=str,
         required=True,
-        help="Database column containing the path to structure A.",
+        help="Table column containing the path to structure A.",
     )
     parser.add_argument(
         "--col-b",
         type=str,
         required=True,
-        help="Database column containing the path to structure B.",
+        help="Table column containing the path to structure B.",
     )
     parser.add_argument(
         "--output-prefix",
@@ -129,7 +129,7 @@ def main():
     )
     args = parser.parse_args(namespace=Args())
 
-    db_name = args.database
+    table_name = args.table
     col_a = args.col_a
     col_b = args.col_b
 
@@ -155,13 +155,13 @@ def main():
     sup_dir.mkdir(parents=True, exist_ok=True)
 
     with DataManager(args.run_dir) as (dm, (read_frame, write_frame), _):
-        df = read_frame(db_name)
+        df = read_frame(table_name)
         if df.empty:
-            raise RuntimeError(f"Database {db_name!r} is empty or missing.")
+            raise RuntimeError(f"Table {table_name!r} is empty or missing.")
 
         for col in (col_a, col_b):
             if col not in df.columns:
-                raise RuntimeError(f"Column {col!r} not found in {db_name!r}.")
+                raise RuntimeError(f"Column {col!r} not found in {table_name!r}.")
 
         ready = df[
             df[col_a].notna()
@@ -182,12 +182,12 @@ def main():
 
             if not src_a.exists():
                 df = dm.update(df, name, {status_col: f"missing: {src_a}"})
-                write_frame(db_name, df)
+                write_frame(table_name, df)
                 n_err += 1
                 continue
             if not src_b.exists():
                 df = dm.update(df, name, {status_col: f"missing: {src_b}"})
-                write_frame(db_name, df)
+                write_frame(table_name, df)
                 n_err += 1
                 continue
 
@@ -199,7 +199,7 @@ def main():
                 convert_to_pdb(src_b, dst_b)
             except Exception as e:
                 df = dm.update(df, name, {status_col: f"ERROR: cif->pdb failed: {e}"})
-                write_frame(db_name, df)
+                write_frame(table_name, df)
                 n_err += 1
                 continue
 
@@ -218,7 +218,7 @@ def main():
                 df = dm.update(df, name, {status_col: f"ERROR: {e}"})
                 n_err += 1
 
-            write_frame(db_name, df)
+            write_frame(table_name, df)
 
     print(f"Done. ok={n_ok}, errors={n_err}")
 

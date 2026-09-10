@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Collect boltz prediction results into mpnn_db.
+Collect boltz prediction results into mpnn_table.
 
-For each row in mpnn_db that was submitted to boltz, look for:
+For each row in mpnn_table that was submitted to boltz, look for:
 
     <run_dir>/<boltz_dir>/boltz_results_*/predictions/<row>/
         confidence_<row>_model_0.json   -> metrics
@@ -12,8 +12,8 @@ Supports both per-design results (boltz_results_<row>/) and shard results
 (boltz_results_shard_i/). Writes the metrics + path into the row.
 
 Usage:
-    sapia collect boltz outputs/RUN --database db1
-    sapia collect boltz outputs/RUN --database db1 --force
+    sapia collect boltz outputs/RUN --table table1
+    sapia collect boltz outputs/RUN --table table1 --force
 """
 
 import json
@@ -83,7 +83,7 @@ def collect_boltz(ctx: CollectCtx) -> CollectEach:
     status/path; this only locates + parses one design's prediction."""
     if ctx.df.empty:
         raise RuntimeError(
-            f"Database {ctx.args.database!r} is empty or missing in {ctx.args.run_dir}."
+            f"Table {ctx.args.table!r} is empty or missing in {ctx.args.run_dir}."
         )
 
     # Build a map of design_name -> prediction dir across all boltz_results_* dirs.
