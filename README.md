@@ -64,8 +64,7 @@ See **[docs/configuration.md](docs/configuration.md)** for the full activation-s
    ```bash
    # activation/rfdiffusion.sh
    source "$CONDA_PREFIX/etc/profile.d/conda.sh"
-   conda activate SE3nv
-   export RUN_INFERENCE="/path/to/RFdiffusion/scripts/run_inference.py"
+   conda activate SE3nv   # puts run_inference.py on PATH
    ```
 
 3. **Point `SAPIA_ACTIVATE_<NAME>` at it from your `.env`**

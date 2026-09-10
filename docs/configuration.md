@@ -40,22 +40,20 @@ $EDITOR /shared/lab/activation/rfdiffusion.sh
 The goal of the activation script is to make the tool available to the SLURM job's shell. There are two ways to do it:
 
 1. **Activate an environment** — the common option: activate a conda env / load a module / source a script, then export the tool's input paths.
-2. **Point straight at an interpreter/binary.** — the raw option. Some tools take an optional path variable that defaults to a command on `PATH`: `RFDIFFUSION_PYTHON`, `PROTEIN_MPNN_PYTHON`, `USALIGN_BIN`, `PIPELINE_PYTHON`. This allows for direct execution without conda/module activation. Export it from the activation script when the binary isn't already on `PATH`.
+2. **Point straight at an interpreter/binary.** — the raw option. Some tools take an optional path variable that pins the interpreter/binary so the job runs without conda/module activation: `RFDIFFUSION_PYTHON`, `PROTEIN_MPNN_PYTHON`, `USALIGN_BIN`, `PIPELINE_PYTHON`. Left unset, each falls back to the tool's command on `PATH` (which activating an environment supplies). Export it from the activation script when the binary isn't already on `PATH`.
 
 
 ```bash
 # /shared/lab/activation/rfdiffusion.sh
 
-# RFdiffusion accepts both activation ways
-## Option 1: activate an environment
+# RFdiffusion accepts both activation ways — pick one.
+## Option 1: activate an environment (puts run_inference.py on PATH; RUN_INFERENCE not needed)
 source "$CONDA_PREFIX/etc/profile.d/conda.sh" # or any command that puts conda on PATH
 conda activate SE3nv # or module load RFdiffusion, or whatever your system accepts
 
-## Option 2: point to binary (system activation-agnostic)
-export RFDIFFUSION_PYTHON="/path/to/SE3nv/python"
-
-## Tool input
-export RUN_INFERENCE="/path/to/RFdiffusion/scripts/run_inference.py"
+## Option 2: pin the interpreter (activation-agnostic) — then RUN_INFERENCE is required
+# export RFDIFFUSION_PYTHON="/path/to/SE3nv/python"
+# export RUN_INFERENCE="/path/to/RFdiffusion/scripts/run_inference.py"
 ```
 
 An activation script is also the natural place for any per-tool runtime setup the job needs — pointing framework caches at node-local scratch, exporting extra env vars, etc.
@@ -87,8 +85,8 @@ Template: `activation/rfdiffusion.sh`.
 
 | Variable | Where | Required | Meaning |
 | --- | --- | --- | --- |
-| `RUN_INFERENCE` | activation script | yes | Path to RFdiffusion's `scripts/run_inference.py`. |
-| `RFDIFFUSION_PYTHON` | activation script | no | Interpreter with RFdiffusion's deps. Defaults to `python`. |
+| `RUN_INFERENCE` | activation script | only when pinning | Path to RFdiffusion's `scripts/run_inference.py`. Not needed when activation puts `run_inference.py` on `PATH`; **required** when `RFDIFFUSION_PYTHON` is set. |
+| `RFDIFFUSION_PYTHON` | activation script | no | Interpreter with RFdiffusion's deps, to skip activation. Unset by default — `run_inference.py` is run directly from `PATH`. |
 
 ### RFdiffusion3 / foundry — `SAPIA_ACTIVATE_RFDIFFUSION3`
 
