@@ -1,8 +1,15 @@
 # prosapia
 
-`prosapia` is **a shared workbench for protein-design tools on HPC**. It's built with a single concept in mind: maximize *flexibility* while keeping *implementation* as simple as possible.
+`prosapia` is **a shared dynamic workbench for protein-design tools on HPC**. It's built with a single concept in mind: maximize *flexibility* while keeping *implementation* as simple as possible.
 
-Tools share one bench: a **table** they read from and write back to, and a **two-phase driver** that runs them on the cluster via SLURM. Each tool sets its results on the bench and picks up what earlier tools left.
+Tools share one bench: a **data interface** (a collection of tables) they read from and write back to, and a **two-phase driver** that runs them on the cluster via SLURM and collects their outputs to a table. Each tool sets its results on the bench and picks up what earlier tools left.
+
+To define how tools interact with the data interface, `prosapia` establishes the following **principles**:
+
+1. A design is a row, a generation of designs is a table.
+
+2. When a protein diverges in sequence or structure, it is no longer the same protein but a child of a parent — therefore it needs a new table.
+
 
 See **[docs](docs/index.md)** for the full documentation.
 
@@ -29,6 +36,7 @@ Need a tool that isn't bundled? **[Write your own](docs/writing-a-tool.md).**
 `prosapia` is a `pip`-installable library. Install it into a dedicated environment and build your pipeline there.
 
 ```bash
+mkdir my-project && cd my-project
 python -m venv .venv
 source .venv/bin/activate
 
@@ -51,7 +59,6 @@ prosapia ships the tool *implementations* but not the software behind them: you 
 
 ### Quick guide to bind a tool:
 
-See **[docs/configuration.md](docs/configuration.md)** for the full activation-script model and complete guide.
 
 1. **Scaffold the starter config.** `sapia init --config` writes a `.env` seed and an `activation/` dir of runnable per-tool templates into the current directory.
 
@@ -75,11 +82,13 @@ See **[docs/configuration.md](docs/configuration.md)** for the full activation-s
 
 `.env` itself holds only global settings, those `SAPIA_ACTIVATE_<NAME>` pointers, and the few values prosapia reads at submit time.
 
+See **[the complete guide](docs/configuration.md)** for the configuration and full activation-script model.
+
 ### Sharing custom tools across environments
 
 `sapia` discovers built-in tools first, then any directory in **`PROSAPIA_TOOLS_DIR`** (default `./tools`) — point it at a shared location to reuse custom tools across environments.
 
- See [Configuration](docs/configuration.md#tool-discovery-and-sharing) for how discovery and shadowing work.
+ Learn how [discovery and shadowing work.](docs/configuration.md#tool-discovery-and-sharing) 
 
 ## Quick start
 
@@ -89,19 +98,19 @@ RUN_DIR=$(sapia new_run --label demo)      # mint a run_dir (prints its path)
 
 # de-novo backbones → a root table
 sapia run     rfdiffusion "$RUN_DIR" ...
-sapia collect rfdiffusion "$RUN_DIR" -d table0
+sapia collect rfdiffusion "$RUN_DIR" -t table0
 
 # design sequences for those backbones → a child table
-sapia run     proteinmpnn   "$RUN_DIR" -d table0 ...
-sapia collect proteinmpnn   "$RUN_DIR" -d table1
+sapia run     proteinmpnn   "$RUN_DIR" -t table0 ...
+sapia collect proteinmpnn   "$RUN_DIR" -t table1
 
 # predict structures and score them *in place* on the sequence table
-sapia run     alphafold3  "$RUN_DIR" -d table1 ...
-sapia collect alphafold3  "$RUN_DIR" -d table1
+sapia run     alphafold3  "$RUN_DIR" -t table1 ...
+sapia collect alphafold3  "$RUN_DIR" -t table1
 ```
 
-`run_dir` is a positional argument to every tool; `-d/--table` names the
-table to consume. Omit `-d` on a `create` tool to start a fresh root lineage.
+`run_dir` is a positional argument to every tool; `-t/--table` names the
+table to consume. Omit `-t` on a `create` tool to start a fresh root lineage.
 Only `sapia new_run` mints a `run_dir`; tools always operate inside an existing
 one.
 
@@ -109,12 +118,10 @@ Every tool shares base `sapia run` flags — concurrency, partitions, GPUs, filt
 
 ## Two kinds of tools: `create` vs. `update`
 
-A tool's `action` decides how its output relates to its input — and it encodes a biological rule:
+Following prosapia's second principle: a tool's `action` decides how its output relates to its input.
 
-**When a protein diverges in sequence or structure, it is no longer the same protein, so it needs a new table.**
-
-- **`create`** mints a **new child table** (a new generation, `gen+1`) and links each new row to its parent. Use it when the tool *produces new entities*: RFdiffusion emits new backbones (and swaps side chains for glycines — a new  sequence); each diffusion is a distinct structure; ProteinMPNN turns one backbone into many new sequences. 
-- **`update`** annotates the **same table in place**, adding columns to existing rows. Use it when the tool *measures a property* of designs that already exist: an AlphaFold3 / ColabFold / Boltz prediction is a property of *that* protein — not a new one — and a USalign score just annotates it.
+- **`create`** mints a **new child table** (a new generation, `gen+1`) and links each new row to its parent. Its used when the tool *produces new entities*: RFdiffusion emits new backbones (and swaps side chains for glycines — a new  sequence); each diffusion is a distinct structure; ProteinMPNN turns one backbone into many new sequences. 
+- **`update`** annotates the **same table in place**, adding columns to existing rows. Its used when the tool *derives a property* of designs that already exist: an AlphaFold3 / ColabFold / Boltz prediction is a property of *that* protein — not a new one — and a USalign score just annotates it.
 
 Nothing about the resulting lineage tree is declared up front — each edge is just another `sapia run` / `sapia collect`. Read more, and see the tree diagram, in **[docs/lineage-and-tables.md](docs/lineage-and-tables.md)**.
 

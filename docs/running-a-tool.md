@@ -8,9 +8,9 @@ This page is the reference for the base set and, importantly, how it maps to (an
 
 ```bash
 # submit the array
-sapia run     <tool> <run_dir> [-d <table>] [flags]  
+sapia run     <tool> <run_dir> [-t <table>] [flags]  
 # read results into the output table
-sapia collect <tool> <run_dir> -d <table>            
+sapia collect <tool> <run_dir> -t <table>            
 ```
 
 A run does three things: it **resolves the output table** (the source table for an `update` tool, or a freshly reserved child/root for a `create` tool), builds a **manifest** — one line per *ready* design — and submits a **SLURM array** whose per-task `.sbatch` consumes that manifest. [`sapia collect`](collecting-a-tool.md) then closes the cycle. 
@@ -30,7 +30,7 @@ These flags decide *which* designs are submitted and where their output lands.
 | Flag | Default | Meaning |
 | --- | --- | --- |
 | `run_dir` (positional) | — | The workflow directory, minted by `sapia new_run`. |
-| `-d`, `--table` | — | Source table in `run_dir` (name, no extension). **Required** for `update` tools; optional for `create` — omit it to start a fresh root lineage. |
+| `-t`, `--table` | — | Source table in `run_dir` (name, no extension). **Required** for `update` tools; optional for `create` — omit it to start a fresh root lineage. |
 | `-i`, `--input-column` | tool's `default_input_column` | Which table column feeds the tool (e.g. `pdb_path`). |
 | `-l`, `--dir-label` | `""` | Suffix for the output dir, to run same-tool variants side by side (e.g. different seeds). Produces the leaf `<tool>_<dir_label>` and the dir `run_dir/<table>/<leaf>/`. See [Using labels](using-labels.md). |
 | `--table-label` | `""` | **`create` tools only.** Labels the child table this run reserves (append rule: `table<gen>_<parent_label>_<table_label>`). Use it to disambiguate a fork. See [Using labels](using-labels.md). |

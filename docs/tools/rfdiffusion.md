@@ -13,7 +13,7 @@ Contigs are authored in RFdiffusion's native contig syntax. Any `{expr}` island 
 --contigs '{prepend_len},A1-{motif_end-1}'
 ```
 
-A `{expr}` needs a lineage to resolve against, so it is only valid **with** `-d/--table`; a root run must use literal contigs.
+A `{expr}` needs a lineage to resolve against, so it is only valid **with** `-t/--table`; a root run must use literal contigs.
 
 ### High-order symmetry: `--replicate`
 
@@ -39,8 +39,8 @@ They are commonly used together: `--replicate` writes out the per-chain contig, 
 
 ## Root vs. create
 
-- **Create** (with `-d/--table`): one diffusion per ready row, inputs from `--input-column`. Each input PDB is renumbered per-chain at submit time — RFdiffusion's continuous cross-chain numbering would otherwise break contig/symmetry parsing.
-- **Root** (no `-d`): a single design group. Pass `--input-pdb` to diffuse one structure not yet in any table (motif / partial), or omit it for pure de-novo. `--input-pdb` is root-only.
+- **Create** (with `-t/--table`): one diffusion per ready row, inputs from `--input-column`. Each input PDB is renumbered per-chain at submit time — RFdiffusion's continuous cross-chain numbering would otherwise break contig/symmetry parsing.
+- **Root** (no `-t`): a single design group. Pass `--input-pdb` to diffuse one structure not yet in any table (motif / partial), or omit it for pure de-novo. `--input-pdb` is root-only.
 
 ## How the array is distributed
 

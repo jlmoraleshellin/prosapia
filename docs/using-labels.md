@@ -22,12 +22,12 @@ Predict structures for `table1` under two different seeds, side by side:
 
 ```bash
 # variant A
-sapia run     alphafold3 "$RUN_DIR" -d table1 -l seed1 ...
-sapia collect alphafold3 "$RUN_DIR" -d table1 -l seed1
+sapia run     alphafold3 "$RUN_DIR" -t table1 -l seed1 ...
+sapia collect alphafold3 "$RUN_DIR" -t table1 -l seed1
 
 # variant B
-sapia run     alphafold3 "$RUN_DIR" -d table1 -l seed2 ...
-sapia collect alphafold3 "$RUN_DIR" -d table1 -l seed2
+sapia run     alphafold3 "$RUN_DIR" -t table1 -l seed2 ...
+sapia collect alphafold3 "$RUN_DIR" -t table1 -l seed2
 ```
 
 This leaves two output dirs and two column sets in the **same** `table1`:
@@ -47,26 +47,19 @@ Try two ProteinMPNN settings on the same backbones in `table0`:
 
 ```bash
 # fork A: low sampling temperature
-sapia run     proteinmpnn "$RUN_DIR" -d table0 --table-label lowT ...
-sapia collect proteinmpnn "$RUN_DIR" -d table1_lowT
+sapia run     proteinmpnn "$RUN_DIR" -t table0 --table-label lowT ...
+sapia collect proteinmpnn "$RUN_DIR" -t table1_lowT
 
 # fork B: high sampling temperature
-sapia run     proteinmpnn "$RUN_DIR" -d table0 --table-label highT ...
-sapia collect proteinmpnn "$RUN_DIR" -d table1_highT
+sapia run     proteinmpnn "$RUN_DIR" -t table0 --table-label highT ...
+sapia collect proteinmpnn "$RUN_DIR" -t table1_highT
 ```
 
 Both children record `table0` as their parent in the registry, so lineage stays intact. Two things to note:
 
-- **Collect has no `--table-label`.** The label lives in the *table name*, so you pass that name to `collect -d`. The `sapia run` output prints the destination table path, so you can read the name there (or check `_registry.tsv`).
+- **Collect has no `--table-label`.** The label lives in the *table name*, so you pass that name to `collect -t`. The `sapia run` output prints the destination table path, so you can read the name there (or check `_registry.tsv`).
 - **The label carries forward.** It accumulates down generations, so a `create` tool run on `table1_lowT` reserves `table2_lowT` (and `table2_lowT_<new>` if you add another `--table-label`). The table name always tells you which fork you're on.
 
 ## Combining them
 
-The two are orthogonal — `--table-label` picks *which lineage*, `-l` separates *variants within it*:
-
-```bash
-sapia run     proteinmpnn "$RUN_DIR" -d table0 --table-label lowT -l test_set ...
-sapia collect proteinmpnn "$RUN_DIR" -d table1_lowT -l retry
-```
-
-→ `run_dir/table1_lowT/proteinmpnn_retry/`, columns `proteinmpnn_retry_*` in `table1_lowT`.
+#TODO improve combination explanation and logic

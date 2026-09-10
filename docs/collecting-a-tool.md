@@ -5,17 +5,17 @@
 ## The shape
 
 ```bash
-sapia collect <tool> <run_dir> -d <table> [flags]
+sapia collect <tool> <run_dir> -t <table> [flags]
 ```
 
-`-d/--table` names the table the run wrote to — the reserved child for a `create` tool (e.g. `table1`), or the same table for an `update` tool. Unlike `sapia run`, it is **always required**: by collect time the destination table already exists (the run reserved it), so there is nothing to infer.
+`-t/--table` names the table the run wrote to — the reserved child for a `create` tool (e.g. `table1`), or the same table for an `update` tool. Unlike `sapia run`, it is **always required**: by collect time the destination table already exists (the run reserved it), so there is nothing to infer.
 
 ## Flags
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
 | `run_dir` (positional) | — | The workflow directory. |
-| `-d`, `--table` | — | **Required.** The table to fill (name, no extension) — the table the run wrote to. |
+| `-t`, `--table` | — | **Required.** The table to fill (name, no extension) — the table the run wrote to. |
 | `-l`, `--dir-label` | `""` | Must match the run's `--dir-label`, so collect reads the same output dir (`run_dir/<table>/<leaf>/`) the run wrote to. See [Using labels](using-labels.md). |
 | `--force` | off | Re-collect rows that are already filled in (skips the resume filter). |
 

@@ -3,7 +3,7 @@
 A **filter** is an optional Python module you point `sapia run` at with `-f/--filter`. It exposes a single `apply_filter(df) -> df`, and the driver applies it to the source table **before the manifest is built**. This way you can subset, sample, threshold, or reorder designs at submit time without touching the table itself.
 
 ```bash
-sapia run <tool> <run_dir> -d <table> -f path/to/filter.py
+sapia run <tool> <run_dir> -t <table> -f path/to/filter.py
 ```
 
 ## The contract
@@ -23,7 +23,7 @@ def apply_filter(df: DataFrame) -> DataFrame:
 
 ## When it runs
 
-The filter runs at **submit time, in the `sapia` driver** (not on the cluster), and **before the manifest is computed**. So the framework's own filtering — the `--input-column` presence check and the resume skip (`<leaf>_status == "OK"`) applies *on top of* the frame you return. It sees the full source table. (For a root `create` run with no `-d`, there's no source table, so the frame is empty.)
+The filter runs at **submit time, in the `sapia` driver** (not on the cluster), and **before the manifest is computed**. So the framework's own filtering — the `--input-column` presence check and the resume skip (`<leaf>_status == "OK"`) applies *on top of* the frame you return. It sees the full source table. (For a root `create` run with no `-t`, there's no source table, so the frame is empty.)
 
 If your filter returns an empty frame, the run prints `No designs to submit.` and exits without submitting anything.
 
