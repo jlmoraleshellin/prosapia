@@ -6,8 +6,15 @@ Reads sequences from an MPNN table, writes one boltz YAML input per sequence,
 groups them into shard directories, and submits a sbatch array where each task
 runs boltz on a whole shard (optionally on multiple GPUs via --devices).
 
-The template CIF, chain layout, and number of subunits are hardcoded at the
-top of this file -- edit them there.
+The number of subunits is derived per-sequence from the MPNN chainbreak syntax
+(``/``-separated chains); the chain layout follows from that. Only the template
+CIF has a site default, via the TEMPLATE_CIF environment variable.
+
+Manifest layout: the only genuinely per-task field is the shard directory. Every
+run-wide boltz CLI option (``--devices``, ``--use_msa_server``, ...) is collapsed
+into a single space-separated ``extra`` field (see ``_boltz_extra``), which the
+sbatch drops unquoted into the ``boltz predict`` argv. Adding a run-wide flag
+means extending ``_boltz_extra``, not adding a manifest column.
 
 Usage:
     sapia run boltz outputs/20260420_123035_grow_hairpin --table table1
@@ -19,6 +26,7 @@ from argparse import ArgumentParser
 from pathlib import Path
 from shutil import copy2
 from typing import cast
+import string
 
 from dotenv import load_dotenv
 
@@ -27,47 +35,64 @@ from prosapia.core import CommonArgs, ManifestCtx
 load_dotenv()  # Load environment variables from .env file
 
 # ------------ Boltz template config -----------------------------------------
-N_SUBUNITS = 11
-CHAIN_IDS = list("ABCDEFGHIJK")[:N_SUBUNITS]
 TEMPLATE_CIF = os.getenv("TEMPLATE_CIF", "")  # set in .env
-TEMPLATE_THRESHOLD = os.getenv("TEMPLATE_THRESHOLD", 2.0)  # set in .env
-USE_MSA = os.getenv("USE_MSA", False)  # set in .env
 # -----------------------------------------------------------------------------
 
 
 class BoltzArgs(CommonArgs):
     shard_size: int
     devices: int
+    use_msa_server: bool
+    use_template: bool
+    template_cif: str
+    template_threshold: float
 
 
-def _format_chain_list(ids: list[str]) -> str:
+def _format_chain_list(n_subunits: int) -> str:
     """Render ['A', 'B', ...] as '[A, B, ...]' for boltz YAML."""
+    ids = list(string.ascii_uppercase)[:n_subunits]
     return "[" + ", ".join(ids) + "]"
 
 
-def write_boltz_yaml(yaml_path: Path, sequence: str) -> None:
+def write_boltz_yaml(yaml_path: Path, sequence: str, args: BoltzArgs) -> None:
     """Write a single boltz input YAML."""
-    sequence = sequence.split("/", 1)[0]
-    chain_list = _format_chain_list(CHAIN_IDS)
-    msa_line = "" if USE_MSA else "      msa: empty\n"
+    sequence_list = sequence.split("/")
+    n_subunits = len(sequence_list)
+    chain_list = _format_chain_list(n_subunits)
+    msa_line = "" if args.use_msa_server else "      msa: empty\n"
+    template_line = (
+        (
+            "templates:\n"
+            f"  - cif: {args.template_cif}\n"
+            f"    chain_id: {chain_list}\n"
+            f"    template_id: {chain_list}\n"
+            f"    force: true\n"
+            f"    threshold: {args.template_threshold}\n"
+        )
+        if args.use_template
+        else ""
+    )
     yaml_text = (
         "version: 1\n"
         "sequences:\n"
         "  - protein:\n"
         f"      id: {chain_list}\n"
-        f"      sequence: {sequence}\n"
+        f"      sequence: {sequence_list[0]}\n"
         f"{msa_line}"
-        "templates:\n"
-        f"  - cif: {TEMPLATE_CIF}\n"
-        f"    chain_id: {chain_list}\n"
-        f"    template_id: {chain_list}\n"
-        f"    force: true\n"
-        f"    threshold: {TEMPLATE_THRESHOLD}\n"
+        f"{template_line}"
     )
     yaml_path.write_text(yaml_text)
 
 
-def _add_boltz_args(parser: ArgumentParser) -> None:
+def _boltz_extra_cli_args(args: BoltzArgs) -> str:
+    """Run-wide `boltz predict` args (same for every shard), joined space-separated."""
+    parts = [f"--devices {args.devices}"]
+    if args.use_msa_server:
+        parts.append("--use_msa_server")
+    return " ".join(parts)
+
+
+def add_boltz_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--shard-size",
         type=int,
@@ -81,6 +106,28 @@ def _add_boltz_args(parser: ArgumentParser) -> None:
         help="Number of GPUs boltz uses per task (--devices). "
         "Automatically sets --gpus-per-task to match unless explicitly overridden. "
         "Defaults to 1.",
+    )
+    parser.add_argument(
+        "--use-msa-server",
+        action="store_true",
+        help="Use MSA information in the boltz input YAML.",
+    )
+    parser.add_argument(
+        "--use-template",
+        action="store_true",
+        help="Use template information in the boltz input YAML.",
+    )
+    parser.add_argument(
+        "--template-cif",
+        type=str,
+        default=TEMPLATE_CIF,
+        help="Path to template CIF file. Defaults to TEMPLATE_CIF environment variable.",
+    )
+    parser.add_argument(
+        "--template-threshold",
+        type=float,
+        default=2.0,
+        help="Template threshold for boltz input YAML. Defaults to 2.0.",
     )
 
 
@@ -96,11 +143,13 @@ def build_boltz_manifest(ctx: ManifestCtx[BoltzArgs]):
         name = cast(str, name)
         sequence = str(ctx.ready.at[name, ctx.args.input_column])
         yaml_path = yaml_dir / f"{name}.yml"
-        write_boltz_yaml(yaml_path, sequence)
+        write_boltz_yaml(yaml_path, sequence, ctx.args)
         yaml_paths.append(yaml_path)
 
     shards_dir = ctx.out_dir / "boltz_shards"
     shards_dir.mkdir(parents=True, exist_ok=True)
+
+    extra = _boltz_extra_cli_args(ctx.args)
 
     manifest_rows: list[tuple[str, ...]] = []
     for i in range(0, len(yaml_paths), ctx.args.shard_size):
@@ -109,6 +158,6 @@ def build_boltz_manifest(ctx: ManifestCtx[BoltzArgs]):
         shard.mkdir(parents=True, exist_ok=True)
         for yaml_path in yaml_paths[i : i + ctx.args.shard_size]:
             copy2(yaml_path, shard / yaml_path.name)
-        manifest_rows.append((str(shard), str(ctx.args.devices)))
+        manifest_rows.append((str(shard), extra))
 
     return manifest_rows

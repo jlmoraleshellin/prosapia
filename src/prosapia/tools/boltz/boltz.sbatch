@@ -15,10 +15,15 @@ set +u
 source "${SAPIA_ACTIVATE_BOLTZ:?set SAPIA_ACTIVATE_BOLTZ in your .env to a tool activation script}"
 set -u
 
+# Manifest columns (tab-separated):
+#   shard_dir  extra
+# $EXTRA holds every run-wide `boltz predict` option (--devices, --use_msa_server,
+# ...) as space-separated tokens. It is intentionally left unquoted below so each
+# token becomes its own argv entry.
 SHARD_DIR=$(echo "$SAPIA_LINE" | cut -f1)
-DEVICES=$(echo "$SAPIA_LINE" | cut -f2)
+EXTRA=$(echo "$SAPIA_LINE" | cut -f2)
 
-echo "[$(date +%T)] task $SLURM_ARRAY_TASK_ID: predicting shard $SHARD_DIR with $DEVICES device(s)"
+echo "[$(date +%T)] task $SLURM_ARRAY_TASK_ID: predicting shard $SHARD_DIR ($EXTRA)"
 boltz predict "$SHARD_DIR" \
     --out_dir "$OUT_DIR" \
-    --devices "$DEVICES"
+    $EXTRA
