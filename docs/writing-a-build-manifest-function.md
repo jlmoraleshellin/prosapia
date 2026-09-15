@@ -9,11 +9,12 @@ The function takes a `ManifestCtx` and returns a sequence of rows, where each ro
 ```python
 from prosapia.core import ManifestCtx, ManifestRow
 
+
 def build_mytool_manifest(ctx: ManifestCtx) -> list[ManifestRow]:
     rows: list[ManifestRow] = []
-    for name in ctx.ready.index:                    # only the ready designs
+    for name in ctx.ready.index:  # only the ready designs
         src = ctx.ready.at[name, ctx.args.input_column]
-        rows.append((name, str(src)))               # fields your .sbatch will cut
+        rows.append((name, str(src)))  # fields your .sbatch will cut
     return rows
 ```
 

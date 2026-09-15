@@ -274,9 +274,7 @@ def _finalize_create(
         row.setdefault(GEN, table.gen)
 
 
-def _finalize_update(
-    updates: CollectResult, table: Table, df: pd.DataFrame
-) -> None:
+def _finalize_update(updates: CollectResult, table: Table, df: pd.DataFrame) -> None:
     """Warn (don't fail) when an update collect produces rows not already in the table."""
     new = [name for name in updates if name not in df.index]
     if new:

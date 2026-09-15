@@ -32,9 +32,7 @@ def expand_chain_spec(spec: str) -> list[str]:
         elif len(ends) == 2:
             start, end = ends
         else:
-            raise ValueError(
-                f"malformed chain range {token!r} (expected 'A' or 'A:C')"
-            )
+            raise ValueError(f"malformed chain range {token!r} (expected 'A' or 'A:C')")
         if not (
             len(start) == 1 and len(end) == 1 and start.isalpha() and end.isalpha()
         ):

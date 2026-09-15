@@ -83,7 +83,9 @@ def build_chain_map(
     if not positions_spec or positions_spec.strip().lower() == "none":
         return chain_map
 
-    resolved = resolve_template(positions_spec, lookup, name).strip().strip("[]").strip()
+    resolved = (
+        resolve_template(positions_spec, lookup, name).strip().strip("[]").strip()
+    )
     if not resolved:
         return chain_map
 

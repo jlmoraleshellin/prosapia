@@ -29,9 +29,12 @@ def test_resolve_dir_name_update(tmp_path):
     # tool annotating a worms-created table writes to run_dir/<table>/<update_tool>/.
     d = tmp_path / "table2_worms" / "alphafold3"
     d.mkdir(parents=True)
-    table = Table(table_name="table2_worms", tool_name="worms")  # creator != running tool
+    table = Table(
+        table_name="table2_worms", tool_name="worms"
+    )  # creator != running tool
     assert (
-        resolve_dir_name(_args(tmp_path), table, ToolMetadata("alphafold3", "update")) == d
+        resolve_dir_name(_args(tmp_path), table, ToolMetadata("alphafold3", "update"))
+        == d
     )
 
 

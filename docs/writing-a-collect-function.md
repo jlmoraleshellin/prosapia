@@ -23,10 +23,10 @@ from typing import Iterable
 from prosapia.core import Collected, CollectCtx, CollectEach, DesignCtx
 
 
-def collect_mytool(ctx: CollectCtx) -> CollectEach:      # runs once
+def collect_mytool(ctx: CollectCtx) -> CollectEach:  # runs once
     # ... one-time setup: scan ctx.out_dir, build an index, capture ctx.args ...
 
-    def one(d: DesignCtx) -> Iterable[Collected]:        # runs per ready design
+    def one(d: DesignCtx) -> Iterable[Collected]:  # runs per ready design
         # ... locate + parse this design's output, yield a Collected per row ...
         yield Collected(data={...}, path=..., status=...)
 
@@ -90,21 +90,25 @@ def collect_af3(ctx: CollectCtx) -> CollectEach:
             if design_dir.is_dir():
                 design_dirs[design_dir.name] = design_dir
 
-    na_metrics = {k: pd.NA for k in AF3_JSON_KEYS}   # bare metric names
+    na_metrics = {k: pd.NA for k in AF3_JSON_KEYS}  # bare metric names
 
     def one(d: DesignCtx) -> Iterable[Collected]:
         design_dir = design_dirs.get(d.name)
         if design_dir is None:
-            yield Collected(status=f"missing: no output dir for {d.name}", data=na_metrics)
+            yield Collected(
+                status=f"missing: no output dir for {d.name}", data=na_metrics
+            )
             return
 
         summary, cif = find_prediction_files(design_dir)
         if summary is None or cif is None:
-            yield Collected(status=f"missing: no models in {design_dir}", data=na_metrics)
+            yield Collected(
+                status=f"missing: no models in {design_dir}", data=na_metrics
+            )
             return
 
-        metrics = load_metrics(summary)              # {"ptm": ..., "iptm": ..., ...}
-        yield Collected(data=metrics, path=cif)      # status defaults to "OK"
+        metrics = load_metrics(summary)  # {"ptm": ..., "iptm": ..., ...}
+        yield Collected(data=metrics, path=cif)  # status defaults to "OK"
 
     return one
 ```
@@ -128,16 +132,16 @@ def collect_mpnn(ctx: CollectCtx) -> CollectEach:
     fasta_by_parent = build_fasta_index(ctx.out_dir)
 
     def one(d: DesignCtx) -> Iterable[Collected]:
-        fasta = fasta_by_parent.get(d.name)          # d.name is the parent row
+        fasta = fasta_by_parent.get(d.name)  # d.name is the parent row
         if fasta is None:
-            return                                    # no output -> create skips
+            return  # no output -> create skips
 
         for i, (header, sequence) in enumerate(parse_fasta(fasta)):
             if i == 0:
-                continue                              # skip the echoed input seq
+                continue  # skip the echoed input seq
             yield Collected(
-                name=f"{d.name}_f{i}",                # the new child row's name
-                parent=d.name,                        # -> parent_name (lineage)
+                name=f"{d.name}_f{i}",  # the new child row's name
+                parent=d.name,  # -> parent_name (lineage)
                 path=fasta,
                 data={"iteration": i, "sequence": sequence, **parse_header(header)},
             )

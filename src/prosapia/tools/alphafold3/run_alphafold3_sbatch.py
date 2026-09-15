@@ -23,7 +23,11 @@ from shutil import copy2
 from typing import cast
 
 from prosapia.core import CommonArgs, ManifestCtx
-from prosapia.utils import add_chains_and_positions_args, build_chain_map, group_by_sequence
+from prosapia.utils import (
+    add_chains_and_positions_args,
+    build_chain_map,
+    group_by_sequence,
+)
 
 
 class AlphaFold3Args(CommonArgs):

@@ -147,7 +147,9 @@ def test_collect_create_fills_child_and_stamps_lineage(tmp_path, monkeypatch):
         def one(d: DesignCtx):
             # A create tool mints a child row and names its parent; the framework
             # stamps parent_table/gen and validates the parent edge.
-            yield Collected(name=f"{d.name}_d0", parent=d.name, data={"sequence": "CCC"})
+            yield Collected(
+                name=f"{d.name}_d0", parent=d.name, data={"sequence": "CCC"}
+            )
 
         return one
 
@@ -201,7 +203,8 @@ def test_collect_update_warns_on_new_row(tmp_path, monkeypatch, capsys):
     assert "WARNING" in capsys.readouterr().out
     # the row is still written (warn, not fail)
     assert (
-        DataManager(tmp_path).read_frame("table0").at["rNEW", "alphafold3_status"] == "OK"
+        DataManager(tmp_path).read_frame("table0").at["rNEW", "alphafold3_status"]
+        == "OK"
     )
 
 
@@ -212,14 +215,16 @@ def test_collect_requires_output_dir(tmp_path, monkeypatch):
 
     monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-t", "table0"])
     with pytest.raises(FileNotFoundError):
-        collect(metadata=UPDATE, collect_fn=lambda ctx: (lambda d: []))
+        collect(metadata=UPDATE, collect_fn=lambda ctx: lambda d: [])
 
 
 def test_by_design_stamps_path_and_status(tmp_path, monkeypatch):
     # A Collected's path/status land in the leaf-keyed <leaf>_path / <leaf>_status
     # columns; data columns are leaf-prefixed too.
     dm = DataManager(tmp_path)
-    dm.write_frame("table0", dm.update(dm.read_frame("table0"), "r1", {"sequence": "AAA"}))
+    dm.write_frame(
+        "table0", dm.update(dm.read_frame("table0"), "r1", {"sequence": "AAA"})
+    )
     _make_out_dir(tmp_path, "table0", UPDATE.name)
     model = tmp_path / "r1_model.cif"
 
@@ -239,7 +244,9 @@ def test_by_design_status_none_suppresses_leaf_status(tmp_path, monkeypatch):
     # status=None suppresses only the <leaf>_status stamp; data columns are still
     # leaf-prefixed by the driver (the tool's inner keys nest under the leaf).
     dm = DataManager(tmp_path)
-    dm.write_frame("table0", dm.update(dm.read_frame("table0"), "r1", {"sequence": "AAA"}))
+    dm.write_frame(
+        "table0", dm.update(dm.read_frame("table0"), "r1", {"sequence": "AAA"})
+    )
     _make_out_dir(tmp_path, "table0", UPDATE.name)
 
     def collect_fn(ctx: CollectCtx):
@@ -260,16 +267,22 @@ def test_by_design_leaf_prefix_isolates_dir_label_variants(tmp_path, monkeypatch
     # Two -l/--dir-label variants of the same tool into the same table write distinct
     # leaf-prefixed columns, so one variant never overwrites the other.
     dm = DataManager(tmp_path)
-    dm.write_frame("table0", dm.update(dm.read_frame("table0"), "r1", {"sequence": "AAA"}))
+    dm.write_frame(
+        "table0", dm.update(dm.read_frame("table0"), "r1", {"sequence": "AAA"})
+    )
     _make_out_dir(tmp_path, "table0", "alphafold3_seedA")
     _make_out_dir(tmp_path, "table0", "alphafold3_seedB")
 
     def make(score):
-        return lambda ctx: (lambda d: [Collected(data={"ptm": score})])
+        return lambda ctx: lambda d: [Collected(data={"ptm": score})]
 
-    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-t", "table0", "-l", "seedA"])
+    monkeypatch.setattr(
+        sys, "argv", ["prog", str(tmp_path), "-t", "table0", "-l", "seedA"]
+    )
     collect(metadata=UPDATE, collect_fn=make(0.5))
-    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-t", "table0", "-l", "seedB"])
+    monkeypatch.setattr(
+        sys, "argv", ["prog", str(tmp_path), "-t", "table0", "-l", "seedB"]
+    )
     collect(metadata=UPDATE, collect_fn=make(0.9))
 
     out = DataManager(tmp_path).read_frame("table0")

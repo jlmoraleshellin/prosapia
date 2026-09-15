@@ -42,8 +42,6 @@ AF3_JSON_KEYS: List[str] = [
 ]
 
 
-
-
 def find_prediction_files(
     design_dir: Path,
 ) -> tuple[Path | None, Path | None]:

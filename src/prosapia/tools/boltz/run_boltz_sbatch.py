@@ -63,18 +63,22 @@ def _format_id_list(letters: list[str]) -> str:
     return "[" + ", ".join(letters) + "]"
 
 
-def write_boltz_yaml(yaml_path: Path, chain_map: dict[str, str], args: BoltzArgs) -> None:
+def write_boltz_yaml(
+    yaml_path: Path, chain_map: dict[str, str], args: BoltzArgs
+) -> None:
     """Write a single boltz input YAML.
 
     ``chain_map`` is the ordered ``{chain: sequence}`` to predict. Chains sharing a
     sequence collapse into one entity with a multi-letter ``id`` (homo-oligomer);
     distinct sequences become separate ``- protein:`` entities (hetero-oligomer).
     """
-    entities = ["  - protein:\n"
-                f"      id: {_format_id_list(letters)}\n"
-                f"      sequence: {seq}\n"
-                + ("" if args.use_msa_server else "      msa: empty\n")
-                for letters, seq in group_by_sequence(chain_map)]
+    entities = [
+        "  - protein:\n"
+        f"      id: {_format_id_list(letters)}\n"
+        f"      sequence: {seq}\n"
+        + ("" if args.use_msa_server else "      msa: empty\n")
+        for letters, seq in group_by_sequence(chain_map)
+    ]
 
     # Templates apply across every predicted chain (top-level block, after sequences).
     template_id_list = _format_id_list(list(chain_map))

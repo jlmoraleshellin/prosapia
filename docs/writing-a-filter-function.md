@@ -13,6 +13,7 @@ The module must define exactly one function, named `apply_filter` (the driver ra
 ```python
 from pandas import DataFrame
 
+
 def apply_filter(df: DataFrame) -> DataFrame:
     ...
     return df
