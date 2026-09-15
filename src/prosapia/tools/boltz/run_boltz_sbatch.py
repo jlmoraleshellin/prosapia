@@ -6,9 +6,11 @@ Reads sequences from an MPNN table, writes one boltz YAML input per sequence,
 groups them into shard directories, and submits a sbatch array where each task
 runs boltz on a whole shard (optionally on multiple GPUs via --devices).
 
-The number of subunits is derived per-sequence from the MPNN chainbreak syntax
-(``/``-separated chains); the chain layout follows from that. Only the template
-CIF has a site default, via the TEMPLATE_CIF environment variable.
+Chains are derived per-sequence from the MPNN chainbreak syntax (``/``-separated
+chains): chains sharing a sequence collapse into one homo-oligomer entity, distinct
+sequences become separate hetero-oligomer entities. ``--chains`` narrows which
+chains to predict (mini-language, e.g. ``A:D``). Only the template CIF has a site
+default, via the TEMPLATE_CIF environment variable.
 
 Manifest layout: the only genuinely per-task field is the shard directory. Every
 run-wide boltz CLI option (``--devices``, ``--use_msa_server``, ...) is collapsed
@@ -26,11 +28,11 @@ from argparse import ArgumentParser
 from pathlib import Path
 from shutil import copy2
 from typing import cast
-import string
 
 from dotenv import load_dotenv
 
 from prosapia.core import CommonArgs, ManifestCtx
+from prosapia.utils import group_by_sequence, select_chains
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -46,41 +48,45 @@ class BoltzArgs(CommonArgs):
     use_template: bool
     template_cif: str
     template_threshold: float
+    chains: str | None
 
 
-def _format_chain_list(n_subunits: int) -> str:
+def _format_id_list(letters: list[str]) -> str:
     """Render ['A', 'B', ...] as '[A, B, ...]' for boltz YAML."""
-    ids = list(string.ascii_uppercase)[:n_subunits]
-    return "[" + ", ".join(ids) + "]"
+    return "[" + ", ".join(letters) + "]"
 
 
 def write_boltz_yaml(yaml_path: Path, sequence: str, args: BoltzArgs) -> None:
-    """Write a single boltz input YAML."""
-    sequence_list = sequence.split("/")
-    n_subunits = len(sequence_list)
-    chain_list = _format_chain_list(n_subunits)
-    msa_line = "" if args.use_msa_server else "      msa: empty\n"
+    """Write a single boltz input YAML.
+
+    Chains come from the proteinmpnn ``/``-chainbreak ``sequence`` (optionally
+    narrowed by ``--chains``). Chains sharing a sequence collapse into one entity
+    with a multi-letter ``id`` (homo-oligomer); distinct sequences become separate
+    ``- protein:`` entities (hetero-oligomer).
+    """
+    chain_map = select_chains(sequence, args.chains)
+
+    entities = ["  - protein:\n"
+                f"      id: {_format_id_list(letters)}\n"
+                f"      sequence: {seq}\n"
+                + ("" if args.use_msa_server else "      msa: empty\n")
+                for letters, seq in group_by_sequence(chain_map)]
+
+    # Templates apply across every predicted chain (top-level block, after sequences).
+    template_id_list = _format_id_list(list(chain_map))
     template_line = (
         (
             "templates:\n"
             f"  - cif: {args.template_cif}\n"
-            f"    chain_id: {chain_list}\n"
-            f"    template_id: {chain_list}\n"
+            f"    chain_id: {template_id_list}\n"
+            f"    template_id: {template_id_list}\n"
             f"    force: true\n"
             f"    threshold: {args.template_threshold}\n"
         )
         if args.use_template
         else ""
     )
-    yaml_text = (
-        "version: 1\n"
-        "sequences:\n"
-        "  - protein:\n"
-        f"      id: {chain_list}\n"
-        f"      sequence: {sequence_list[0]}\n"
-        f"{msa_line}"
-        f"{template_line}"
-    )
+    yaml_text = "version: 1\nsequences:\n" + "".join(entities) + template_line
     yaml_path.write_text(yaml_text)
 
 
@@ -116,6 +122,16 @@ def add_boltz_args(parser: ArgumentParser) -> None:
         "--use-template",
         action="store_true",
         help="Use template information in the boltz input YAML.",
+    )
+    parser.add_argument(
+        "--chains",
+        type=str,
+        default=None,
+        metavar="A:D",
+        help="Chains to predict, in the chain mini-language (':' inclusive letter "
+        "range, ',' separates): e.g. 'A:D' -> A, B, C, D. Selects those chains from "
+        "the input sequence; letters beyond the sequence's chain count are dropped. "
+        "Default: predict every chain in the sequence.",
     )
     parser.add_argument(
         "--template-cif",

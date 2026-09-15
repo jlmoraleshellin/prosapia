@@ -75,7 +75,7 @@ from prosapia.core import (
     LookupFn,
     ManifestCtx,
 )
-from prosapia.utils import ensure_pdb, resolve_template
+from prosapia.utils import ensure_pdb, expand_chain_spec, resolve_template
 
 
 class ProteinMPNNArgs(CommonArgs):
@@ -93,44 +93,13 @@ class ProteinMPNNArgs(CommonArgs):
 
 
 def _parse_chains(spec: str) -> str:
-    """Expand the chain mini-language into a space-separated chain list.
+    """Expand the chain mini-language into a space-separated ``--chain_list`` string.
 
     ``:`` is an inclusive letter range and ``,`` separates: ``A:C,E`` -> ``"A B C E"``.
-    Order is preserved (no sort/dedupe). Empty spec -> "" (design all chains).
+    Order is preserved (no sort/dedupe). Empty spec -> "" (design all chains). The
+    expansion itself is shared (see ``prosapia.utils.expand_chain_spec``).
     """
-    spec = spec.strip().strip("[]").strip()
-    if not spec:
-        return ""
-
-    chains: list[str] = []
-    for token in spec.split(","):
-        token = token.strip()
-        if not token:
-            continue
-        ends = [e.strip() for e in token.split(":")]
-        if len(ends) == 1:
-            start = end = ends[0]
-        elif len(ends) == 2:
-            start, end = ends
-        else:
-            raise ValueError(
-                f"--chains-to-design: malformed chain range {token!r} "
-                f"(expected 'A' or 'A:C')"
-            )
-        if not (
-            len(start) == 1 and len(end) == 1 and start.isalpha() and end.isalpha()
-        ):
-            raise ValueError(
-                f"--chains-to-design: chain range {token!r} must use single letters "
-                f"(e.g. 'A:C')"
-            )
-        lo, hi = ord(start.upper()), ord(end.upper())
-        if hi < lo:
-            raise ValueError(
-                f"--chains-to-design: chain range {token!r} ends before it starts"
-            )
-        chains.extend(chr(c) for c in range(lo, hi + 1))
-    return " ".join(chains)
+    return " ".join(expand_chain_spec(spec))
 
 
 def _pos_int(tok: str, token: str, name: str) -> int:

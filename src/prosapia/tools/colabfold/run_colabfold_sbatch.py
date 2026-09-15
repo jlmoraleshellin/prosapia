@@ -11,8 +11,11 @@ gets its own ``task_<i>`` output directory.  The companion
 ``sapia collect colabfold`` scans these task directories to match results back
 to design names.
 
-Requires ``n_subunits`` and (optionally) ``prebundle_length`` columns available
-up the input table's lineage (resolved via ``DataManager.lookup``).
+Chains are derived per-sequence from the MPNN chainbreak syntax (``/``-separated
+chains) and rendered as ColabFold's ``:``-separated multimer query, so homo- and
+hetero-oligomers are handled the same way. ``--chains`` narrows which chains to
+predict (mini-language, e.g. ``A:D``). ``--start-at-column`` still trims N-terminal
+residues (per chain), reading e.g. a ``prebundle_length`` column up the lineage.
 
 Usage:
     sapia run colabfold outputs/20260420_123035_grow_hairpin --table table1
@@ -24,31 +27,30 @@ from pathlib import Path
 from typing import cast
 
 from prosapia.core import CommonArgs, ManifestCtx
+from prosapia.utils import select_chains
 
 
 class ColabFoldArgs(CommonArgs):
     queries_per_task: int
     devices: int
     start_at_column: str
-    n_subunits: int | None
+    chains: str | None
 
 
 def write_colabfold_fasta(
     fasta_dir: Path,
     task_idx: int,
-    queries: list[tuple[str, str, int]],
+    queries: list[tuple[str, str]],
 ) -> Path:
     """Write a multi-query FASTA file for ColabFold.
 
-    For homo-oligomers the sequence is repeated with ``:`` separators so
-    ColabFold treats each copy as a separate chain.
+    Each query's sequence is already the ColabFold multimer string: one sequence
+    per chain, ``:``-separated (a single chain has no separator). This covers homo-
+    and hetero-oligomers uniformly.
     """
     fasta_path = fasta_dir / f"query_{task_idx}.fasta"
     with open(fasta_path, "w") as f:
-        for name, sequence, n_subunits in queries:
-            multimer_seq = (
-                ":".join([sequence] * n_subunits) if n_subunits > 1 else sequence
-            )
+        for name, multimer_seq in queries:
             f.write(f">{name}\n{multimer_seq}\n")
     return fasta_path
 
@@ -69,11 +71,14 @@ def _add_colabfold_args(parser: ArgumentParser) -> None:
         "Defaults to 1.",
     )
     parser.add_argument(
-        "--n-subunits",
-        type=int,
+        "--chains",
+        type=str,
         default=None,
-        help="Fixed number of subunits for all designs. "
-        "When set, overrides the 'n_subunits' table column.",
+        metavar="A:D",
+        help="Chains to predict, in the chain mini-language (':' inclusive letter "
+        "range, ',' separates): e.g. 'A:D' -> A, B, C, D. Selects those chains from "
+        "the input sequence; letters beyond the sequence's chain count are dropped. "
+        "Default: predict every chain in the sequence.",
     )
     parser.add_argument(
         "--start-at-column",
@@ -97,15 +102,16 @@ def build_colabfold_manifest(ctx: ManifestCtx[ColabFoldArgs]):
     if start_at_col and start_at_col.lower() == "none":
         start_at_col = None
 
-    queries: list[tuple[str, str, int]] = []
+    queries: list[tuple[str, str]] = []
     for name in ready.index:
         name = cast(str, name)
-        sequence = str(ready.at[name, ctx.args.input_column]).split("/", 1)[0]
+        sequence = str(ready.at[name, ctx.args.input_column])
+        chain_map = select_chains(sequence, ctx.args.chains)
         if start_at_col:
             start_at = int(ready.at[name, start_at_col])  # type: ignore
-            sequence = sequence[start_at:]
-        n_subunits = ctx.args.n_subunits or int(ctx.lookup(name, "n_subunits"))
-        queries.append((name, sequence, n_subunits))
+            chain_map = {c: seq[start_at:] for c, seq in chain_map.items()}
+        multimer_seq = ":".join(chain_map.values())
+        queries.append((name, multimer_seq))
 
     manifest_rows: list[tuple[str, ...]] = []
     for i in range(0, len(queries), ctx.args.queries_per_task):
