@@ -75,7 +75,7 @@ from prosapia.core import (
     LookupFn,
     ManifestCtx,
 )
-from prosapia.utils import ensure_pdb, expand_chain_spec, resolve_template
+from prosapia.utils import ensure_pdb, expand_chain_spec, parse_positions
 
 
 class ProteinMPNNArgs(CommonArgs):
@@ -102,56 +102,19 @@ def _parse_chains(spec: str) -> str:
     return " ".join(expand_chain_spec(spec))
 
 
-def _pos_int(tok: str, token: str, name: str) -> int:
-    """Parse a resolved position endpoint to int with a migration-friendly error."""
-    try:
-        return int(tok)
-    except ValueError:
-        raise ValueError(
-            f"design {name!r}: non-integer position {tok!r} in {token!r} "
-            f"(wrap table column expressions in braces, e.g. '{{motif_end}}')"
-        )
-
-
 def _parse_positions(spec: str, lookup: LookupFn, name: str) -> str:
     """Expand the position mini-language into a ProteinMPNN ``--position_list``.
 
-    Expressions live in ``{...}`` islands and are resolved first (integers, bare
-    table column names up the lineage, and ``+ - * //``); everything else is this
-    tool's own mini-language: ``/`` breaks chains (-> the comma between per-chain
-    groups), ``,`` separates fragments within a chain (-> spaces), ``start:end``
-    expands inclusively, a single position passes through; outer ``[...]`` optional.
-
-    Order is preserved and positions are NOT de-duplicated -- tied positions are
-    index-parallel (group j's i-th entry ties to group 0's i-th entry). Empty spec
-    -> "". Only a malformed range token (more than one ':') is rejected; alignment
-    and validity are left to ProteinMPNN.
+    A thin string formatter over the shared ``parse_positions`` (which resolves
+    ``{...}`` islands, splits chains on ``/`` and fragments on ``,``, and expands
+    ``start:end`` inclusively): per-chain groups joined by ``", "``, positions
+    within a group by spaces. Order is preserved and NOT de-duplicated -- tied
+    positions are index-parallel (group j's i-th entry ties to group 0's i-th).
+    Empty spec -> "". Open-ended ranges are rejected here (no chain length is
+    known); alignment and validity are left to ProteinMPNN.
     """
-    spec = resolve_template(spec, lookup, name).strip().strip("[]").strip()
-    if not spec:
-        return ""
-
-    groups: list[str] = []
-    for chain_spec in spec.split("/"):
-        positions: list[int] = []
-        for token in chain_spec.split(","):
-            token = token.strip()
-            if not token:
-                continue
-            ends = token.split(":")
-            if len(ends) == 1:
-                start = end = _pos_int(ends[0], token, name)
-            elif len(ends) == 2:
-                start = _pos_int(ends[0], token, name)
-                end = _pos_int(ends[1], token, name)
-            else:
-                raise ValueError(
-                    f"design {name!r}: malformed position range {token!r} "
-                    f"(expected 'start:end' or a single position)"
-                )
-            positions.extend(range(start, end + 1))
-        groups.append(" ".join(str(p) for p in positions))
-    return ", ".join(groups)
+    groups = parse_positions(spec, lookup, name)
+    return ", ".join(" ".join(str(p) for p in group) for group in groups)
 
 
 def _write_bias_jsonl(spec: str, out_dir: Path) -> str:

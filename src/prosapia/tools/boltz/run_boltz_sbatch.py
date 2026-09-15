@@ -32,7 +32,13 @@ from typing import cast
 from dotenv import load_dotenv
 
 from prosapia.core import CommonArgs, ManifestCtx
-from prosapia.utils import group_by_sequence, select_chains
+from prosapia.utils import (
+    add_chains_and_positions_args,
+    add_devices_arg,
+    build_chain_map,
+    group_by_sequence,
+    maybe_set_gpus_per_task,
+)
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -49,6 +55,7 @@ class BoltzArgs(CommonArgs):
     template_cif: str
     template_threshold: float
     chains: str | None
+    positions: str | None
 
 
 def _format_id_list(letters: list[str]) -> str:
@@ -56,16 +63,13 @@ def _format_id_list(letters: list[str]) -> str:
     return "[" + ", ".join(letters) + "]"
 
 
-def write_boltz_yaml(yaml_path: Path, sequence: str, args: BoltzArgs) -> None:
+def write_boltz_yaml(yaml_path: Path, chain_map: dict[str, str], args: BoltzArgs) -> None:
     """Write a single boltz input YAML.
 
-    Chains come from the proteinmpnn ``/``-chainbreak ``sequence`` (optionally
-    narrowed by ``--chains``). Chains sharing a sequence collapse into one entity
-    with a multi-letter ``id`` (homo-oligomer); distinct sequences become separate
-    ``- protein:`` entities (hetero-oligomer).
+    ``chain_map`` is the ordered ``{chain: sequence}`` to predict. Chains sharing a
+    sequence collapse into one entity with a multi-letter ``id`` (homo-oligomer);
+    distinct sequences become separate ``- protein:`` entities (hetero-oligomer).
     """
-    chain_map = select_chains(sequence, args.chains)
-
     entities = ["  - protein:\n"
                 f"      id: {_format_id_list(letters)}\n"
                 f"      sequence: {seq}\n"
@@ -105,14 +109,7 @@ def add_boltz_args(parser: ArgumentParser) -> None:
         default=10,
         help="Number of YAML inputs per shard directory. Defaults to 10.",
     )
-    parser.add_argument(
-        "--devices",
-        type=int,
-        default=1,
-        help="Number of GPUs boltz uses per task (--devices). "
-        "Automatically sets --gpus-per-task to match unless explicitly overridden. "
-        "Defaults to 1.",
-    )
+    add_devices_arg(parser)
     parser.add_argument(
         "--use-msa-server",
         action="store_true",
@@ -123,16 +120,7 @@ def add_boltz_args(parser: ArgumentParser) -> None:
         action="store_true",
         help="Use template information in the boltz input YAML.",
     )
-    parser.add_argument(
-        "--chains",
-        type=str,
-        default=None,
-        metavar="A:D",
-        help="Chains to predict, in the chain mini-language (':' inclusive letter "
-        "range, ',' separates): e.g. 'A:D' -> A, B, C, D. Selects those chains from "
-        "the input sequence; letters beyond the sequence's chain count are dropped. "
-        "Default: predict every chain in the sequence.",
-    )
+    add_chains_and_positions_args(parser)
     parser.add_argument(
         "--template-cif",
         type=str,
@@ -148,8 +136,7 @@ def add_boltz_args(parser: ArgumentParser) -> None:
 
 
 def build_boltz_manifest(ctx: ManifestCtx[BoltzArgs]):
-    if ctx.args.devices > 1:
-        ctx.args.gpus_per_task = ctx.args.devices
+    maybe_set_gpus_per_task(ctx.args)
 
     yaml_dir = ctx.out_dir / "boltz_inputs"
     yaml_dir.mkdir(parents=True, exist_ok=True)
@@ -158,8 +145,11 @@ def build_boltz_manifest(ctx: ManifestCtx[BoltzArgs]):
     for name in ctx.ready.index:
         name = cast(str, name)
         sequence = str(ctx.ready.at[name, ctx.args.input_column])
+        chain_map = build_chain_map(
+            sequence, ctx.args.chains, ctx.args.positions, ctx.lookup, name
+        )
         yaml_path = yaml_dir / f"{name}.yml"
-        write_boltz_yaml(yaml_path, sequence, ctx.args)
+        write_boltz_yaml(yaml_path, chain_map, ctx.args)
         yaml_paths.append(yaml_path)
 
     shards_dir = ctx.out_dir / "boltz_shards"

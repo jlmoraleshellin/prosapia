@@ -23,14 +23,14 @@ from shutil import copy2
 from typing import cast
 
 from prosapia.core import CommonArgs, ManifestCtx
-from prosapia.utils import group_by_sequence, select_chains
+from prosapia.utils import add_chains_and_positions_args, build_chain_map, group_by_sequence
 
 
 class AlphaFold3Args(CommonArgs):
     shard_size: int
-    start_at_column: str
     model_seeds: list[int]
     chains: str | None
+    positions: str | None
     no_msa: bool
 
 
@@ -69,19 +69,12 @@ def write_af3_json(
     json_path.write_text(json.dumps(payload, indent=2))
 
 
-def _add_af3_args(parser: ArgumentParser) -> None:
+def add_af3_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--shard-size",
         type=int,
         default=10,
         help="Number of JSON inputs per shard directory. Defaults to 10.",
-    )
-    parser.add_argument(
-        "--start-at-column",
-        type=str,
-        default="prebundle_length",
-        help="Column whose value determines how many N-terminal residues to trim. "
-        "Use 'none' to use the full sequence. Defaults to 'prebundle_length'.",
     )
     parser.add_argument(
         "--model-seeds",
@@ -90,16 +83,7 @@ def _add_af3_args(parser: ArgumentParser) -> None:
         default=[42],
         help="Model seeds for AF3 predictions. Defaults to [42].",
     )
-    parser.add_argument(
-        "--chains",
-        type=str,
-        default=None,
-        metavar="A:D",
-        help="Chains to predict, in the chain mini-language (':' inclusive letter "
-        "range, ',' separates): e.g. 'A:D' -> A, B, C, D. Selects those chains from "
-        "the input sequence; letters beyond the sequence's chain count are dropped. "
-        "Default: predict every chain in the sequence.",
-    )
+    add_chains_and_positions_args(parser)
     parser.add_argument(
         "--no-msa",
         action="store_true",
@@ -113,18 +97,13 @@ def build_af3_manifest(ctx: ManifestCtx[AlphaFold3Args]):
 
     ready = ctx.ready
 
-    start_at_col: str | None = ctx.args.start_at_column
-    if start_at_col and start_at_col.lower() == "none":
-        start_at_col = None
-
     json_paths: list[Path] = []
     for name in ready.index:
         name = cast(str, name)
         sequence = str(ready.at[name, ctx.args.input_column])
-        chain_map = select_chains(sequence, ctx.args.chains)
-        if start_at_col:
-            start_at = int(ready.at[name, start_at_col])  # type: ignore
-            chain_map = {c: seq[start_at:] for c, seq in chain_map.items()}
+        chain_map = build_chain_map(
+            sequence, ctx.args.chains, ctx.args.positions, ctx.lookup, name
+        )
         json_path = json_dir / f"{name}.json"
         write_af3_json(
             json_path,
