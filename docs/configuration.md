@@ -127,12 +127,6 @@ Template: `activation/openfold3.sh`. Activation script must put `run_openfold` o
 
 Template `activation/boltz.sh`. Activation script must put `boltz` on `PATH`. The template also shows the optional framework-cache setup in the sbatch.
 
-| Variable | Where | Required | Meaning |
-| --- | --- | --- | --- |
-| `USE_MSA` | `.env` (submit time) | no | `true` to run with an MSA; otherwise an empty MSA is used. |
-| `TEMPLATE_CIF` | `.env` (submit time) | no | Path to a template CIF, if templating. |
-| `TEMPLATE_THRESHOLD` | `.env` (submit time) | no | Template distance threshold (default `2.0`). |
-
 ### USalign — `SAPIA_ACTIVATE_USALIGN`
 
 Template: `activation/usalign.sh`.
