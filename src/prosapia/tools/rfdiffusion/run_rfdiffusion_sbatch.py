@@ -314,12 +314,11 @@ def _build_create_designs(
     ctx: ManifestCtx[RFDiffArgs], global_extra: str
 ) -> list[tuple[str, ...]]:
     """Iterate the input table's --input-column: one diffusion per ready design row."""
-    ready = ctx.ready
 
     designs: list[tuple[str, ...]] = []
-    for name in ready.index:
+    for name in ctx.ready.index:
         name = cast(str, name)
-        input_path = Path(str(ready.at[name, ctx.args.input_column]))
+        input_path = Path(str(ctx.ready.at[name, ctx.args.input_column]))
         if not input_path.exists():
             print(f"{name}: MISSING {input_path} (skipping)")
             continue
@@ -365,14 +364,18 @@ def _build_root_designs(
         input_path = Path(ctx.args.input_pdb)
         if not input_path.exists():
             raise FileNotFoundError(f"--input-pdb {input_path} does not exist.")
-        name = input_path.stem
+        name = f"{input_path.stem}_diff"
         staged_input: Path | None = (
             ctx.out_dir / name / "_diffusion_input" / f"{name}_renumbered.pdb"
         )
         renumber_chains_independently(input_path, staged_input)
     else:
-        name = "denovo"
+        name = "denovo_diff"
         staged_input = None
+
+    # A root run has no parent table for collect to iterate; record the group name
+    # so `sapia collect` can find <out_dir>/<name>/ and rebuild its rows.
+    ctx.write_meta(root_designs=[name])
 
     return [
         _assemble_design(

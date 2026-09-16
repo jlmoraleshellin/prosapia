@@ -46,7 +46,7 @@ The inner function receives one design at a time:
 
 | Field | Meaning |
 | --- | --- |
-| `d.name` | the design's row name (an existing row for an `update` tool; the *parent* row for a `create` tool). |
+| `d.name` | the design's row name (an existing row for an `update` tool; the *parent* row for a `create` tool — or, for a **root** `create` run with no `--table`, a group name the run recorded via [`ctx.write_meta(root_designs=…)`](writing-a-build-manifest-function.md#root-runs-no---table)). |
 | `d.out_dir` | this run's output directory (same as `ctx.out_dir`). |
 | `d.lookup` | read a value from this design or any ancestor: `d.lookup(d.name, "n_subunits")`. |
 

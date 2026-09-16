@@ -6,14 +6,18 @@ which only fills an already-existing table. The ``Tool.action`` decides whether 
 create contract (resolvable ``PARENT_NAME`` per row) is enforced.
 """
 
+import json
 import sys
 
+import pandas as pd
 import pytest
 
 from prosapia.core import (
     GEN,
     PARENT_TABLE,
     PARENT_NAME,
+    ROOT_DESIGNS_KEY,
+    RUN_META_FILENAME,
     Collected,
     CollectArgs,
     CollectCtx,
@@ -23,6 +27,7 @@ from prosapia.core import (
     ToolMetadata,
     build_collect_parser,
     collect_from_args,
+    write_run_meta,
 )
 
 UPDATE = ToolMetadata("alphafold3", "update")
@@ -288,6 +293,85 @@ def test_by_design_leaf_prefix_isolates_dir_label_variants(tmp_path, monkeypatch
     out = DataManager(tmp_path).read_frame("table0")
     assert out.at["r1", "alphafold3_seedA_ptm"] == 0.5
     assert out.at["r1", "alphafold3_seedB_ptm"] == 0.9
+
+
+def _reserve_root(tmp_path, root_designs):
+    """Register a root create table + its output dir, and seed the sidecar with the
+    design group names a root run would have recorded (as the run script does)."""
+    dm = DataManager(tmp_path)
+    dm.rm.register_table(
+        Table(
+            table_name="table0",
+            gen=0,
+            table_label="",
+            parent_table_name=None,
+            tool_name=CREATE.name,
+        )
+    )
+    out = _make_out_dir(tmp_path, "table0", CREATE.name)
+    meta = {"input_column": "x"}
+    if root_designs is not None:
+        meta[ROOT_DESIGNS_KEY] = root_designs
+    (out / RUN_META_FILENAME).write_text(json.dumps(meta))
+    return "table0"
+
+
+def test_collect_root_create_iterates_recorded_designs(tmp_path, monkeypatch):
+    # A root-create has no parent table; ctx.ready comes from the sidecar's
+    # root_designs, and the minted rows are stamped as roots (gen 0, no parent).
+    table = _reserve_root(tmp_path, ["denovo"])
+    seen = {}
+
+    def collect_fn(ctx: CollectCtx):
+        seen["ready"] = list(ctx.ready.index)
+        seen["parent_table"] = ctx.parent_table
+
+        def one(d: DesignCtx):
+            yield Collected(name=f"{d.name}_0", parent=d.name, data={"iteration": 0})
+
+        return one
+
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-t", table])
+    collect(metadata=CREATE, collect_fn=collect_fn)
+
+    assert seen["ready"] == ["denovo"]  # from the sidecar, not a parent table
+    assert seen["parent_table"] is None
+
+    df = DataManager(tmp_path).read_frame(table)
+    assert df.at["denovo_0", GEN] == 0  # root generation
+    assert pd.isna(df.at["denovo_0", PARENT_NAME])  # root: parent overwritten to NA
+    assert df.at["denovo_0", "diffused_status"] == "OK"
+    assert df.at["denovo_0", "diffused_iteration"] == 0
+
+
+def test_collect_root_create_without_recorded_designs_collects_nothing(
+    tmp_path, monkeypatch
+):
+    # A sidecar with no root_designs (e.g. a pre-feature run_dir) leaves ready empty,
+    # so nothing is collected -- the documented limitation, not a crash.
+    table = _reserve_root(tmp_path, None)
+    seen = {}
+
+    def collect_fn(ctx: CollectCtx):
+        seen["ready"] = list(ctx.ready.index)
+        return lambda d: [Collected(name=f"{d.name}_0", parent=d.name)]
+
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-t", table])
+    collect(metadata=CREATE, collect_fn=collect_fn)
+
+    assert seen["ready"] == []
+    assert DataManager(tmp_path).read_frame(table).empty
+
+
+def test_update_run_meta_merges_without_clobbering(tmp_path):
+    # write_meta must compose with the driver's base params: collect still reads
+    # input_column from the same sidecar the tool appends root_designs to.
+    write_run_meta(tmp_path, input_column="seq", tool="diffused")
+    write_run_meta(tmp_path, root_designs=["denovo"])
+
+    meta = json.loads((tmp_path / RUN_META_FILENAME).read_text())
+    assert meta["input_column"] == "seq"  # base field survives the second write
+    assert meta["root_designs"] == ["denovo"]
 
 
 def test_by_design_create_mints_multiple_children(tmp_path, monkeypatch):

@@ -258,6 +258,7 @@ class ManifestCtx(Generic[ArgsT]):
     args: ArgsT
     out_dir: Path
     lookup: LookupFn
+    write_meta: Callable[..., None]
 
     @property
     def ready(self) -> pd.DataFrame:
@@ -313,16 +314,22 @@ def _write_manifest(path: Path, rows: Sequence[ManifestRow]) -> None:
             f.write("\t".join(str(v) for v in row) + "\n")
 
 
-def write_run_meta(out_dir: Path, metadata: ToolMetadata, args: CommonArgs) -> None:
-    """Record this run's parameters into the out_dir sidecar"""
-    meta = {
-        "tool": metadata.name,
-        "input_column": args.input_column,
-        "dir_label": args.dir_label,
-        "filter": str(args.filter) if args.filter else None,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
-    (out_dir / RUN_META_FILENAME).write_text(json.dumps(meta, indent=2))
+def write_run_meta(out_dir: Path, **fields) -> None:
+    """Merge ``fields`` into the run's ``.meta.json`` sidecar, creating it if absent.
+
+    Read-modify-write so additions compose instead of clobbering: the driver seeds
+    the base run params, and a ``build_manifest_fn`` adds its own (e.g. root_designs)
+    via ``ctx.write_meta`` without wiping what the driver already wrote.
+    """
+    path = out_dir / RUN_META_FILENAME
+    meta: dict = {}
+    if path.is_file():
+        try:
+            meta = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            meta = {}
+    meta.update(fields)
+    path.write_text(json.dumps(meta, indent=2))
 
 
 def _submit_array(
@@ -484,7 +491,15 @@ def run_from_args(
         out_dir.mkdir(parents=True, exist_ok=True)
         log_dir.mkdir(parents=True, exist_ok=True)
 
-        write_run_meta(out_dir, metadata, args)
+        # Write run's base metadata to the sidecar
+        write_run_meta(
+            out_dir,
+            tool=metadata.name,
+            input_column=args.input_column,
+            dir_label=args.dir_label,
+            filter=str(args.filter) if args.filter else None,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+        )
 
         # A root tool has no source table: give an empty frame (for type security).
         df = read_frame(src_table) if src_table else pd.DataFrame()
@@ -504,6 +519,7 @@ def run_from_args(
             args=args,
             out_dir=out_dir,
             lookup=partial(dm.lookup, df),
+            write_meta=partial(write_run_meta, out_dir),
         )
         manifest_rows = build_manifest_fn(ctx)
 

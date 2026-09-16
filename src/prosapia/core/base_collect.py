@@ -26,6 +26,7 @@ from .naming import (
     GEN,
     PARENT_TABLE,
     PARENT_NAME,
+    ROOT_DESIGNS_KEY,
     RUN_META_FILENAME,
     path_column,
     resolve_dir_name,
@@ -87,6 +88,10 @@ class CollectCtx(Generic[ArgsT]):
         update-collect uses this table's ready designs. A design is ready when it has a present input column.
         """
         meta = self._meta()
+        # Root-create: no parent table to iterate. Instead, its recorded in the run meta.
+        if self.creates_table and self.parent_table is None:
+            names = (meta or {}).get(ROOT_DESIGNS_KEY, [])
+            return pd.DataFrame(index=pd.Index(names))
         col = (
             meta["input_column"]
             if meta and "input_column" in meta
@@ -94,8 +99,10 @@ class CollectCtx(Generic[ArgsT]):
         )
         frame = self.parent_df if self.creates_table else self.df
         ready = filter_ready(frame, col)
+        # Standard create: can't filter out already-collected rows (status_col) because the parent table has no status_col for this tool yet.
         if self.creates_table:
             return ready
+        # Update: filter out rows already collected (status_col == "OK"), unless --force
         return drop_collected(ready, self.df, self.status_col, self.args.force)
 
 
