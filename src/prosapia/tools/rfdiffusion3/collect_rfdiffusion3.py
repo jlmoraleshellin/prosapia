@@ -8,9 +8,13 @@ Collect RFdiffusion3 outputs into the (child) diffusion table.
     <shard_stem>_<key>_<batch>_model_<n>.json     (per-design metadata)
 
 into ``<out_dir>/results_<shard_stem>/``. This scans those dirs, matches files
-back to their parent design (the JSON key == a parent-table row name), converts each
-``.cif.gz`` to PDB (downstream tools consume PDB), and registers one child row per
-output as ``<name>_<i>`` carrying ``parent_name`` for lineage.
+back to their design (the JSON key == a parent-table row name, or a root-run group
+name recorded in ``.meta.json``), converts each ``.cif.gz`` to PDB (downstream tools
+consume PDB), and registers one child row per output as ``<name>_<i>`` carrying
+``parent_name`` for lineage.
+
+The framework supplies the designs to collect (``ctx.ready``): parent-table rows for
+a table-driven run, or the ``root_designs`` recorded by the run for a root run.
 
 Safe to re-run: rows are rebuilt from the outputs on disk.
 

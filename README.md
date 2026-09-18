@@ -143,7 +143,7 @@ More detailed docs live under [`docs/`](docs/index.md):
 - [Running a tool](docs/running-a-tool.md) — the `sapia run` flags and how they map to SLURM.
 - [Collecting a tool](docs/collecting-a-tool.md) — the `sapia collect` phase and its flags.
 - [Using labels](docs/using-labels.md) — `--dir-label` and `--table-label` for variants and forks.
-- [Using RFdiffusion](docs/tools/rfdiffusion.md) and [using ProteinMPNN](docs/tools/proteinmpnn.md) — the two bundled tools with their own expression languages.
+- [Using RFdiffusion](docs/tools/rfdiffusion.md), [using RFdiffusion3](docs/tools/rfdiffusion3.md), and [using ProteinMPNN](docs/tools/proteinmpnn.md) — bundled tools with their own expression languages.
 - [Lineage & tables](docs/lineage-and-tables.md) — `create` vs. `update`, roots, and `lookup`.
 - [Configuration](docs/configuration.md) — the full environment-variable reference.
 - [Writing a tool](docs/writing-a-tool.md), [writing a build-manifest function](docs/writing-a-build-manifest-function.md), [writing a collect function](docs/writing-a-collect-function.md), and [writing a filter function](docs/writing-a-filter-function.md).

@@ -9,7 +9,9 @@
 
 set -uo pipefail
 
-# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE. Our manifest line is a
+# shard JSON (up to --shard-size design keys) plus the run-wide overrides. One
+# `rfd3 design` process iterates the shard's keys in series on the single GPU.
 source "${SAPIA_PRELUDE:?}"
 
 # Site-specific activation (required) — see docs/configuration.md.
