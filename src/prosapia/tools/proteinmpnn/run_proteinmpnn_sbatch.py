@@ -291,7 +291,7 @@ def build_proteinmpnn_manifest(
     return manifest_rows
 
 
-def add_proteinmpnn_args(parser: ArgumentParser) -> None:
+def add_run_proteinmpnn_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--designs-per-task",
         type=int,

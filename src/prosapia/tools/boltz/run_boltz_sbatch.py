@@ -71,7 +71,7 @@ def write_boltz_yaml(
         if not path.is_file():
             raise FileNotFoundError(f"--template-yaml file not found: {template_yaml}")
         return path.read_text().rstrip("\n") + "\n"
-    
+
     entities = [
         "  - protein:\n"
         f"      id: [{', '.join(letters)}]\n"
@@ -96,7 +96,7 @@ def _boltz_predict_global_args(args: BoltzArgs) -> str:
     return " ".join(parts)
 
 
-def add_boltz_args(parser: ArgumentParser) -> None:
+def add_run_boltz_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--shard-size",
         type=int,

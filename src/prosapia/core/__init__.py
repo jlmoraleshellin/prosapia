@@ -19,7 +19,6 @@ from .base_sbatch import (  # noqa: F401
     resolve_output_table,
     run_from_args,
     write_run_meta,
-    write_run_meta,
 )
 from .data_manager import (  # noqa: F401
     Table,

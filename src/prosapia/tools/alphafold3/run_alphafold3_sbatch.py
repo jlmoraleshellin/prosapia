@@ -73,7 +73,7 @@ def write_af3_json(
     json_path.write_text(json.dumps(payload, indent=2))
 
 
-def add_af3_args(parser: ArgumentParser) -> None:
+def add_run_af3_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--shard-size",
         type=int,

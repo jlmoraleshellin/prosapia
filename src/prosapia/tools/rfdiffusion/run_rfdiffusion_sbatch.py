@@ -87,7 +87,7 @@ def _replicate_arg(value: str) -> str | int:
     return n
 
 
-def add_extra_args_rfdiffusion(parser: ArgumentParser):
+def add_run_rfdiffusion_args(parser: ArgumentParser):
     parser.add_argument(
         "--contigs",
         type=str,

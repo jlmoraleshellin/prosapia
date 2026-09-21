@@ -77,12 +77,10 @@ def build_colabfold_manifest(ctx: ManifestCtx[ColabFoldArgs]):
     fasta_dir = ctx.out_dir / "colabfold_queries"
     fasta_dir.mkdir(parents=True, exist_ok=True)
 
-    ready = ctx.ready
-
     queries: list[tuple[str, str]] = []
-    for name in ready.index:
+    for name in ctx.ready.index:
         name = cast(str, name)
-        sequence = str(ready.at[name, ctx.args.input_column])
+        sequence = str(ctx.ready.at[name, ctx.args.input_column])
         chain_map = build_chain_map(
             sequence, ctx.args.chains, ctx.args.positions, ctx.lookup, name
         )

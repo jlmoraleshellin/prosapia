@@ -79,7 +79,7 @@ def write_runner_yaml(runner_path: Path, devices: int) -> None:
     runner_path.write_text(yaml.dump(runner, default_flow_style=False))
 
 
-def add_openfold3_args(parser: ArgumentParser) -> None:
+def add_run_openfold3_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--queries-per-task",
         type=int,

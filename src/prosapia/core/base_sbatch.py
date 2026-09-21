@@ -482,7 +482,7 @@ def run_from_args(
         # CREATE reserves a new table in the registry that gets created when collect is called;
         # UPDATE writes back to src_table.
         output_table = resolve_output_table(
-            registry, metadata, src_table or None, getattr(args, "table_label", "")
+            registry, metadata, src_table, getattr(args, "table_label", "")
         )
 
         # Dirs (created below, so resolve without the existence guard).

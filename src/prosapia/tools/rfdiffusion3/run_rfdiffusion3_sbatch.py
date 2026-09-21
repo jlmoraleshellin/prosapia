@@ -96,7 +96,7 @@ class RFD3Args(CommonArgs):
     set: list[str]
 
 
-def add_rfd3_args(parser: ArgumentParser) -> None:
+def add_run_rfd3_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--contigs",
         type=str,

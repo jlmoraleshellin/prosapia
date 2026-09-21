@@ -31,10 +31,10 @@ from typing import Any, Iterable
 import pandas as pd
 
 from prosapia.core import (
-    Collected,
     CollectArgs,
     CollectCtx,
     CollectEach,
+    Collected,
     DesignCtx,
 )
 from prosapia.utils import ensure_pdb
@@ -47,7 +47,7 @@ class RFD3CollectArgs(CollectArgs):
     num_designs: int
 
 
-def _add_rfd3_collect_args(parser: ArgumentParser) -> None:
+def add_collect_rfd3_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--num-designs",
         type=int,
@@ -78,7 +78,7 @@ def _find_outputs(results_dirs: list[Path], name: str) -> list[tuple[int, int, P
     return found
 
 
-def collect_rfd3(ctx: CollectCtx) -> CollectEach:
+def collect_rfd3(ctx: CollectCtx[RFD3CollectArgs]) -> CollectEach:
     """Per-parent RFdiffusion3 collector. A create tool: the framework iterates the
     ready parents and this rebuilds each parent's child rows (``<name>_<i>``) from the
     outputs on disk, converting each ``.cif.gz`` to PDB. The framework stamps

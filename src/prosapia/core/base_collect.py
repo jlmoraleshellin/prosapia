@@ -237,7 +237,6 @@ def _add_collect_args(parser: ArgumentParser) -> None:
 
 
 def build_collect_parser(
-    metadata: "ToolMetadata",
     add_extra_args_fn: AddArgsFn | None = None,
 ) -> ArgumentParser:
     """Build a reusable (``add_help=False``) parent parser holding every collect flag

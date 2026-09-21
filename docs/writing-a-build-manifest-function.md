@@ -46,7 +46,7 @@ table. So a root run **must record the top-level group names it creates** in the
 sidecar, or collect will have nothing to iterate:
 
 ```python
-if ctx.args.table is None:               # root run
+if ctx.args.table is None:  # root run
     name = ctx.args.input_pdb.stem if ctx.args.input_pdb else "denovo"
     ctx.write_meta(root_designs=[name])  # <-- collect reads this back
     ...

@@ -47,7 +47,7 @@ class DiffusionCollectArgs(CollectArgs):
     num_designs: int
 
 
-def _add_diffusion_args(parser: ArgumentParser) -> None:
+def add_collect_rfdiffusion_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--num-designs",
         type=int,

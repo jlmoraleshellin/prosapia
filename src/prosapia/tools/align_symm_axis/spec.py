@@ -10,7 +10,7 @@ TOOL = Tool(
     action="update",
     description="Align symmetric assemblies onto the +Z axis.",
     default_sbatch=str(Path(__file__).parent / "align_symm_axis.sbatch"),
-    default_input_column="symm_path",
+    default_input_column="make_symmdef_path",
     build_manifest_fn=build_align_symm_axis_manifest,
     collect_fn=collect_align_symm_axis,
 )
