@@ -379,7 +379,7 @@ def _build_create_specs(
 
 def _build_root_specs(
     ctx: ManifestCtx[RFD3Args], extra_fields: dict[str, Any]
-) -> list[tuple[str, dict[str, Any]]]:
+) -> tuple[str, list[tuple[str, dict[str, Any]]]]:
     """Root run (no --table): a single design group, from --input-pdb or de-novo.
 
     Root means "start a fresh lineage without iterating a table column" -- NOT
@@ -406,11 +406,7 @@ def _build_root_specs(
         input_path = None
         name = "denovo_diff"
 
-    # A root run has no parent table for collect to iterate; record the group name
-    # so `sapia collect` can find its outputs and rebuild its rows.
-    ctx.write_meta(root_designs=[name])
-
-    return [(name, _build_spec(name, input_path, ctx.args, ctx.lookup, extra_fields))]
+    return name, [(name, _build_spec(name, input_path, ctx.args, ctx.lookup, extra_fields))]
 
 
 def _cli_overrides(args: RFD3Args) -> str:
@@ -434,7 +430,10 @@ def build_rfd3_manifest(ctx: ManifestCtx[RFD3Args]) -> list[tuple[str, ...]]:
     extra_fields = load_extra_spec(ctx.args.extra_spec)
 
     if ctx.args.table is None:
-        specs = _build_root_specs(ctx, extra_fields)
+        name, specs = _build_root_specs(ctx, extra_fields)
+        # A root run has no parent table for collect to iterate; record the group name
+        # so `sapia collect` can find its outputs and rebuild its rows.
+        ctx.write_meta(root_designs=[name])
     else:
         if ctx.args.input_pdb is not None:
             raise ValueError(

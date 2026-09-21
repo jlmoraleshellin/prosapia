@@ -344,7 +344,7 @@ def _build_create_designs(
 
 def _build_root_designs(
     ctx: ManifestCtx[RFDiffArgs], global_extra: str
-) -> list[tuple[str, ...]]:
+) -> tuple[str, list[tuple[str, ...]]]:
     """Root run (no --table): a single design group, from --input-pdb or de-novo.
 
     Root means "start a fresh lineage without iterating a table column" -- NOT
@@ -373,11 +373,7 @@ def _build_root_designs(
         name = "denovo_diff"
         staged_input = None
 
-    # A root run has no parent table for collect to iterate; record the group name
-    # so `sapia collect` can find <out_dir>/<name>/ and rebuild its rows.
-    ctx.write_meta(root_designs=[name])
-
-    return [
+    return name, [
         _assemble_design(
             name, staged_input, ctx.args, ctx.out_dir, ctx.lookup, global_extra
         )
@@ -388,7 +384,10 @@ def build_rfdiff_manifest(ctx: ManifestCtx[RFDiffArgs]) -> list[tuple[str, ...]]
     global_extra = _global_extra(ctx.args)
 
     if ctx.args.table is None:
-        designs = _build_root_designs(ctx, global_extra)
+        name, designs = _build_root_designs(ctx, global_extra)
+        # A root run has no parent table for collect to iterate; record the group name
+        # so `sapia collect` can find <out_dir>/<name>/ and rebuild its rows.
+        ctx.write_meta(root_designs=[name])
     else:
         if ctx.args.input_pdb is not None:
             raise ValueError(
