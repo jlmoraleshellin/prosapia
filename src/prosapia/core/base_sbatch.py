@@ -360,7 +360,11 @@ def _submit_array(
     print("Submitting:", " ".join(cmd))
     result = subprocess.run(
         cmd,
-        env={**os.environ, "SAPIA_PRELUDE": str(PRELUDE_PATH)},
+        env={
+            **os.environ,
+            "SAPIA_PRELUDE": str(PRELUDE_PATH),
+            "SAPIA_TOOL_DIR": str(Path(args.sbatch_script).resolve().parent),
+        },
     )
     if result.returncode != 0:
         raise RuntimeError(f"sbatch exited {result.returncode}")
