@@ -27,8 +27,10 @@ Everything else is opt-in and appended to run_inference.py only when set:
 repeatable ``--set key=value``. All per-design activation happens here at manifest-build
 time (renumber + contig resolution); the sbatch just launches the binary.
 
-With --per-card N, designs are chunked N at a time into per-task sub-manifests;
-each array task runs its N diffusions concurrently on a single GPU.
+Each array task gets a sub-manifest of --per-card x --shard-size designs, split
+into --per-card lanes that run concurrently on the task's single GPU; each lane
+runs its --shard-size designs in series. Every design is still its own
+run_inference.py process, so the model is reloaded per design either way.
 
 Usage:
     # general run, config-driven
@@ -68,6 +70,7 @@ class RFDiffArgs(CommonArgs):
     input_pdb: Path | None
     replicate: str | int | None
     per_card: int
+    shard_size: int
     symmetry: str | None
     partial_T: int | None
     num_designs: int | None
@@ -129,6 +132,15 @@ def add_run_rfdiffusion_args(parser: ArgumentParser):
         help="Number of diffusions to run concurrently on a single GPU. They "
         "time-share the card, so scale --mem/--cpus-per-task accordingly and "
         "watch for VRAM OOM. Defaults to 1 (one diffusion per card).",
+    )
+    parser.add_argument(
+        "--shard-size",
+        type=int,
+        default=1,
+        help="Number of diffusions each --per-card lane runs in series, so an "
+        "array task holds per-card x shard-size designs. Memory-safe (no extra "
+        "concurrency), but each design is still its own process and reloads the "
+        "model; size it so the task finishes inside --time. Defaults to 1.",
     )
     parser.add_argument(
         "--symmetry",
@@ -396,17 +408,19 @@ def build_rfdiff_manifest(ctx: ManifestCtx[RFDiffArgs]) -> list[tuple[str, ...]]
             )
         designs = _build_create_designs(ctx, global_extra)
 
-    # One sub-manifest per task; the sbatch script launches its rows
-    # concurrently on the task's single allocated GPU.
+    # One sub-manifest per task. Each row is prefixed with its lane: the sbatch
+    # runs lanes concurrently on the task's single GPU, and each lane's rows in series.
     task_dir = ctx.out_dir / "diffusion_tasks"
     task_dir.mkdir(parents=True, exist_ok=True)
 
+    per_card = ctx.args.per_card
+    per_task = per_card * ctx.args.shard_size
     manifest_rows: list[tuple[str, ...]] = []
-    for i in range(0, len(designs), ctx.args.per_card):
-        chunk = designs[i : i + ctx.args.per_card]
-        sub = task_dir / f"task_{i // ctx.args.per_card}.tsv"
+    for i in range(0, len(designs), per_task):
+        chunk = designs[i : i + per_task]
+        sub = task_dir / f"task_{i // per_task}.tsv"
         with open(sub, "w") as f:
-            for row in chunk:
-                f.write("\t".join(row) + "\n")
+            for j, row in enumerate(chunk):
+                f.write("\t".join((str(j % per_card), *row)) + "\n")
         manifest_rows.append((str(sub),))
     return manifest_rows
