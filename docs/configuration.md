@@ -143,9 +143,9 @@ One template serves both: `activation/rosetta.sh`; point both variables at your 
 | --- | --- | --- | --- |
 | `ROSETTA` | activation script | yes | Rosetta install root (the sbatch calls `$ROSETTA/bin/rosetta_scripts…` and `$ROSETTA/src/…`). |
 
-### align_symm_axis — `SAPIA_ACTIVATE_ALIGN_SYMM_AXIS`
+### Pure-Python tools — `SAPIA_ACTIVATE_ALIGN_SYMM_AXIS` (align_symm_axis)
 
-Template: `activation/align_symm_axis.sh`.
+These tools only need a Python with prosapia's own deps (gemmi, numpy, pandas). One template serves them all: `activation/python.sh`; point each tool's variable at your copy.
 
 | Variable | Where | Required | Meaning |
 | --- | --- | --- | --- |
