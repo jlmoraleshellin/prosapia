@@ -24,7 +24,6 @@ Usage:
 
 import json
 import re
-from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -41,20 +40,6 @@ from prosapia.utils import ensure_pdb
 
 # Metadata keys pulled from the per-design sidecar JSON when present.
 RFD3_METADATA_KEYS = ["ca_rmsd_to_input"]
-
-
-class RFD3CollectArgs(CollectArgs):
-    num_designs: int
-
-
-def add_collect_rfd3_args(parser: ArgumentParser) -> None:
-    parser.add_argument(
-        "--num-designs",
-        type=int,
-        default=1,
-        help="Expected outputs per parent (used to mark parents with no outputs "
-        "as errors). Defaults to 1.",
-    )
 
 
 def _load_metadata(json_path: Path) -> dict[str, Any]:
@@ -78,28 +63,20 @@ def _find_outputs(results_dirs: list[Path], name: str) -> list[tuple[int, int, P
     return found
 
 
-def collect_rfd3(ctx: CollectCtx[RFD3CollectArgs]) -> CollectEach:
+def collect_rfd3(ctx: CollectCtx[CollectArgs]) -> CollectEach:
     """Per-parent RFdiffusion3 collector. A create tool: the framework iterates the
     ready parents and this rebuilds each parent's child rows (``<name>_<i>``) from the
-    outputs on disk, converting each ``.cif.gz`` to PDB. The framework stamps
-    status/path/parent_name from each Collected."""
+    outputs on disk, converting each ``.cif.gz`` to PDB. A parent with no outputs
+    yields no rows. The framework stamps status/path/parent_name from each Collected."""
     results_dirs = sorted(d for d in ctx.out_dir.glob("results_*") if d.is_dir())
     print(f"Scanning {len(results_dirs)} results dir(s) in {ctx.out_dir}")
-    num_designs = ctx.args.num_designs
     run_dir = ctx.args.run_dir
 
     def one(d: DesignCtx) -> Iterable[Collected]:
         outputs = _find_outputs(results_dirs, d.name)
 
         if not outputs:
-            print(f"{d.name}: no outputs, marking {num_designs} row(s) as error")
-            for i in range(num_designs):
-                yield Collected(
-                    name=f"{d.name}_{i}",
-                    parent=d.name,
-                    status="error: no output",
-                    data={"iteration": i},
-                )
+            print(f"{d.name}: no outputs, skipping")
             return
 
         for i, (batch, model, cif_gz) in enumerate(outputs):

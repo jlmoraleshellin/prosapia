@@ -32,8 +32,8 @@ Extra ``InputSpecification`` fields the dedicated flags don't expose (``ligand``
 ``select_fixed_atoms``, ``select_hotspots``, ...) can be supplied via ``--extra-spec``,
 a YAML or JSON file whose top-level mapping is merged into every design's spec; its
 string values may embed the same ``{expr}`` placeholders. Setting a field that a
-dedicated flag also sets is an error. Each design needs a ``contig`` or a ``length``
-(from a flag or --extra-spec).
+dedicated flag also sets is an error; ``contig`` and ``length`` may come from
+either their flag or --extra-spec.
 
 Usage:
     # general, table-driven
@@ -75,8 +75,7 @@ _HAS_PLACEHOLDER = re.compile(r"\{[^}]*\}")
 
 class SpecConfigError(ValueError):
     """A run-wide spec misconfiguration that applies to every design (e.g. an
-    --extra-spec field colliding with a dedicated flag, or no contig from either
-    source). Unlike a per-row error, it is not swallowed by the create loop's
+    --extra-spec field colliding with a dedicated flag). Unlike a per-row error, it is not swallowed by the create loop's
     warn-and-skip -- it fails the whole submit up front."""
 
 
@@ -107,8 +106,7 @@ def add_run_rfd3_args(parser: ArgumentParser) -> None:
         "reference the input by chain+residue (e.g. `A40-60`), designed regions are "
         "bare numbers or ranges (e.g. `30` or `60-80`), and the section `/0` breaks chains (comma-delimited, e.g. `A1-100,/0,B1-50`). May "
         "embed {expr} placeholders resolved per-design up the lineage (integers, bare "
-        "table column names, and + - * //). Optional: a design needs a `contig` or a "
-        "`--length`; the `contig` may instead come from --extra-spec.",
+        "table column names, and + - * //). The `contig` may come from --extra-spec.",
     )
     parser.add_argument(
         "--length",
@@ -117,18 +115,17 @@ def add_run_rfd3_args(parser: ArgumentParser) -> None:
         help="Total design length constraint (per-design `length`): an int or "
         "'min-max'. May embed {expr} placeholders. For a de-novo symmetric oligomer "
         "this is one subunit's length (e.g. --length 100 --symmetry C5, no contig). "
-        "Omitted by default (rfd3 infers it from the contig).",
+        "Omitted by default (rfd3 infers it from the contig). It may come from --extra-spec.",
     )
     parser.add_argument(
         "--extra-spec",
         type=str,
         default=None,
-        help="Path to a YAML or JSON file: a mapping of extra rfd3 "
-        "InputSpecification fields (e.g. ligand, select_fixed_atoms, "
+        help="Path to a YAML or JSON file: a mapping of (extra) rfd3 "
+        "InputSpecification fields (e.g. contig, length, ligand, select_fixed_atoms, "
         "select_hotspots, redesign_motif_sidechains) merged into EVERY design's "
         "spec. String values may embed {expr} placeholders resolved per-design up "
-        "the lineage. Setting a field that a dedicated flag also sets (contig, "
-        "input, length, symmetry, partial_t) is an error.",
+        "the lineage. Can be used instead of specific flags like --length or --contigs."
     )
     parser.add_argument(
         "--input-pdb",
@@ -137,8 +134,8 @@ def add_run_rfd3_args(parser: ArgumentParser) -> None:
         help="Single input structure to diffuse when starting a ROOT run (no "
         "--table): motif/partial diffusion of one PDB that isn't in any table yet. "
         "Only valid without --table (with a table, inputs come from --input-column). "
-        "Omit for pure de-novo generation. The design group is named after this "
-        "file's stem.",
+        "Omit for pure de-novo generation. The design group is named "
+        "`<stem>_diff` (or `denovo_diff` with no input).",
     )
     parser.add_argument(
         "--symmetry",
@@ -292,8 +289,7 @@ def _build_spec(
     (the ``input`` field is then omitted). ``extra_fields`` is the parsed --extra-spec
     mapping, resolved per-design and merged in. Raises ValueError on a per-row problem
     (an unresolvable contig/length, or ``--symmetry auto`` with no input to count
-    chains from), and the run-wide ``SpecConfigError`` on an extra-spec collision or
-    when neither a contig nor a length is supplied by any source.
+    chains from), and the run-wide ``SpecConfigError`` on an extra-spec collision.
     """
     tool_fields: dict[str, Any] = {}
 
@@ -338,13 +334,6 @@ def _build_spec(
         )
 
     spec = {**resolved_extra, **tool_fields}
-    # rfd3 needs something that defines what to build: a contig (motif/scaffold) or a
-    # length (e.g. a de-novo symmetric oligomer's subunit length).
-    if "contig" not in spec and "length" not in spec:
-        raise SpecConfigError(
-            "a design needs a contig or a length: pass --contigs/--length, or "
-            "include a 'contig'/'length' field in --extra-spec"
-        )
     return spec
 
 
@@ -406,7 +395,9 @@ def _build_root_specs(
         input_path = None
         name = "denovo_diff"
 
-    return name, [(name, _build_spec(name, input_path, ctx.args, ctx.lookup, extra_fields))]
+    return name, [
+        (name, _build_spec(name, input_path, ctx.args, ctx.lookup, extra_fields))
+    ]
 
 
 def _cli_overrides(args: RFD3Args) -> str:

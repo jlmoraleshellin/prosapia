@@ -5,8 +5,7 @@ Rebuild the diffusion table from a run directory's diffused/ outputs.
 For each parent design folder under <run_dir>/<diffused-dir-name>/, this looks
 for a command.txt marker file (written by rfdiffusion.sbatch once a task has
 run) and, if present, registers every <name>_<i>.pdb it finds as an OK row in the
-diffusion table. Parents missing the marker file get an "error: no marker" row per
-expected iteration.
+diffusion table. Parents missing the marker file (or with no PDBs) contribute no rows.
 
 Run this after the rfdiffusion SLURM array; it (re)builds the diffusion table by
 scanning the outputs, so it is safe to re-run to rebuild a corrupted table.
@@ -16,7 +15,6 @@ Usage:
 """
 
 import re
-from argparse import ArgumentParser
 from pathlib import Path
 from typing import Iterable
 
@@ -43,43 +41,18 @@ def _find_diffused_pdbs(parent_dir: Path, name: str) -> list[tuple[int, Path]]:
     return found
 
 
-class DiffusionCollectArgs(CollectArgs):
-    num_designs: int
-
-
-def add_collect_rfdiffusion_args(parser: ArgumentParser) -> None:
-    parser.add_argument(
-        "--num-designs",
-        type=int,
-        default=10,
-        help="Expected number of iterations per parent (used when marking "
-        "failed parents). Defaults to 10.",
-    )
-
-
-def collect_diffusion(ctx: CollectCtx[DiffusionCollectArgs]) -> CollectEach:
+def collect_diffusion(ctx: CollectCtx[CollectArgs]) -> CollectEach:
     """Per-parent rfdiffusion collector. rfdiffusion is a create tool: the framework
-    iterates the ready parents and this rebuilds each parent's child rows from its
-    on-disk output dir (out_dir/<name>/). A parent with no dir/marker is marked
-    failed. The framework stamps status/path/parent_name from each Collected."""
-    num_designs = ctx.args.num_designs
+    iterates the ready parents and this rebuilds each parent's child rows from the
+    diffused PDBs found in its on-disk output dir (out_dir/<name>/). A parent with no
+    dir/marker yields no rows. The framework stamps status/path/parent_name from each
+    Collected."""
 
     def one(d: DesignCtx) -> Iterable[Collected]:
         parent_dir = ctx.out_dir / d.name
-        marker = parent_dir / MARKER_FILENAME
 
-        if not marker.exists():
-            # No success marker -- treat the whole parent as failed.
-            print(
-                f"{d.name}: no {MARKER_FILENAME}, marking {num_designs} row(s) as error"
-            )
-            for i in range(num_designs):
-                yield Collected(
-                    name=f"{d.name}_{i}",
-                    parent=d.name,
-                    status="error: no marker",
-                    data={"iteration": i},
-                )
+        if not (parent_dir / MARKER_FILENAME).exists():
+            print(f"{d.name}: no {MARKER_FILENAME}, skipping")
             return
 
         pdbs = _find_diffused_pdbs(parent_dir, d.name)

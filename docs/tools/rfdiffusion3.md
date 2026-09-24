@@ -15,7 +15,7 @@ Contigs are authored in rfd3's native contig syntax: indexed motif segments refe
 
 A `{expr}` needs a lineage to resolve against, so it is only valid **with** `-t/--table`; a root run must use literal contigs (this also applies to `--length` and `--extra-spec`).
 
-A design needs a `contig` **or** a `--length` (see [de-novo symmetric](#symmetric-diffusion---symmetry) below); the `contig` may also come from `--extra-spec` instead of `--contigs`.
+The `contig` and `length` may each come from `--contigs`/`--length` or from `--extra-spec` (a de-novo symmetric oligomer needs only a length — see [below](#symmetric-diffusion---symmetry)).
 
 ## Symmetric diffusion: `--symmetry`
 
@@ -75,7 +75,7 @@ The same file as JSON works identically:
 ## Root vs. create
 
 - **Create** (with `-t/--table`): one design group per ready row, inputs from `--input-column`. The input PDB/CIF is used as-is — rfd3 contigs reference the input's own chain+residue numbers, so no renumbering is done (unlike RFdiffusion).
-- **Root** (no `-t`): a single design group. Pass `--input-pdb` to diffuse one structure not yet in any table (motif / partial), or omit it for pure de-novo. `--input-pdb` is root-only, and a root run can't use `{expr}` (no lineage).
+- **Root** (no `-t`): a single design group, named `<input-stem>_diff` when you pass `--input-pdb` (diffuse one structure not yet in any table — motif / partial) or `denovo_diff` when you omit it (pure de-novo). Its outputs collect as rows `<group>_<i>`. `--input-pdb` is root-only, and a root run can't use `{expr}` (no lineage).
 
 ## How the array is distributed
 
