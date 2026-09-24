@@ -6,7 +6,7 @@
 
 ## Contigs, with `{expr}` placeholders
 
-Contigs are authored in rfd3's native contig syntax: indexed motif segments reference the input by chain+residue (`A40-60`), designed regions are bare numbers or ranges (`30`, `60-80`), and `/0` breaks chains. Any `{expr}` island is resolved **per design** against the table lineage. It accepts integers, bare column names, and `+ - * //` arithmetic:
+Contigs are authored in rfd3's native contig syntax: indexed motif segments reference the input by chain+residue (`A40-60`), designed regions are bare numbers or ranges (`30`, `60-80`), and the section `/0` breaks chains (comma-delimited like any other section, e.g. `A1-100,/0,B1-50`). Any `{expr}` island is resolved **per design** against the table lineage. It accepts integers, bare column names, and `+ - * //` arithmetic:
 
 ```bash
 --contigs 'A1-{motif_end},30'      # motif A1..motif_end + 30 designed residues

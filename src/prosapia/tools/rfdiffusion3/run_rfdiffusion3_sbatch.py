@@ -105,7 +105,7 @@ def add_run_rfd3_args(parser: ArgumentParser) -> None:
         "write the contig for a SINGLE asymmetric unit -- rfd3's symmetric sampler "
         "replicates it across the group (see --symmetry). Indexed motif segments "
         "reference the input by chain+residue (e.g. `A40-60`), designed regions are "
-        "bare numbers or ranges (e.g. `30` or `60-80`), and `/0` breaks chains. May "
+        "bare numbers or ranges (e.g. `30` or `60-80`), and the section `/0` breaks chains (comma-delimited, e.g. `A1-100,/0,B1-50`). May "
         "embed {expr} placeholders resolved per-design up the lineage (integers, bare "
         "table column names, and + - * //). Optional: a design needs a `contig` or a "
         "`--length`; the `contig` may instead come from --extra-spec.",
