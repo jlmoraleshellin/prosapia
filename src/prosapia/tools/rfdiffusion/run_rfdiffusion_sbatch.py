@@ -52,7 +52,7 @@ from typing import Callable, cast
 import gemmi
 
 from prosapia.core import CommonArgs, ManifestCtx
-from prosapia.utils import resolve_template
+from prosapia.utils import count_polymer_chains, resolve_template
 
 # A fixed contig segment references an input chain: an uppercase chain letter
 # immediately followed by a residue number (e.g. A1-108). Diffused segments
@@ -211,14 +211,6 @@ def renumber_chains_independently(src: Path, dst: Path) -> None:
     structure.write_pdb(str(dst))
 
 
-def _count_chains(pdb_path: Path) -> int:
-    """Return the number of polymer chains in the first model (cyclic symmetry order)."""
-    structure = gemmi.read_structure(str(pdb_path))
-    structure.setup_entities()
-    model = structure[0]
-    return sum(1 for chain in model if len(chain.get_polymer()) > 0)
-
-
 def _replicate_contig(unit_spec: str, n_chains: int) -> str:
     """Replicate a single asymmetric-unit spec across n chains (A, B, C, ...).
 
@@ -298,7 +290,7 @@ def _assemble_design(
             "(e.g. c3) / replicate count, or provide --input-pdb."
         )
     else:
-        n_chains = _count_chains(staged_input)
+        n_chains = count_polymer_chains(staged_input)
 
     if args.replicate is not None:
         n_rep = n_chains if args.replicate == "auto" else args.replicate

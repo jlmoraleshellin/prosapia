@@ -1,6 +1,6 @@
 # Using ProteinMPNN
 
-`sapia run proteinmpnn` designs sequences for backbones with ProteinMPNN, spawning a new child table. It is a terse, fully-explicit interface over ProteinMPNN's per-chain helper syntax: one small mini-language drives it and nothing is inferred from the structure.
+`sapia run proteinmpnn` designs sequences for backbones with ProteinMPNN, spawning a new child table. It is a terse, fully-explicit interface over ProteinMPNN's per-chain helper syntax: one small mini-language drives it, and only `--symmetry` reads anything from the structure.
 
 `sapia run proteinmpnn --help` is the authoritative flag list; this page covers that mini-language (chains, then positions) and how the array is distributed.
 
@@ -28,9 +28,25 @@ The same `:` range / `,` separator grammar, extended for positions: `/` breaks c
 
 Positions are **1-indexed within each parsed chain** (ProteinMPNN renumbers every chain to 1..L), not original PDB numbering. Order is preserved and not de-duplicated; tied groups must be equal length and are tied index-parallel. Per-chain positions require `--chains-to-design` to map their groups onto.
 
-## Symmetry shortcut
+ProteinMPNN expects **one group per designed chain**, so a spec with fewer groups than chains is an error on its side (`fixed_position_dict[chain] = fixed_list[i]` → `IndexError`) — write every group out with `/`, or let `--symmetry` broadcast a single one.
 
-`--symmetry` is a homo-oligomer convenience with no single ProteinMPNN switch: it ties all chains (`make_tied_positions_dict --homooligomer 1`, chains auto-detected at run time) and designs every chain. Mutually exclusive with `--tied-positions`.
+## Symmetry shortcut (`--symmetry auto|N`)
+
+`--symmetry` is a homo-oligomer convenience with no single ProteinMPNN switch. It does two things:
+
+- **Ties all chains**, via `make_tied_positions_dict --homooligomer 1`.
+- **Broadcasts a one-unit position spec.** A `--fixed-positions` spec with a single group describes one asymmetric unit, and it is replicated across the designed chains — so you write the unit once instead of repeating it per chain. Any other group count is passed through untouched.
+
+The order comes from `auto` (the input structure's polymer chain count) or from a plain integer — for ProteinMPNN, symmetry is only ever a *number of tied chains*. With no `--chains-to-design`, the designed chains are the structure's first N, read from the file (chain names are not assumed to be a sequential `A`, `B`, `C` run).
+
+```bash
+# one 12-mer unit, written once
+--fixed-positions 1:3,48:96 --symmetry auto
+# same, with the order stated and the chains explicit
+--fixed-positions 1:3,48:96 --symmetry 12 --chains-to-design A:L
+```
+
+Mutually exclusive with `--tied-positions`.
 
 ## Other knobs
 
@@ -50,5 +66,5 @@ This is what keeps walltime down: the model-load cost is paid **per group, not p
 # homo-oligomer redesign after boltz, larger tasks
 sapia run proteinmpnn outputs/RUN --table boltz_table --table-label proteinmpnn_r2 \
     --input-column boltz_path --filter filters/filter1_after_boltz.py \
-    --symmetry --designs-per-task 20 --num-seq-per-target 10
+    --symmetry auto --designs-per-task 20 --num-seq-per-target 10
 ```

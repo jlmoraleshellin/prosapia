@@ -56,13 +56,12 @@ from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any, cast
 
-import gemmi
 import yaml
 from dotenv import load_dotenv
 
 from prosapia.core import CommonArgs, ManifestCtx
 from prosapia.core.data_manager import LookupFn
-from prosapia.utils import resolve_template
+from prosapia.utils import count_polymer_chains, resolve_template
 
 load_dotenv()
 
@@ -202,17 +201,6 @@ def add_run_rfd3_args(parser: ArgumentParser) -> None:
     )
 
 
-def _count_polymer_chains(pdb_path: Path) -> int:
-    """Count polymer chains in the input's first model (the cyclic symmetry order
-    used by ``--symmetry auto``)."""
-    structure = gemmi.read_structure(str(pdb_path))
-    model = structure[0]
-    n_chains = sum(1 for chain in model if len(chain.get_polymer()) > 0)
-    if n_chains == 0:
-        raise ValueError(f"{pdb_path}: no polymer chains found")
-    return n_chains
-
-
 def _coerce_length(length: str) -> int | str:
     """Length is an int when purely numeric, else a verbatim 'min-max' string."""
     return int(length) if length.isdigit() else length
@@ -312,7 +300,7 @@ def _build_spec(
                     "this design has none. Pass an explicit symmetry (e.g. C4) or "
                     "provide --input-pdb."
                 )
-            sym_id = f"C{_count_polymer_chains(input_path)}"
+            sym_id = f"C{count_polymer_chains(input_path)}"
         else:
             sym_id = args.symmetry
         # is_symmetric_motif declares that an INPUT motif is already symmetrized; it

@@ -12,7 +12,8 @@ and gated by a flag below; anything else is deferred to the binary via repeatabl
 ``--set`` (native flags and pre-made jsonl paths alike).
 
 This is a terse, fully-explicit interface over ProteinMPNN's per-chain helper
-syntax. Two small mini-languages drive it; nothing is derived from the structure.
+syntax. Two small mini-languages drive it, and only ``--symmetry`` reads anything
+from the structure (its chain names, to size the oligomer).
 
 Chain mini-language (``--chains-to-design``): the chains you design, in ProteinMPNN
 order. ``:`` is an inclusive letter range, ``,`` separates:
@@ -41,10 +42,16 @@ positions are index-parallel: group j's i-th entry ties to group 0's i-th entry)
 The user is responsible for aligning group counts to chains and keeping tied groups
 equal length; ProteinMPNN raises on a mismatch.
 
-Symmetry (``--symmetry``): homo-oligomer convenience with no ProteinMPNN equivalent
-as a single switch -- ties all chains via ``make_tied_positions_dict --homooligomer 1``
-(chains auto-detected at run time) and designs every chain. Mutually exclusive with
-``--tied-positions``.
+Symmetry (``--symmetry auto|N``): homo-oligomer convenience with no ProteinMPNN
+equivalent as a single switch. It ties all chains via ``make_tied_positions_dict
+--homooligomer 1``, and it makes the position mini-language describe a single
+asymmetric unit: a lone group is broadcast across the designed chains, since
+ProteinMPNN wants one group per chain in ``--chain_list``. ``auto`` takes the order
+from the input's polymer chain count, otherwise pass that count as a plain integer;
+with no ``--chains-to-design`` the designed chains are the structure's first N.
+Mutually exclusive with ``--tied-positions``.
+
+    --fixed-positions 1:3,48:96 --symmetry auto   # that unit, in every chain
 
 Other generalized knobs:
     --bias-aa "D:1.39 E:1.39" global AA composition bias (make_bias_AA); space-
@@ -61,7 +68,7 @@ Usage:
     # after boltz, a homo-oligomer (reproduces upstream example 6), larger tasks
     sapia run proteinmpnn outputs/<run> --table proteinmpnn_table --table-label proteinmpnn_r2 \\
         --input-column boltz_path --filter filters/filter1_after_boltz.py \\
-        --symmetry --designs-per-task 20 --num-seq-per-target 10
+        --symmetry auto --designs-per-task 20 --num-seq-per-target 10
 """
 
 import json
@@ -75,14 +82,19 @@ from prosapia.core import (
     LookupFn,
     ManifestCtx,
 )
-from prosapia.utils import ensure_pdb, expand_chain_spec, parse_positions
+from prosapia.utils import (
+    ensure_pdb,
+    expand_chain_spec,
+    parse_positions,
+    polymer_chain_names,
+)
 
 
 class ProteinMPNNArgs(CommonArgs):
     chains_to_design: str
     fixed_positions: str
     tied_positions: str
-    symmetry: bool
+    symmetry: str | None
     bias_aa: str
     set: list[str]
     num_seq_per_target: int
@@ -102,7 +114,13 @@ def _parse_chains(spec: str) -> str:
     return " ".join(expand_chain_spec(spec))
 
 
-def _parse_positions(spec: str, lookup: LookupFn, name: str) -> str:
+def _parse_positions(
+    spec: str,
+    lookup: LookupFn,
+    name: str,
+    *,
+    broadcast_to: int | None = None,
+) -> str:
     """Expand the position mini-language into a ProteinMPNN ``--position_list``.
 
     A thin string formatter over the shared ``parse_positions`` (which resolves
@@ -112,9 +130,55 @@ def _parse_positions(spec: str, lookup: LookupFn, name: str) -> str:
     positions are index-parallel (group j's i-th entry ties to group 0's i-th).
     Empty spec -> "". Open-ended ranges are rejected here (no chain length is
     known); alignment and validity are left to ProteinMPNN.
+
+    ``broadcast_to`` (set from ``--symmetry``) replicates a spec that describes a
+    SINGLE asymmetric unit across that many chains, so one group can serve a
+    homo-oligomer. Only a lone group is replicated: any other count is passed
+    through untouched, and ProteinMPNN remains the judge of whether it matches the
+    chain list.
     """
     groups = parse_positions(spec, lookup, name)
+    if broadcast_to and len(groups) == 1:
+        groups = groups * broadcast_to
     return ", ".join(" ".join(str(p) for p in group) for group in groups)
+
+
+def _check_symmetry_spec(spec: str | None) -> None:
+    """Validate the ``--symmetry`` value up front, before anything is submitted.
+
+    Structure-independent, so it runs once per submit rather than per design.
+    ``auto`` defers the order to each design's chain count; anything else must be
+    a plain integer >= 2, since for ProteinMPNN symmetry only ever means "how many
+    chains are tied" -- a point-group id has nothing to contribute.
+    """
+    if spec is None or spec == "auto":
+        return
+    try:
+        order = int(spec)
+    except ValueError:
+        raise ValueError(
+            f"--symmetry: expected 'auto' or an integer chain count, got {spec!r} "
+            f"(write the number of chains in the oligomer, e.g. --symmetry 12)"
+        )
+    if order < 2:
+        raise ValueError(f"--symmetry: order must be at least 2, got {order}")
+
+
+def _resolve_chains(args: ProteinMPNNArgs, pdb_src: Path) -> str:
+    """One design's designed-chain list, as a ProteinMPNN ``--chain_list`` string.
+
+    ``--chains-to-design`` wins when given. Otherwise ``--symmetry`` derives the
+    list from the structure itself -- the first ``order`` polymer chains, where
+    ``auto`` takes every one of them -- so a homo-oligomer needs neither a chain
+    spec nor a count. With neither flag, "" leaves every chain designed.
+    """
+    if args.chains_to_design:
+        return _parse_chains(args.chains_to_design)
+    if args.symmetry is None:
+        return ""
+    names = polymer_chain_names(pdb_src)
+    order = len(names) if args.symmetry == "auto" else int(args.symmetry)
+    return " ".join(names[:order])
 
 
 def _write_bias_jsonl(spec: str, out_dir: Path) -> str:
@@ -210,22 +274,28 @@ def build_proteinmpnn_manifest(
     # input-status prefilter is needed here.
     ready = ctx.ready
 
-    # Run-wide pieces (all structure-independent): argv tail and the chain list.
+    # Run-wide pieces (all structure-independent): argv tail and the bias jsonl.
     bias_path = _write_bias_jsonl(ctx.args.bias_aa, ctx.out_dir)
     mpnn_extra = _mpnn_extra(ctx.args, bias_path)
-    chains = _parse_chains(ctx.args.chains_to_design)
 
     # Guardrails: tying is either the homo-oligomer shortcut or explicit, not both;
-    # per-chain positions need a chain list to map their groups onto.
-    if ctx.args.symmetry and ctx.args.tied_positions:
+    # per-chain positions need a chain list to map their groups onto, which
+    # --symmetry can supply from the structure instead.
+    _check_symmetry_spec(ctx.args.symmetry)
+    if ctx.args.symmetry is not None and ctx.args.tied_positions:
         raise ValueError(
             "--symmetry (homo-oligomer tie) and --tied-positions (explicit tie) are "
             "mutually exclusive"
         )
-    if (ctx.args.fixed_positions or ctx.args.tied_positions) and not chains:
+    if (
+        (ctx.args.fixed_positions or ctx.args.tied_positions)
+        and not ctx.args.chains_to_design
+        and ctx.args.symmetry is None
+    ):
         raise ValueError(
             "--fixed-positions/--tied-positions require --chains-to-design (their "
-            "groups map one-to-one onto those chains)"
+            "groups map one-to-one onto those chains), or --symmetry to derive the "
+            "chains and broadcast one group across them"
         )
 
     # Stage each design (CIF->PDB via the shared cache; PDBs returned as-is) and
@@ -235,8 +305,18 @@ def build_proteinmpnn_manifest(
     for design_name in sorted(cast(str, n) for n in ready.index):
         input_path = Path(str(ready.at[design_name, ctx.args.input_column]))
         pdb_src = ensure_pdb(input_path, ctx.args.run_dir).resolve()
-        fixed_pl = _parse_positions(ctx.args.fixed_positions, ctx.lookup, design_name)
-        if ctx.args.symmetry:
+        chains = _resolve_chains(ctx.args, pdb_src)
+        # Under --symmetry a lone position group describes one asymmetric unit and
+        # is replicated across the designed chains (ProteinMPNN wants one group per
+        # chain in --chain_list).
+        broadcast = len(chains.split()) if ctx.args.symmetry is not None else None
+        fixed_pl = _parse_positions(
+            ctx.args.fixed_positions,
+            ctx.lookup,
+            design_name,
+            broadcast_to=broadcast,
+        )
+        if ctx.args.symmetry is not None:
             tie_mode, tied_pl = "homo", ""
         elif ctx.args.tied_positions:
             tie_mode, tied_pl = (
@@ -308,7 +388,8 @@ def add_run_proteinmpnn_args(parser: ArgumentParser) -> None:
         help="Chains to design, in ProteinMPNN order, as a chain mini-language: ':' is "
         "an inclusive letter range and ',' separates (e.g. 'A:C,E' -> 'A B C E'). Passed "
         "as --chain_list to assign_fixed_chains and, for the position flags, to "
-        "make_{fixed,tied}_positions_dict. Empty (default): design all chains.",
+        "make_{fixed,tied}_positions_dict. Empty (default): design all chains, or "
+        "the structure's first N when --symmetry says so.",
     )
     parser.add_argument(
         "--fixed-positions",
@@ -319,7 +400,9 @@ def add_run_proteinmpnn_args(parser: ArgumentParser) -> None:
         "',' separates fragments within a chain, 'start:end' is an inclusive range; table "
         "column expressions go in {...} islands (resolved up the lineage with + - * // "
         "arithmetic), everything else is a literal integer. 1-indexed within each parsed "
-        "chain. E.g. '9:23/10,11,18:20,22'. Empty (default): redesign everything.",
+        "chain. E.g. '9:23/10,11,18:20,22'. One group per designed chain is expected, "
+        "unless --symmetry broadcasts a single group across them. Empty (default): "
+        "redesign everything.",
     )
     parser.add_argument(
         "--tied-positions",
@@ -332,10 +415,17 @@ def add_run_proteinmpnn_args(parser: ArgumentParser) -> None:
     )
     parser.add_argument(
         "--symmetry",
-        action="store_true",
-        help="Homo-oligomer convenience: tie all chains via make_tied_positions_dict "
-        "--homooligomer 1 (chains auto-detected at run time; designs all chains). "
-        "Mutually exclusive with --tied-positions.",
+        type=str,
+        default=None,
+        metavar="AUTO|N",
+        help="Homo-oligomer convenience. Ties all chains via make_tied_positions_dict "
+        "--homooligomer 1, AND lets --fixed-positions describe a single asymmetric "
+        "unit: a lone position group is broadcast across the designed chains. "
+        "'auto' takes the order from the input structure's polymer chain count; "
+        "otherwise pass that count as a plain integer (e.g. 12 -- ProteinMPNN "
+        "symmetry is only ever a number of tied chains, not a point group). With no "
+        "--chains-to-design, the designed chains are the structure's first N. "
+        "Omitted by default. Mutually exclusive with --tied-positions.",
     )
     parser.add_argument(
         "--bias-aa",
