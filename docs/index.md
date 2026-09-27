@@ -4,11 +4,13 @@ New here? The [README](../README.md) has the pitch, installation, and a quick st
 
 ## Start here
 
-- **[Architecture](architecture.md)** — the shared table and the two-phase SLURM driver.
+- **[Architecture](architecture.md)** — the shared table and the two-phase driver.
 - **[Lineage & tables](lineage-and-tables.md)** — `create` vs. `update`, roots, the lineage tree, and `lookup`.
 - **[Using labels](using-labels.md)** — `--dir-label` and `--table-label` for same-tool variants and forking the lineage.
 - **[Configuration](configuration.md)** — binding tools via activation scripts, the environment-variable reference, and tool discovery.
-- **[Running a tool](running-a-tool.md)** — the `sapia run` flags and how they map to a SLURM array job.
+- **[Running a tool](running-a-tool.md)** — the `sapia run` flags shared by every run, and how the executors compare.
+  - **[Running on SLURM](running-on-slurm.md)** — how a run maps to `sbatch` arrays: partitions, chunking, `#SBATCH` overrides.
+  - **[Running on Modal](running-on-modal.md)** — the `sapia modal-shell` workstation, tool images, the runs Volume and task status.
 - **[Collecting a tool](collecting-a-tool.md)** — the `sapia collect` phase that writes a tool's outputs back into the table.
 - **[Using RFdiffusion](tools/rfdiffusion.md)**, **[Using RFdiffusion3](tools/rfdiffusion3.md)**, and **[Using ProteinMPNN](tools/proteinmpnn.md)** — guides to bundled tools with their own expression languages.
 - **[Writing a tool](writing-a-tool.md)**, **[Writing a build-manifest function](writing-a-build-manifest-function.md)**, and **[Writing a collect function](writing-a-collect-function.md)** — build your own tool, or customize a bundled one.

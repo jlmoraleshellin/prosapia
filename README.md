@@ -114,7 +114,7 @@ table to consume. Omit `-t` on a `create` tool to start a fresh root lineage.
 Only `sapia new_run` mints a `run_dir`; tools always operate inside an existing
 one.
 
-Every tool shares base `sapia run` flags — concurrency, partitions, GPUs, filtering, resume — and how they map to SLURM. See **[docs/running-a-tool.md](docs/running-a-tool.md)** for the full reference.
+Every tool shares base `sapia run` flags — concurrency, GPUs, filtering, resume — and runs on SLURM or Modal. See **[docs/running-a-tool.md](docs/running-a-tool.md)** for the full reference, and [running on SLURM](docs/running-on-slurm.md) / [running on Modal](docs/running-on-modal.md) for each scheduler.
 
 ## Two kinds of tools: `create` vs. `update`
 
@@ -140,7 +140,7 @@ A tool carries **no orchestration logic** — the driver supplies that. It is ju
 More detailed docs live under [`docs/`](docs/index.md):
 
 - [Architecture](docs/architecture.md) — the shared table and the two-phase driver.
-- [Running a tool](docs/running-a-tool.md) — the `sapia run` flags and how they map to SLURM.
+- [Running a tool](docs/running-a-tool.md) — the `sapia run` flags and the executors; see [running on SLURM](docs/running-on-slurm.md) and [running on Modal](docs/running-on-modal.md).
 - [Collecting a tool](docs/collecting-a-tool.md) — the `sapia collect` phase and its flags.
 - [Using labels](docs/using-labels.md) — `--dir-label` and `--table-label` for variants and forks.
 - [Using RFdiffusion](docs/tools/rfdiffusion.md), [using RFdiffusion3](docs/tools/rfdiffusion3.md), and [using ProteinMPNN](docs/tools/proteinmpnn.md) — bundled tools with their own expression languages.

@@ -26,7 +26,6 @@ from prosapia.core.executors.modal import (
     get_runs_volume,
 )
 
-TOKEN_SECRET_ENV = "SAPIA_MODAL_TOKEN_SECRET"
 REMOTE_DOTENV = "/root/sapia.env"
 # `sapia` without installing the package: prosapia is shipped as source. Written by
 # printf, so the \n escapes stay literal here.
@@ -72,21 +71,13 @@ def _image() -> modal.Image:
     return image
 
 
-def _secrets() -> list[modal.Secret]:
-    secrets = [modal.Secret.from_dict(get_dotenv_vars())]
-    # Only needed if the container's own credentials can't launch the task apps.
-    if name := os.environ.get(TOKEN_SECRET_ENV):
-        secrets.append(modal.Secret.from_name(name))
-    return secrets
-
-
 app = modal.App("sapia-workstation")
 
 
 @app.function(
     image=_image(),
     volumes={RUNS_MOUNT: get_runs_volume()},
-    secrets=_secrets(),
+    secrets=[modal.Secret.from_dict(get_dotenv_vars())],
     cpu=float(os.environ.get("SAPIA_MODAL_SHELL_CPU", 0.25)),
     memory=int(os.environ.get("SAPIA_MODAL_SHELL_MEMORY", 1024)),
     timeout=24 * 3600,
