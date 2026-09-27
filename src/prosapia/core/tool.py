@@ -24,7 +24,7 @@ class ToolOverrides(TypedDict, total=False):
     name: str
     action: Action
     description: str
-    default_sbatch: str
+    default_script: str
     default_input_column: str
     build_manifest_fn: BuildManifestFn
     collect_fn: CollectorFactory
@@ -37,7 +37,7 @@ class Tool:
     # Metadata
     name: str
     action: Action
-    default_sbatch: str
+    default_script: str
     default_input_column: str
     build_manifest_fn: BuildManifestFn
     collect_fn: CollectorFactory

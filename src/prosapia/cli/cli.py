@@ -74,7 +74,7 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
             parents=[
                 build_run_parser(
                     tool.metadata,
-                    tool.default_sbatch,
+                    tool.default_script,
                     tool.default_input_column,
                     tool.add_run_args_fn,
                 )

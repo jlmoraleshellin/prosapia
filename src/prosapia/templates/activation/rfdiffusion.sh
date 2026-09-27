@@ -1,5 +1,5 @@
 # Activation script for the `rfdiffusion` tool — point SAPIA_ACTIVATE_RFDIFFUSION here.
-# Sourced by rfdiffusion.sbatch on the compute node, before it runs run_inference.py.
+# Sourced by rfdiffusion.sh on the compute node, before it runs run_inference.py.
 # Job: activate the conda environment and set the necessary paths.
 
 # --- activation (use whatever your site provides) ---

@@ -1,6 +1,6 @@
 # sapia_task_prelude.sh — shared array-task scaffolding.
 #
-# Sourced by a tool's .sbatch via:  source "${SAPIA_PRELUDE:?}"
+# Sourced by a tool's .sh via:  source "${SAPIA_PRELUDE:?}"
 # (the `sapia` driver exports SAPIA_PRELUDE into the submit environment). Because
 # it is sourced, it shares the caller's positional parameters ($1, $2) and runs
 # in the same shell, so the variables it sets are visible to the rest of the script.

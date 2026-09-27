@@ -126,7 +126,7 @@ def build_usalign_manifest(ctx: ManifestCtx[USalignArgs]) -> list[tuple[str, ...
                 continue  # no col_b structure on this row or its ancestors
             src_b = Path(str(val))
         # Stage CIF->PDB up front (cached under run_dir/.cif_to_pdb). A missing
-        # input is passed through raw so the sbatch records it as an error.
+        # input is passed through raw so the task script records it as an error.
         pdb_a = ensure_pdb(src_a, ctx.args.run_dir) if src_a.exists() else src_a
         pdb_b = ensure_pdb(src_b, ctx.args.run_dir) if src_b.exists() else src_b
         manifest_rows.append((name, str(pdb_a), str(pdb_b), col_a, col_b_label, prefix))

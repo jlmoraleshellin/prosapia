@@ -7,7 +7,7 @@ single batched ``protein_mpnn_run`` call (model loaded once). Groups are then
 bin-packed onto SLURM array tasks up to ``--designs-per-task`` designs each.
 
 The pipeline (``parse_multiple_chains`` -> optional helper steps -> ``protein_mpnn_run``)
-runs inline in ``proteinmpnn.sbatch``, once per group. Each helper step is opt-in
+runs inline in ``proteinmpnn.sh``, once per group. Each helper step is opt-in
 and gated by a flag below; anything else is deferred to the binary via repeatable
 ``--set`` (native flags and pre-made jsonl paths alike).
 

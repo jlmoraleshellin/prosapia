@@ -3,7 +3,7 @@
 Rebuild the diffusion table from a run directory's diffused/ outputs.
 
 For each parent design folder under <run_dir>/<diffused-dir-name>/, this looks
-for a command.txt marker file (written by rfdiffusion.sbatch once a task has
+for a command.txt marker file (written by rfdiffusion.sh once a task has
 run) and, if present, registers every <name>_<i>.pdb it finds as an OK row in the
 diffusion table. Parents missing the marker file (or with no PDBs) contribute no rows.
 

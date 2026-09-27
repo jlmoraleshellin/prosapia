@@ -1,5 +1,5 @@
 # Activation script for the `USalign` tool — point SAPIA_ACTIVATE_USALIGN here.
-# Sourced by usalign.sbatch before it runs USalign.
+# Sourced by usalign.sh before it runs USalign.
 # Job: make the USalign binary available.
 
 # Either put it on PATH (use whatever your site provides)...

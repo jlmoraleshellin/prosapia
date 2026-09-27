@@ -3,7 +3,7 @@
 Collect make_symmdef results into the table.
 
 Scans <run_dir>/<table>/make_symmdef/ for the per-design TSV files written
-by make_symmdef.sbatch, and merges the symm status + path back into the
+by make_symmdef.sh, and merges the symm status + path back into the
 specified table as <prefix>_status / <prefix>_path columns.
 
 Usage:

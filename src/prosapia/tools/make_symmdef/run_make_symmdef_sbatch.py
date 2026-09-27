@@ -34,7 +34,7 @@ def build_make_symmdef_manifest(
         name = cast(str, name)
         src = Path(str(ready.at[name, ctx.args.input_column]))
         # Convert CIF->PDB up front (cached under run_dir/.cif_to_pdb). A missing
-        # input is passed through raw so the sbatch records it as an error.
+        # input is passed through raw so the task script records it as an error.
         input_pdb = ensure_pdb(src, ctx.args.run_dir) if src.exists() else src
         manifest_rows.append((name, str(input_pdb)))
 

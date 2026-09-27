@@ -33,7 +33,7 @@ OUT_PDB="$OUT_DIR/${NAME}_aligned.pdb"
 
 echo "[$(date +%T)] task $SLURM_ARRAY_TASK_ID: align_symm_axis for $NAME"
 
-# The worker lives next to this .sbatch inside the package; SAPIA_TOOL_DIR (exported
+# The worker lives next to this .sh inside the package; SAPIA_TOOL_DIR (exported
 # by the driver) points there, independent of the submit cwd. If the worker itself
 # crashes (before it can record error-as-data), write a fallback error TSV so collect
 # still sees this design.

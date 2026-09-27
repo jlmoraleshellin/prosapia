@@ -39,15 +39,15 @@ load_dotenv()
 
 SLURM_MAX_ARRAY_SIZE = int(os.getenv("SLURM_MAX_ARRAY_SIZE", 1000))
 
-# Sourced by every tool's .sbatch (via $SAPIA_PRELUDE) for shared task scaffolding. See core/sbatch/sapia_task_prelude.sh.
-PRELUDE_PATH = Path(__file__).parent / "sbatch" / "sapia_task_prelude.sh"
+# Sourced by every tool's .sh (via $SAPIA_PRELUDE) for shared task scaffolding. See core/scripts/sapia_task_prelude.sh.
+PRELUDE_PATH = Path(__file__).parent / "scripts" / "sapia_task_prelude.sh"
 
 
 ## ARGPARSER
 class CommonArgs(Namespace):
     run_dir: Path
     table: str | None
-    sbatch_script: Path
+    script: Path
     input_column: str
     dir_label: str
     table_label: str
@@ -65,16 +65,16 @@ class CommonArgs(Namespace):
 
 def _add_sbatch_args(
     parser: ArgumentParser,
-    default_sbatch: str,
+    default_script: str,
     default_input_column: str,
 ) -> None:
     """Add the SLURM-array flags shared by every run parser (standalone or ``sapia``)."""
     parser.add_argument(
         "-s",
-        "--sbatch-script",
+        "--script",
         type=Path,
-        default=default_sbatch,
-        help=f"Path to the sbatch script. Defaults to '{default_sbatch}'.",
+        default=default_script,
+        help=f"Path to the per-task script. Defaults to '{default_script}'.",
     )
     parser.add_argument(
         "-i",
@@ -146,7 +146,7 @@ def _add_sbatch_args(
         type=int,
         default=None,
         help="CPUs per array task (--cpus-per-task=N). Overrides the #SBATCH "
-        "directive in the tool's .sbatch. Default is unset (use the script's value).",
+        "directive in the tool's .sh. Default is unset (use the script's value).",
     )
     parser.add_argument(
         "-T",
@@ -154,14 +154,14 @@ def _add_sbatch_args(
         type=str,
         default=None,
         help="Wall-time limit per array task (--time, e.g. '04:00:00'). Overrides "
-        "the #SBATCH directive in the tool's .sbatch. Default is unset.",
+        "the #SBATCH directive in the tool's .sh. Default is unset.",
     )
     parser.add_argument(
         "--mem",
         type=str,
         default=None,
         help="Memory per array task (--mem, e.g. '32G'). Overrides the #SBATCH "
-        "directive in the tool's .sbatch. Default is unset.",
+        "directive in the tool's .sh. Default is unset.",
     )
     parser.add_argument(
         "--force",
@@ -173,7 +173,7 @@ def _add_sbatch_args(
 
 def build_run_parser(
     metadata: "ToolMetadata",
-    default_sbatch: str,
+    default_script: str,
     default_input_column: str,
     add_extra_args_fn: AddArgsFn | None = None,
 ) -> ArgumentParser:
@@ -188,7 +188,7 @@ def build_run_parser(
         add_help=False,
         parents=[base_parser(require_table=not metadata.creates_table)],
     )
-    _add_sbatch_args(parser, default_sbatch, default_input_column)
+    _add_sbatch_args(parser, default_script, default_input_column)
     if metadata.creates_table:
         parser.add_argument(
             "--table-label",
@@ -350,9 +350,9 @@ def _submit_array(
         f"--cpus-per-task={args.cpus_per_task}" if args.cpus_per_task else "",
         f"--time={args.time}" if args.time else "",
         f"--mem={args.mem}" if args.mem else "",
-        f"--output={log_dir}/{args.sbatch_script.stem}_%A_%a.out",
-        f"--error={log_dir}/{args.sbatch_script.stem}_%A_%a.err",
-        str(args.sbatch_script),
+        f"--output={log_dir}/{args.script.stem}_%A_%a.out",
+        f"--error={log_dir}/{args.script.stem}_%A_%a.err",
+        str(args.script),
         str(manifest),
         str(out_dir),
     ]
@@ -363,7 +363,7 @@ def _submit_array(
         env={
             **os.environ,
             "SAPIA_PRELUDE": str(PRELUDE_PATH),
-            "SAPIA_TOOL_DIR": str(Path(args.sbatch_script).resolve().parent),
+            "SAPIA_TOOL_DIR": str(Path(args.script).resolve().parent),
         },
     )
     if result.returncode != 0:
@@ -491,7 +491,7 @@ def run_from_args(
 
         # Dirs (created below, so resolve without the existence guard).
         out_dir = resolve_dir_name(args, output_table, metadata, must_exist=False)
-        log_dir = out_dir / f"{args.sbatch_script.stem}_logs"
+        log_dir = out_dir / f"{args.script.stem}_logs"
         out_dir.mkdir(parents=True, exist_ok=True)
         log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -517,7 +517,7 @@ def run_from_args(
         manifest_dir = args.run_dir / ".manifests"
         manifest_dir.mkdir(parents=True, exist_ok=True)
 
-        manifest_base = manifest_dir / f"{args.sbatch_script.stem}_manifest.txt"
+        manifest_base = manifest_dir / f"{args.script.stem}_manifest.txt"
         ctx = ManifestCtx(
             df=df,
             args=args,
