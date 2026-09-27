@@ -33,7 +33,7 @@ class USalignCollectArgs(CollectArgs):
     output_prefix: str | None
 
 
-def _add_usalign_args(parser: ArgumentParser) -> None:
+def add_collect_usalign_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--col-a",
         type=str,

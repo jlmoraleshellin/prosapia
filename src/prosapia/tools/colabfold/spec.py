@@ -4,7 +4,7 @@ from prosapia.core import Tool
 
 from .collect_colabfold import collect_colabfold
 from .run_colabfold_sbatch import (
-    _add_colabfold_args,
+    add_colabfold_args,
     build_colabfold_manifest,
 )
 
@@ -15,6 +15,6 @@ TOOL = Tool(
     default_sbatch=str(Path(__file__).parent / "colabfold.sbatch"),
     default_input_column="proteinmpnn_sequence",
     build_manifest_fn=build_colabfold_manifest,
-    add_run_args_fn=_add_colabfold_args,
+    add_run_args_fn=add_colabfold_args,
     collect_fn=collect_colabfold,
 )

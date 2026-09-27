@@ -19,10 +19,11 @@ set +u
 source "${SAPIA_ACTIVATE_RFDIFFUSION:?set SAPIA_ACTIVATE_RFDIFFUSION in your .env to a tool activation script}"
 set -u
 
-# Each array task gets its own sub-manifest (one row per design). With
-# --per-card N these N diffusions are launched together and time-share the
-# task's single GPU. Rows are ACTIVATEd at manifest-build time (tab-separated):
-#   name  staged_input  output_prefix  contig  symmetry_token  global_extra
+# Each array task gets its own sub-manifest (one row per design), prefixed with
+# a lane index. Lanes (--per-card) run concurrently and time-share the task's
+# single GPU; within a lane, rows (--shard-size) run in series. Rows are
+# ACTIVATEd at manifest-build time (tab-separated):
+#   lane  name  staged_input  output_prefix  contig  symmetry_token  global_extra
 # symmetry_token and global_extra may be empty and may contain spaces, so fields
 # are pulled with `cut` (which preserves empty fields, unlike `IFS=$'\t' read`).
 
@@ -72,21 +73,34 @@ run_one() {
     return $rc
 }
 
-echo "Task ${SLURM_ARRAY_TASK_ID}: $(wc -l < "$SAPIA_LINE") diffusion(s) on one GPU"
+# Run one lane's rows in series. A failed design doesn't stop the lane; the lane
+# exits non-zero if any of its designs failed.
+run_lane() {
+    local lane=$1 line rc=0
+    local name staged prefix contig symmetry_token global_extra
+    while IFS= read -r line || [ -n "$line" ]; do
+        [ -z "$line" ] && continue
+        name=$(printf '%s' "$line" | cut -f2)
+        staged=$(printf '%s' "$line" | cut -f3)
+        prefix=$(printf '%s' "$line" | cut -f4)
+        contig=$(printf '%s' "$line" | cut -f5)
+        symmetry_token=$(printf '%s' "$line" | cut -f6)
+        global_extra=$(printf '%s' "$line" | cut -f7)
+        echo "Lane $lane: launching $name"
+        # </dev/null: keep run_inference.py from consuming the lane's remaining rows.
+        run_one "$name" "$staged" "$prefix" "$contig" "$symmetry_token" "$global_extra" </dev/null || rc=1
+    done < <(awk -F'\t' -v l="$lane" '$1 == l' "$SAPIA_LINE")
+    return $rc
+}
+
+lanes=$(cut -f1 "$SAPIA_LINE" | sort -un)
+echo "Task ${SLURM_ARRAY_TASK_ID}: $(wc -l < "$SAPIA_LINE") diffusion(s) in $(wc -w <<< "$lanes") lane(s) on one GPU"
 
 pids=()
-while IFS= read -r line || [ -n "$line" ]; do
-    [ -z "$line" ] && continue
-    name=$(printf '%s' "$line" | cut -f1)
-    staged=$(printf '%s' "$line" | cut -f2)
-    prefix=$(printf '%s' "$line" | cut -f3)
-    contig=$(printf '%s' "$line" | cut -f4)
-    symmetry_token=$(printf '%s' "$line" | cut -f5)
-    global_extra=$(printf '%s' "$line" | cut -f6)
-    echo "Launching $name"
-    run_one "$name" "$staged" "$prefix" "$contig" "$symmetry_token" "$global_extra" &
+for lane in $lanes; do
+    run_lane "$lane" &
     pids+=($!)
-done < "$SAPIA_LINE"
+done
 
 fail=0
 for pid in "${pids[@]}"; do

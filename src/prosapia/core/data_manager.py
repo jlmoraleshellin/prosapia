@@ -78,7 +78,9 @@ class RegistryManager:
         """Read the registry frame fresh (empty frame if it doesn't exist yet)."""
         return self.dm.read_frame(REGISTRY_TABLE)
 
-    def derive_new_table(self, parent_table: str | None, table_label: str = "") -> Table:
+    def derive_new_table(
+        self, parent_table: str | None, table_label: str = ""
+    ) -> Table:
         """Derive a new table handle (root if ``parent_table`` is None, else a child). Pure; does not register."""
         reg = self._read()
         if parent_table:
@@ -273,7 +275,9 @@ class DataManager:
                 if col.endswith("_status"):
                     continue
                 out_col = (
-                    f"{table.parent_table_name}__{col}" if col in joined.columns else col
+                    f"{table.parent_table_name}__{col}"
+                    if col in joined.columns
+                    else col
                 )
                 joined[out_col] = aligned[col].to_numpy()
             # Carry the ancestor's parent_name forward as the next join key.

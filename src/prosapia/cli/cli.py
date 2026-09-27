@@ -92,7 +92,6 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
             description=tool.description,
             parents=[
                 build_collect_parser(
-                    tool.metadata,
                     tool.add_collect_args_fn,
                 )
             ],

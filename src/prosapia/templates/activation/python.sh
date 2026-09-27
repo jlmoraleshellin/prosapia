@@ -1,5 +1,7 @@
-# Activation script for the `align_symm_axis` tool — point SAPIA_ACTIVATE_ALIGN_SYMM_AXIS here.
-# Sourced by align_symm_axis.sbatch before it runs align_symm_axis_worker.py.
+# Activation script for the pure-Python tools, i.e. those that only need prosapia's
+# own deps (gemmi, numpy, pandas): currently `align_symm_axis`. Point each such
+# tool's SAPIA_ACTIVATE_<NAME> here (e.g. SAPIA_ACTIVATE_ALIGN_SYMM_AXIS).
+# Sourced by the tool's sbatch before it runs its Python worker.
 # Job: put a Python with prosapia + gemmi + numpy on PATH.
 
 # --- activation (use whatever your site provides) ---

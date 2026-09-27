@@ -27,6 +27,9 @@ ROOT_PARENT = "root"
 # that aren't recoverable from the table itself
 RUN_META_FILENAME = ".meta.json"
 
+# Sidecar key: top-level design group names a root-create run produced
+ROOT_DESIGNS_KEY = "root_designs"
+
 
 def build_tool_leaf(tool: str, dir_label: str = "") -> str:
     """Leaf name for a tool's output dir and table column prefix (``tool[_dir_label]``)."""

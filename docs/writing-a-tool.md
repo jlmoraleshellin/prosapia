@@ -47,13 +47,13 @@ from .run_mytool_sbatch import build_mytool_manifest, _add_run_args
 
 TOOL = Tool(
     name="mytool",
-    action="update",                        # or "create"
+    action="update",  # or "create"
     description="What this tool does.",
     default_sbatch=str(Path(__file__).parent / "mytool.sbatch"),
-    default_input_column="pdb_path",        # which table column feeds the tool
+    default_input_column="pdb_path",  # which table column feeds the tool
     build_manifest_fn=build_mytool_manifest,
     collect_fn=collect_mytool,
-    add_run_args_fn=_add_run_args,          # optional: extra `sapia run` flags
+    add_run_args_fn=_add_run_args,  # optional: extra `sapia run` flags
     add_collect_args_fn=_add_collect_args,  # optional: extra `sapia collect` flags
 )
 ```
@@ -67,11 +67,12 @@ The submit-phase hook. It receives a `ManifestCtx` and returns one **manifest ro
 ```python
 from prosapia.core import ManifestCtx, ManifestRow
 
+
 def build_mytool_manifest(ctx: ManifestCtx) -> list[ManifestRow]:
     rows: list[ManifestRow] = []
-    for name, row in ctx.ready.iterrows():          # only the ready designs
+    for name, row in ctx.ready.iterrows():  # only the ready designs
         src = row[ctx.args.input_column]
-        rows.append((name, str(src)))               # fields your .sbatch will cut
+        rows.append((name, str(src)))  # fields your .sbatch will cut
     return rows
 ```
 

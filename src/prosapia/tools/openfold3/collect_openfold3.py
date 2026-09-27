@@ -36,7 +36,6 @@ OPENFOLD3_JSON_KEYS: List[str] = [
 ]
 
 
-
 def find_best_model(design_dir: Path) -> tuple[Path | None, Path | None]:
     """Find the best model across all seeds/samples by highest avg_plddt.
     Handles multiple seeds and samples per seed, returns only one model per design dir.

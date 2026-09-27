@@ -96,7 +96,11 @@ def test_derive_child_root_inherit_and_fork(tmp_path):
     dm.rm.register_table(TABLE0)
     # No label -> inherit the parent's label, bump the generation.
     child = dm.rm.derive_new_table("table0_worms", "")
-    assert (child.table_name, child.gen, child.table_label) == ("table1_worms", 1, "worms")
+    assert (child.table_name, child.gen, child.table_label) == (
+        "table1_worms",
+        1,
+        "worms",
+    )
     dm.rm.register_table(TABLE1)
     # A label -> append (breadcrumb) onto the parent's label.
     grandchild = dm.rm.derive_new_table("table1_worms", "hl")

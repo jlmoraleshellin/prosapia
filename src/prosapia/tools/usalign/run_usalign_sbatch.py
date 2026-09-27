@@ -44,7 +44,7 @@ class USalignArgs(CommonArgs):
     output_prefix: str | None
 
 
-def _add_usalign_args(parser: ArgumentParser) -> None:
+def add_run_usalign_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--col-a",
         type=str,

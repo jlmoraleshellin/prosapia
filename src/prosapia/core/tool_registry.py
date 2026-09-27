@@ -1,3 +1,4 @@
+import hashlib
 import importlib.machinery
 import importlib.util
 import sys
@@ -14,7 +15,13 @@ def _load(spec_py: Path) -> Tool:
     ...``) without polluting ``sys.path`` or colliding with other tools' modules.
     """
     tool_dir = spec_py.parent
-    pkg_name = f"_sapia_tool_{tool_dir.name}"
+    # Disambiguate by the tool folder's full path, not just its basename: a
+    # forked tool may share a folder name with a built-in (e.g. both `alphafold3`),
+    # and keying the synthetic package on the basename alone would make the fork
+    # reuse the built-in's package object, resolving its relative imports against
+    # the built-in directory.
+    digest = hashlib.sha1(str(tool_dir.resolve()).encode()).hexdigest()[:8]
+    pkg_name = f"_sapia_tool_{tool_dir.name}_{digest}"
 
     # Register the tool folder as a package whose ``__path__`` is the folder, so
     # its files resolve as namespaced submodules (``<pkg>.run``, ``<pkg>.collect``).

@@ -49,9 +49,10 @@ The submitter writes **one sub-manifest per array task**; the `.sbatch` reads it
 | Lever | Effect | Model load |
 | --- | --- | --- |
 | `--num-designs N` | One `run_inference.py` process emits N designs from an input. | **Loaded once** for all N. |
-| `--per-card N` | Packs N designs into one array task, launched **concurrently** on its one GPU (they time-share it). | Each design is its own process → its own load. Scale `--mem`/`-c` and watch VRAM. |
+| `--per-card N` | Splits the array task into N **lanes** launched **concurrently** on its one GPU (they time-share it). | Each design is its own process → its own load. Scale `--mem`/`-c` and watch VRAM. |
+| `--shard-size N` | Each lane runs N designs **in series**, so one array task holds `per-card × shard-size` designs. | Each design is still its own process → its own load. Memory-safe: no extra concurrency. |
 
-The model-reload cost is paid **per process, not per design**: raise `--num-designs` to amortize one load over many designs from the same input, and reach for `--per-card` only to saturate a GPU that a single diffusion leaves idle. Both run within one `--time` budget, so size them so the packed task finishes inside the walltime (override per run with `-t`).
+The model-reload cost is paid **per process, not per design**: raise `--num-designs` to amortize one load over many designs from the same input, reach for `--per-card` only to saturate a GPU that a single diffusion leaves idle, and use `--shard-size` to cut the number of array tasks (queue churn) without adding VRAM pressure. E.g. `--per-card 2 --shard-size 5` runs 10 designs per task as 2 concurrent lanes of 5. Everything runs within one `--time` budget, so size them so the packed task finishes inside the walltime (override per run with `-t`).
 
 ## Other overrides
 
