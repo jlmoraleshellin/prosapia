@@ -1,8 +1,8 @@
 """
 Open the Modal workstation: a shell in a small prosapia container with the runs
-Volume mounted at ``$SAPIA_MODAL_RUNS_MOUNT`` (also its cwd), so run_dirs live only on
-the Volume. Inside it, ``sapia`` works as usual and ``run`` defaults to the modal
-executor. Needs ``prosapia[modal]`` and the Modal settings in the local ``.env``.
+Volume mounted at ``/runs`` (also its cwd), so run_dirs live only on the Volume.
+Inside it, ``sapia`` works as usual and ``run`` defaults to the modal executor.
+Needs ``prosapia[modal]`` and the Modal settings in the local ``.env``.
 
 Usage:
     sapia modal-shell                                   # interactive shell
@@ -10,6 +10,7 @@ Usage:
 """
 
 import argparse
+import base64
 import subprocess
 import sys
 from pathlib import Path
@@ -32,7 +33,10 @@ def build_modal_shell_parser() -> argparse.ArgumentParser:
 def modal_shell_argv(args: argparse.Namespace) -> list[str]:
     argv = [sys.executable, "-m", "modal", "shell", f"{WORKSTATION}::workstation"]
     if args.cmd:
-        argv += ["--cmd", args.cmd]
+        # Modal wraps --cmd as `bash -c "<cmd>"`, so any `"` in it would break out.
+        # Base64 has no quotes; process substitution keeps the command's stdin.
+        b64 = base64.b64encode(args.cmd.encode()).decode()
+        argv += ["--cmd", f"bash <(echo {b64} | base64 -d)"]
     return argv
 
 

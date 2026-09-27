@@ -34,6 +34,7 @@ from typing import cast
 import pandas as pd
 
 from prosapia.core import CommonArgs, ManifestCtx
+from prosapia.core.executors import volume_path
 from prosapia.utils import ensure_pdb
 
 
@@ -111,7 +112,7 @@ def build_usalign_manifest(ctx: ManifestCtx[USalignArgs]) -> list[tuple[str, ...
     elif status_col in ready.columns:
         ready = ready[ready[status_col] != "OK"]
 
-    ref_path = str(Path(ctx.args.ref).resolve()) if ctx.args.ref else None
+    ref_path = str(volume_path(ctx.args.ref)) if ctx.args.ref else None
     col_b_label = "ref" if ctx.args.ref else cast(str, ctx.args.col_b)
 
     manifest_rows: list[tuple[str, ...]] = []

@@ -18,12 +18,11 @@ import modal
 from dotenv import load_dotenv
 
 from prosapia.cli.cli import tools_dirs
+from prosapia.core.executors import RUNS_MOUNT
 from prosapia.core.executors.modal import (
     DOTENV_ENV,
     PYTHON_VERSION,
-    RUNS_MOUNT_ENV,
     get_dotenv_vars,
-    require_env,
     get_runs_volume,
 )
 
@@ -34,7 +33,6 @@ REMOTE_DOTENV = "/root/sapia.env"
 SAPIA_LAUNCHER = '#!/bin/sh\\nexec python -c "from prosapia.cli.cli import main; main()" "$@"\\n'
 
 load_dotenv(".env")
-MOUNT = require_env(RUNS_MOUNT_ENV)
 
 
 def _dependencies() -> list[str]:
@@ -63,7 +61,7 @@ def _image() -> modal.Image:
             "chmod +x /usr/local/bin/sapia",
         )
         .env(env)
-        .workdir(MOUNT)
+        .workdir(RUNS_MOUNT)
         # Whole package, not just .py: the prelude, tools' .sh and templates too.
         .add_local_python_source("prosapia", ignore=["**/__pycache__/**"])
     )
@@ -87,7 +85,7 @@ app = modal.App("sapia-workstation")
 
 @app.function(
     image=_image(),
-    volumes={MOUNT: get_runs_volume()},
+    volumes={RUNS_MOUNT: get_runs_volume()},
     secrets=_secrets(),
     cpu=float(os.environ.get("SAPIA_MODAL_SHELL_CPU", 0.25)),
     memory=int(os.environ.get("SAPIA_MODAL_SHELL_MEMORY", 1024)),

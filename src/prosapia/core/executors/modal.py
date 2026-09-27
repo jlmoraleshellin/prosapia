@@ -10,27 +10,32 @@ The tool's image comes from an optional ``modal_image.py`` next to its task scri
     RESOURCES = {"gpu": "A100", "cpu": 8, "memory": "32G", "timeout": "02:00:00"}  # optional
     def volumes() -> dict[str, modal.Volume]: ...   # optional extra mounts (weights, DBs)
 
-Run storage is one Modal Volume (``SAPIA_MODAL_RUNS_VOLUME``) mounted at
-``SAPIA_MODAL_RUNS_MOUNT``. ``sapia`` itself runs where that Volume is mounted at the
-same path (the ``sapia modal-shell`` workstation), so paths inside manifests and
-tables stay valid in the containers and nothing is stored locally. Tasks run with
-the mount as cwd and get the run's ``.env`` (``$SAPIA_DOTENV``, else ``./.env``).
+Run storage is one Modal Volume (``SAPIA_MODAL_RUNS_VOLUME``) mounted at ``/runs``.
+``sapia`` itself runs where that Volume is mounted at the same path (the
+``sapia modal-shell`` workstation), so paths inside manifests and tables stay valid
+in the containers and nothing is stored locally. Tasks run with the mount as cwd and
+get the run's ``.env`` (``$SAPIA_DOTENV``, else ``./.env``).
+
 Submission is detached: ``sapia run`` returns once the tasks are queued, like sbatch.
+Each task writes ``<log>_<id>.exit`` (its exit code) next to its logs, and the run
+records its Modal app in ``<log_dir>/<script>_modal.json``: a task with no ``.exit``
+is still running, or was killed (timeout/OOM) if the app has stopped.
 """
 
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import re
 import sys
 from pathlib import Path
 from types import ModuleType
 
-from . import PRELUDE_PATH, SubmitCtx, write_manifest
+from . import PRELUDE_PATH, SubmitCtx, volume_path, write_manifest
+import prosapia.core.executors as executors
 
 RUNS_VOLUME_ENV = "SAPIA_MODAL_RUNS_VOLUME"
-RUNS_MOUNT_ENV = "SAPIA_MODAL_RUNS_MOUNT"
 DOTENV_ENV = "SAPIA_DOTENV"
 MODAL_IMAGE_FILENAME = "modal_image.py"
 
@@ -78,11 +83,11 @@ def submit(ctx: SubmitCtx) -> None:
         ) from e
 
     spec = _load_modal_image(ctx.script.resolve().parent)
-    runs_mount = Path(require_env(RUNS_MOUNT_ENV))
-    run_dir = _volume_path(ctx.args.run_dir)
+    runs_mount = Path(executors.RUNS_MOUNT)
+    run_dir = volume_path(ctx.args.run_dir)
     if not run_dir.is_relative_to(runs_mount):
         raise ValueError(
-            f"run_dir {run_dir} is not under {RUNS_MOUNT_ENV}={runs_mount}; the "
+            f"run_dir {run_dir} is not under the runs mount {runs_mount}; the "
             f"modal executor can only run on run_dirs stored on the runs volume."
         )
 
@@ -105,9 +110,9 @@ def submit(ctx: SubmitCtx) -> None:
 
     env = ctx.task_env("modal")
     script = str(ctx.script.resolve())
-    manifest = str(_volume_path(ctx.manifest_base))
-    out_dir = str(_volume_path(ctx.out_dir))
-    log_prefix = str(_volume_path(ctx.log_dir) / ctx.script.stem)
+    manifest = str(volume_path(ctx.manifest_base))
+    out_dir = str(volume_path(ctx.out_dir))
+    log_prefix = str(volume_path(ctx.log_dir) / ctx.script.stem)
     cwd = str(runs_mount)
 
     # Pickled by value (serialized=True): keep its imports local so the container
@@ -116,18 +121,24 @@ def submit(ctx: SubmitCtx) -> None:
         import os
         import subprocess
 
-        with (
-            open(f"{log_prefix}_{task_id}.out", "w") as out,
-            open(f"{log_prefix}_{task_id}.err", "w") as err,
-        ):
-            code = subprocess.run(
-                ["bash", script, manifest, out_dir],
-                env={**os.environ, **env, "SAPIA_TASK_ID": str(task_id), "PWD": cwd},
-                stdout=out,
-                stderr=err,
-                cwd=cwd,
-            ).returncode
-        runs.commit()
+        # 255 unless the script ran: the .exit file is written whatever happens.
+        code = 255
+        try:
+            with (
+                open(f"{log_prefix}_{task_id}.out", "w") as out,
+                open(f"{log_prefix}_{task_id}.err", "w") as err,
+            ):
+                code = subprocess.run(
+                    ["bash", script, manifest, out_dir],
+                    env={**os.environ, **env, "SAPIA_TASK_ID": str(task_id), "PWD": cwd},
+                    stdout=out,
+                    stderr=err,
+                    cwd=cwd,
+                ).returncode
+        finally:
+            with open(f"{log_prefix}_{task_id}.exit", "w") as f:
+                f.write(f"{code}\n")
+            runs.commit()
         return code
 
     app = modal.App(f"sapia-{ctx.tool_name}")
@@ -145,6 +156,9 @@ def submit(ctx: SubmitCtx) -> None:
         f"({', '.join(f'{k}={v}' for k, v in resources.items()) or 'default resources'})"
     )
     with app.run(detach=True):
+        (volume_path(ctx.log_dir) / f"{ctx.script.stem}_modal.json").write_text(
+            json.dumps({"app_id": app.app_id, "n_tasks": n_tasks}) + "\n"
+        )
         fn.spawn_map(range(1, n_tasks + 1))
 
 
@@ -209,18 +223,6 @@ def parse_time_seconds(time: str | int) -> int:
         else:
             h, m, s = parts
     return ((days * 24 + h) * 60 + m) * 60 + s
-
-
-def _volume_path(path: str | os.PathLike) -> Path:
-    """Absolute path in the mount's form. Modal mounts Volumes as symlinks into
-    internal /__modal/volumes/... paths, and the workstation shell starts in that
-    physical dir, so paths under the mount's real path are mapped back to the mount."""
-    p = os.path.abspath(path)
-    mount = os.path.normpath(require_env(RUNS_MOUNT_ENV))
-    real = os.path.realpath(mount)
-    if p == real or p.startswith(real + os.sep):
-        p = mount + p[len(real):]
-    return Path(p)
 
 
 def _load_modal_image(tool_dir: Path) -> ModuleType:

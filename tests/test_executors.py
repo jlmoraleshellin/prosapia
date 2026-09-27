@@ -1,14 +1,19 @@
 """Executors + task prelude: SLURM argv, prelude contract, and Modal fan-out (stubbed)."""
 
+import base64
+import shlex
 import subprocess
 import sys
 import types
+import json
+import shutil
 from argparse import Namespace
 from pathlib import Path
 
 import pytest
 
-from prosapia.core.executors import PRELUDE_PATH, SubmitCtx, get_executor
+import prosapia.core.executors as executors
+from prosapia.core.executors import PRELUDE_PATH, SubmitCtx, get_executor, volume_path
 from prosapia.core.executors import modal as modal_exec
 from prosapia.core.executors import slurm
 from prosapia.core.tool_registry import BUILTIN_TOOLS_DIR, discover
@@ -222,6 +227,7 @@ class _FakeApp:
 
     def __init__(self, name):
         self.name = name
+        self.app_id = "ap-test"
         self.run_kwargs = None
         _FakeApp.last = self
 
@@ -282,7 +288,7 @@ def _modal_tool(tmp_path: Path) -> Path:
 def test_modal_submit_fans_out_and_runs_script(tmp_path, fake_modal, monkeypatch):
     monkeypatch.setitem(sys.modules, "_test_fake_image", _FakeImage)
     monkeypatch.setenv("SAPIA_MODAL_RUNS_VOLUME", "runs")
-    monkeypatch.setenv("SAPIA_MODAL_RUNS_MOUNT", str(tmp_path))
+    monkeypatch.setattr(executors, "RUNS_MOUNT", str(tmp_path))
     dotenv = tmp_path / "ws.env"
     dotenv.write_text("FOO=bar\n")
     monkeypatch.setenv("SAPIA_DOTENV", str(dotenv))
@@ -316,7 +322,35 @@ def test_modal_submit_fans_out_and_runs_script(tmp_path, fake_modal, monkeypatch
     assert app.fn.fn(2) == 0
     out = (ctx.log_dir / "mytool_2.out").read_text().strip()
     assert out == f"modal mytool 2 b {tmp_path}"
+    assert (ctx.log_dir / "mytool_2.exit").read_text() == "0\n"
     assert fake_modal["runs"].commits == 1
+    assert json.loads((ctx.log_dir / "mytool_modal.json").read_text()) == {
+        "app_id": "ap-test",
+        "n_tasks": 3,
+    }
+
+
+def test_modal_task_records_failures(tmp_path, fake_modal, monkeypatch):
+    monkeypatch.setitem(sys.modules, "_test_fake_image", _FakeImage)
+    monkeypatch.setenv("SAPIA_MODAL_RUNS_VOLUME", "runs")
+    monkeypatch.setattr(executors, "RUNS_MOUNT", str(tmp_path))
+    script = _modal_tool(tmp_path)
+    script.write_text('source "$SAPIA_PRELUDE"\nexit 3\n')
+    ctx = _ctx(tmp_path, [("a",)], script=script)
+    get_executor("modal")(ctx)
+    run_task = _FakeApp.last.fn.fn
+
+    assert run_task(1) == 3
+    assert (ctx.log_dir / "mytool_1.exit").read_text() == "3\n"
+
+    # The wrapper itself failing (here: no log dir) still leaves an .exit behind.
+    shutil.rmtree(ctx.log_dir)
+    ctx.log_dir.mkdir()
+    (ctx.log_dir / "mytool_1.out").mkdir()  # can't be opened as a file
+    with pytest.raises(IsADirectoryError):
+        run_task(1)
+    assert (ctx.log_dir / "mytool_1.exit").read_text() == "255\n"
+    assert fake_modal["runs"].commits == 2
 
 
 def test_modal_keeps_symlinked_mount_paths(tmp_path, fake_modal, monkeypatch):
@@ -327,7 +361,7 @@ def test_modal_keeps_symlinked_mount_paths(tmp_path, fake_modal, monkeypatch):
     mount = tmp_path / "runs"
     mount.symlink_to(target)
     monkeypatch.setenv("SAPIA_MODAL_RUNS_VOLUME", "runs")
-    monkeypatch.setenv("SAPIA_MODAL_RUNS_MOUNT", str(mount))
+    monkeypatch.setattr(executors, "RUNS_MOUNT", str(mount))
     # The workstation shell starts in the physical dir, not the mount.
     monkeypatch.chdir(target)
     script = _modal_tool(tmp_path)
@@ -357,10 +391,27 @@ def test_modal_keeps_symlinked_mount_paths(tmp_path, fake_modal, monkeypatch):
 def test_modal_rejects_run_dir_outside_mount(tmp_path, fake_modal, monkeypatch):
     monkeypatch.setitem(sys.modules, "_test_fake_image", _FakeImage)
     monkeypatch.setenv("SAPIA_MODAL_RUNS_VOLUME", "runs")
-    monkeypatch.setenv("SAPIA_MODAL_RUNS_MOUNT", str(tmp_path / "elsewhere"))
+    monkeypatch.setattr(executors, "RUNS_MOUNT", str(tmp_path / "elsewhere"))
     script = _modal_tool(tmp_path)
-    with pytest.raises(ValueError, match="not under SAPIA_MODAL_RUNS_MOUNT"):
+    with pytest.raises(ValueError, match="not under the runs mount"):
         get_executor("modal")(_ctx(tmp_path, [("a",)], script=script))
+
+
+def test_volume_path_maps_real_mount_back(tmp_path, monkeypatch):
+    target = tmp_path / "vo-internal"
+    (target / "run").mkdir(parents=True)
+    mount = tmp_path / "runs"
+    mount.symlink_to(target)
+    monkeypatch.setattr(executors, "RUNS_MOUNT", str(mount))
+    assert volume_path(target / "run") == mount / "run"
+    assert volume_path(target) == mount
+    monkeypatch.chdir(target)
+    assert volume_path("run/x.pdb") == mount / "run" / "x.pdb"
+    # Outside the mount (and off Modal) it is plain abspath: symlinks are kept.
+    link = tmp_path / "link"
+    link.symlink_to(tmp_path / "vo-internal-2", target_is_directory=True)
+    assert volume_path(link) == link
+    assert volume_path(str(tmp_path / "vo-internal-sibling")) == tmp_path / "vo-internal-sibling"
 
 
 def test_modal_requires_modal_image(tmp_path, fake_modal):
@@ -412,7 +463,23 @@ def test_modal_shell_argv():
     assert WORKSTATION.is_file()
     ref = f"{WORKSTATION}::workstation"
     assert modal_shell_argv(Namespace(cmd=None)) == [sys.executable, "-m", "modal", "shell", ref]
-    assert modal_shell_argv(Namespace(cmd="sapia --help"))[-2:] == ["--cmd", "sapia --help"]
+    flag, wrapped = modal_shell_argv(Namespace(cmd="sapia --help"))[-2:]
+    assert flag == "--cmd"
+    assert '"' not in wrapped and "'" not in wrapped
+
+
+def test_modal_shell_cmd_survives_modals_bash_wrapper(tmp_path):
+    from prosapia.cli.modal_shell import modal_shell_argv
+
+    (tmp_path / "a b").mkdir()
+    cmd = """for f in *; do echo "got: $f"; done; echo 'single $HOME'; exit 7"""
+    wrapped = modal_shell_argv(Namespace(cmd=cmd))[-1]
+    assert base64.b64encode(cmd.encode()).decode() in wrapped
+    # Exactly what modal/cli/shell.py does with --cmd.
+    argv = shlex.split(f'/bin/bash -c "{wrapped}"')
+    result = subprocess.run(argv, cwd=tmp_path, capture_output=True, text=True)
+    assert result.returncode == 7
+    assert result.stdout == "got: a b\nsingle $HOME\n"
 
 
 def test_workstation_spec(tmp_path, monkeypatch):
@@ -422,7 +489,6 @@ def test_workstation_spec(tmp_path, monkeypatch):
     (tmp_path / "tools").mkdir()
     # Set via monkeypatch (restored after), so the module's load_dotenv adds nothing.
     monkeypatch.setenv("SAPIA_MODAL_RUNS_VOLUME", "runs")
-    monkeypatch.setenv("SAPIA_MODAL_RUNS_MOUNT", "/runs")
     monkeypatch.setenv("PROSAPIA_TOOLS_DIR", "tools")
     monkeypatch.chdir(tmp_path)
     from prosapia.cli.modal_shell import WORKSTATION
@@ -431,7 +497,7 @@ def test_workstation_spec(tmp_path, monkeypatch):
     ws = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(ws)
 
-    assert ws.MOUNT == "/runs"
+    assert ws.RUNS_MOUNT == "/runs"
     deps = ws._dependencies()
     assert any(d.startswith("pandas") for d in deps)
     assert any(d.startswith("modal==") for d in deps)

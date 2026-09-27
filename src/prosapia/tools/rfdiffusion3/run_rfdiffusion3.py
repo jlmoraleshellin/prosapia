@@ -61,6 +61,7 @@ from dotenv import load_dotenv
 
 from prosapia.core import CommonArgs, ManifestCtx
 from prosapia.core.data_manager import LookupFn
+from prosapia.core.executors import volume_path
 from prosapia.utils import count_polymer_chains, resolve_template
 
 load_dotenv()
@@ -332,7 +333,7 @@ def _build_create_specs(
     specs: list[tuple[str, dict[str, Any]]] = []
     for name in ctx.ready.index:
         name = cast(str, name)
-        input_path = Path(str(ctx.ready.at[name, ctx.args.input_column])).resolve()
+        input_path = volume_path(str(ctx.ready.at[name, ctx.args.input_column]))
         if not input_path.exists():
             print(f"{name}: MISSING {input_path} (skipping)")
             continue
@@ -375,7 +376,7 @@ def _build_root_specs(
         )
 
     if ctx.args.input_pdb is not None:
-        input_path: Path | None = Path(ctx.args.input_pdb).resolve()
+        input_path: Path | None = volume_path(ctx.args.input_pdb)
         if not input_path.exists():
             raise FileNotFoundError(f"--input-pdb {input_path} does not exist.")
         name = f"{input_path.stem}_diff"

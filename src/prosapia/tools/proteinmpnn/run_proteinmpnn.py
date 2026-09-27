@@ -77,6 +77,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import cast
 
+from prosapia.core.executors import volume_path
 from prosapia.core import (
     CommonArgs,
     LookupFn,
@@ -304,7 +305,7 @@ def build_proteinmpnn_manifest(
     groups: dict[Signature, list[Member]] = defaultdict(list)
     for design_name in sorted(cast(str, n) for n in ready.index):
         input_path = Path(str(ready.at[design_name, ctx.args.input_column]))
-        pdb_src = ensure_pdb(input_path, ctx.args.run_dir).resolve()
+        pdb_src = volume_path(ensure_pdb(input_path, ctx.args.run_dir))
         chains = _resolve_chains(ctx.args, pdb_src)
         # Under --symmetry a lone position group describes one asymmetric unit and
         # is replicated across the designed chains (ProteinMPNN wants one group per

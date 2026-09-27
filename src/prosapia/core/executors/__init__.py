@@ -9,6 +9,7 @@ scheduling -- how the manifest is split and how each task gets launched.
 from __future__ import annotations
 
 import importlib
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Sequence
@@ -18,6 +19,9 @@ if TYPE_CHECKING:
 
 # Sourced by every tool's .sh (via $SAPIA_PRELUDE) for shared task scaffolding. See core/scripts/sapia_task_prelude.sh.
 PRELUDE_PATH = Path(__file__).parent.parent / "scripts" / "sapia_task_prelude.sh"
+
+# Where the runs Volume is mounted in every Modal container (workstation and tasks).
+RUNS_MOUNT = "/runs"
 
 
 @dataclass
@@ -63,3 +67,15 @@ def write_manifest(path: Path, rows: "Sequence[ManifestRow]") -> None:
     with open(path, "w") as f:
         for row in rows:
             f.write("\t".join(str(v) for v in row) + "\n")
+
+
+def volume_path(path: str | os.PathLike) -> Path:
+    """Absolute path in the runs mount's form. Modal mounts Volumes as symlinks into
+    internal /__modal/volumes/... paths, and the workstation shell starts in that
+    physical dir, so paths under the mount's real path are mapped back to the mount.
+    Off Modal there is no mount and this is just ``abspath``."""
+    p = os.path.abspath(path)
+    real = os.path.realpath(RUNS_MOUNT)
+    if p == real or p.startswith(real + os.sep):
+        p = RUNS_MOUNT + p[len(real):]
+    return Path(p)

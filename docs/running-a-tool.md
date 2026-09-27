@@ -125,7 +125,7 @@ To change a tool's *baseline* resources permanently, edit (or [fork](writing-a-t
 
 ## Running on Modal
 
-On Modal, run_dirs live only on a Modal Volume, and `sapia` runs next to it in a small container, the **workstation**, instead of on your machine. Set `SAPIA_MODAL_RUNS_VOLUME` and `SAPIA_MODAL_RUNS_MOUNT` in your local `.env`, then open it from the project directory:
+On Modal, run_dirs live only on a Modal Volume, and `sapia` runs next to it in a small container, the **workstation**, instead of on your machine. Set `SAPIA_MODAL_RUNS_VOLUME` (the Volume name) in your local `.env`, then open it from the project directory:
 
 ```bash
 modal volume put sapia-runs inputs/ /inputs        # upload inputs once (PDBs, filters, YAMLs)
@@ -133,14 +133,24 @@ sapia modal-shell                                  # interactive shell; cwd is t
 sapia modal-shell --cmd "sapia new_run --label x"  # or one command, then exit
 ```
 
+**Run `sapia` from `/runs`** (where the shell starts) and pass the run_dir path that `new_run` prints; don't `cd` into a run_dir. Stored paths are relative to where `sapia` ran, and tasks start at `/runs`, so a table collected from inside a run_dir points at files no downstream task can find. The same holds on SLURM, where tasks start in the submit dir.
+
 Inside the workstation, `sapia` works as usual and `run` defaults to `--executor modal`. Relative paths resolve against the Volume root. Browse results on the Modal dashboard or with `modal volume ls|get`. The workstation is sized at 0.25 CPU / 1 GiB (`SAPIA_MODAL_SHELL_CPU`, `SAPIA_MODAL_SHELL_MEMORY`) and exits with the shell. Its image holds prosapia's dependencies, your prosapia source and your `$PROSAPIA_TOOLS_DIR`, and it receives your local `.env`, which it forwards to every task. If it can't launch task containers with its own credentials, store a Modal token as a Modal Secret and name it in `SAPIA_MODAL_TOKEN_SECRET`.
 
 `--executor modal` runs each manifest line in its own Modal container, using the tool's image instead of an activation script:
 
 - **Image.** The tool ships a `modal_image.py` next to its task script defining `image() -> modal.Image`, and optionally `RESOURCES` (`gpu`, `cpu`, `memory`, `timeout`, in the same formats as the SLURM flags) and `volumes() -> dict[str, modal.Volume]` for weights or databases. Tools without one can't run on Modal yet. The task script, its sibling files and the prelude are added to the image at their local paths.
-- **Storage.** Every container mounts the runs Volume at `SAPIA_MODAL_RUNS_MOUNT` and runs from there, so the `run_dir` must be under that mount. The Volume is created as a v2 Volume (concurrent commits from many tasks); keep in mind its limit of 262,144 files per directory.
+- **Storage.** Every container mounts the runs Volume at `/runs` and runs from there, so the `run_dir` must be under `/runs`. The Volume is created as a v2 Volume (concurrent commits from many tasks); keep in mind its limit of 262,144 files per directory.
 - **Resources.** `-g/--gpus-per-task`, `-c/--cpus-per-task`, `--mem` and `-T/--time` override the tool's `RESOURCES`; `--modal-gpu` picks the GPU type. `-C/--max-concurrent` caps the number of running containers. The SLURM-only flags (`--account`, `--partitions`, `--max-gpu-fraction`) are ignored.
 - **Submission** is detached, like `sbatch`: `sapia run` returns once the tasks are queued. Each task writes `<out_dir>/<script>_logs/<script>_<task_id>.{out,err}`, and `sapia collect` works unchanged.
+- **Task status.** Each task also writes `<script>_<task_id>.exit` holding its exit code, even when the wrapper itself fails (`255`), and the run records its Modal app in `<script>_logs/<script>_modal.json` (`app_id`, `n_tasks`). Before collecting:
+
+  | State | How to tell |
+  | --- | --- |
+  | done | `n_tasks` `.exit` files, all `0` |
+  | failed | an `.exit` that isn't `0`; read the matching `.err` |
+  | running | `.exit` files missing while the app runs |
+  | killed | `.exit` files missing after the app stopped (timeout/OOM); `modal app logs <app_id>` |
 - **Python versions.** The task function is pickled by the workstation, so each tool image's Python must match it (`PYTHON_VERSION` in `executors/modal.py`). That interpreter only runs the wrapper that calls `bash <tool>.sh`: a tool that needs another Python installs its own env inside the image and the `.sh` calls it. Install the SDK with `prosapia[modal]`.
 
 ## Tool-specific flags
