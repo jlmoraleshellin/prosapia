@@ -9,15 +9,13 @@
 
 set -uo pipefail
 
-# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE. Our manifest line is a
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_TASK_ID/SAPIA_LINE. Our manifest line is a
 # path to this task's sub-manifest (one row per design); output locations are
 # baked into each design's output_prefix, so we never need OUT_DIR here.
 source "${SAPIA_PRELUDE:?}"
 
 # Site-specific activation (required) — see docs/configuration.md.
-set +u
-source "${SAPIA_ACTIVATE_RFDIFFUSION:?set SAPIA_ACTIVATE_RFDIFFUSION in your .env to a tool activation script}"
-set -u
+sapia_activate SAPIA_ACTIVATE_RFDIFFUSION
 
 # Each array task gets its own sub-manifest (one row per design), prefixed with
 # a lane index. Lanes (--per-card) run concurrently and time-share the task's
@@ -94,7 +92,7 @@ run_lane() {
 }
 
 lanes=$(cut -f1 "$SAPIA_LINE" | sort -un)
-echo "Task ${SLURM_ARRAY_TASK_ID}: $(wc -l < "$SAPIA_LINE") diffusion(s) in $(wc -w <<< "$lanes") lane(s) on one GPU"
+echo "Task ${SAPIA_TASK_ID}: $(wc -l < "$SAPIA_LINE") diffusion(s) in $(wc -w <<< "$lanes") lane(s) on one GPU"
 
 pids=()
 for lane in $lanes; do

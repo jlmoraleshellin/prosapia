@@ -9,16 +9,14 @@
 
 set -uo pipefail
 
-# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE. Our manifest line is a
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_TASK_ID/SAPIA_LINE. Our manifest line is a
 # shard JSON (up to --shard-size design keys) plus the run-wide overrides. One
 # `rfd3 design` process iterates the shard's keys in series on the single GPU.
 source "${SAPIA_PRELUDE:?}"
 
 # Site-specific activation (required) — see docs/configuration.md.
 # Must put `rfd3` on PATH (e.g. `conda activate <env>` and export FOUNDRY_CHECKPOINT_DIRS).
-set +u
-source "${SAPIA_ACTIVATE_RFDIFFUSION3:?set SAPIA_ACTIVATE_RFDIFFUSION3 in your .env to a tool activation script}"
-set -u
+sapia_activate SAPIA_ACTIVATE_RFDIFFUSION3
 
 SHARD_JSON=$(echo "$SAPIA_LINE" | cut -f1)
 OVERRIDES=$(echo "$SAPIA_LINE" | cut -f2)
@@ -26,7 +24,7 @@ OVERRIDES=$(echo "$SAPIA_LINE" | cut -f2)
 SHARD_OUT_DIR=$OUT_DIR/results_$(basename "$SHARD_JSON" .json)
 mkdir -p "$SHARD_OUT_DIR"
 
-echo "[$(date +%T)] task $SLURM_ARRAY_TASK_ID: rfd3 design on $SHARD_JSON"
+echo "[$(date +%T)] task $SAPIA_TASK_ID: rfd3 design on $SHARD_JSON"
 echo "  overrides: $OVERRIDES"
 
 # OVERRIDES is intentionally unquoted: it is a space-separated list of Hydra

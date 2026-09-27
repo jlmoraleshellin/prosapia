@@ -6,14 +6,12 @@
 
 set -euo pipefail
 
-# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_TASK_ID/SAPIA_LINE.
 source "${SAPIA_PRELUDE:?}"
 
 # Site-specific activation (required) — see docs/configuration.md.
 # Must put `boltz` on PATH.
-set +u
-source "${SAPIA_ACTIVATE_BOLTZ:?set SAPIA_ACTIVATE_BOLTZ in your .env to a tool activation script}"
-set -u
+sapia_activate SAPIA_ACTIVATE_BOLTZ
 
 # Manifest columns (tab-separated):
 #   shard_dir  extra
@@ -23,7 +21,7 @@ set -u
 SHARD_DIR=$(echo "$SAPIA_LINE" | cut -f1)
 EXTRA=$(echo "$SAPIA_LINE" | cut -f2)
 
-echo "[$(date +%T)] task $SLURM_ARRAY_TASK_ID: predicting shard $SHARD_DIR ($EXTRA)"
+echo "[$(date +%T)] task $SAPIA_TASK_ID: predicting shard $SHARD_DIR ($EXTRA)"
 boltz predict "$SHARD_DIR" \
     --out_dir "$OUT_DIR" \
     $EXTRA

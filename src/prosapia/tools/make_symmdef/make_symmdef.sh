@@ -10,13 +10,11 @@
 
 set -euo pipefail
 
-# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_TASK_ID/SAPIA_LINE.
 source "${SAPIA_PRELUDE:?}"
 
 # Site-specific activation (required) — see docs/configuration.md.
-set +u
-source "${SAPIA_ACTIVATE_SYMMDEF:?set SAPIA_ACTIVATE_SYMMDEF in your .env to a tool activation script}"
-set -u
+sapia_activate SAPIA_ACTIVATE_SYMMDEF
 
 NAME=$(echo "$SAPIA_LINE" | cut -f1)
 SRC=$(echo "$SAPIA_LINE" | cut -f2)
@@ -45,7 +43,7 @@ STEM=$(basename "$SRC")
 STEM=${STEM%.*}
 SRC_DIR=$(dirname "$SRC")
 
-echo "[$(date +%T)] task $SLURM_ARRAY_TASK_ID: make_symmdef for $NAME"
+echo "[$(date +%T)] task $SAPIA_TASK_ID: make_symmdef for $NAME"
 
 if perl "$MAKESYMM" -m NCS -a A -i B -p "$SRC" \
     >"$OUT_DIR/${STEM}.symm" 2>"$OUT_DIR/${STEM}.log"; then

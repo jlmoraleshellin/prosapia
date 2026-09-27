@@ -10,13 +10,11 @@
 
 set -uo pipefail
 
-# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_TASK_ID/SAPIA_LINE.
 source "${SAPIA_PRELUDE:?}"
 
 # Site-specific activation (required) — see docs/configuration.md.
-set +u
-source "${SAPIA_ACTIVATE_USALIGN:?set SAPIA_ACTIVATE_USALIGN in your .env to a tool activation script}"
-set -u
+sapia_activate SAPIA_ACTIVATE_USALIGN
 
 NAME=$(echo "$SAPIA_LINE" | cut -f1)
 PDB_A=$(echo "$SAPIA_LINE" | cut -f2)
@@ -44,7 +42,7 @@ write_error() {  # $1 = message; pad the metric columns so the row stays rectang
     printf '%s\tERROR: %s\t\t\t\t\t\t\t\t\t\t\t\n' "$NAME" "$1" >>"$RESULT_TSV"
 }
 
-echo "[$(date +%T)] task $SLURM_ARRAY_TASK_ID: comparing $NAME ($COL_A vs $COL_B)"
+echo "[$(date +%T)] task $SAPIA_TASK_ID: comparing $NAME ($COL_A vs $COL_B)"
 
 if [[ ! -f "$PDB_A" ]]; then write_error "missing: $PDB_A"; exit 0; fi
 if [[ ! -f "$PDB_B" ]]; then write_error "missing: $PDB_B"; exit 0; fi
