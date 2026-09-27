@@ -27,7 +27,7 @@ packages = ["src/prosapia"]
 source = "uv-dynamic-versioning"
 
 [tool.uv-dynamic-versioning]
-metadata = true
+pattern = "default-unprefixed"
 fallback-version = "0.0.0"
 
 [tool.uv]
