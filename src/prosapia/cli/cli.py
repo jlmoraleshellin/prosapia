@@ -60,7 +60,7 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
     fork_p.set_defaults(_dispatch=fork_from_args)
 
     run_tools = verbs.add_parser(
-        "run", help="Submit a tool's SLURM array."
+        "run", help="Submit a tool's tasks (SLURM array or Modal)."
     ).add_subparsers(dest="tool", required=True)
     collect_tools = verbs.add_parser(
         "collect", help="Collect a tool's outputs into its table."

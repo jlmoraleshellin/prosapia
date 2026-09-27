@@ -44,6 +44,7 @@ class CommonArgs(Namespace):
     table: str | None
     script: Path
     executor: str
+    modal_gpu: str | None
     input_column: str
     dir_label: str
     table_label: str
@@ -80,6 +81,13 @@ def _add_submit_args(
         help="Scheduler that runs the tasks. Defaults to $SAPIA_EXECUTOR, else 'slurm'.",
     )
     parser.add_argument(
+        "--modal-gpu",
+        type=str,
+        default=None,
+        help="Modal GPU type (e.g. 'A100', 'H100'). Only used with --executor modal; "
+        "overrides RESOURCES['gpu'] in the tool's modal_image.py.",
+    )
+    parser.add_argument(
         "-i",
         "--input-column",
         type=str,
@@ -108,7 +116,7 @@ def _add_submit_args(
         "--max-concurrent",
         type=int,
         default=40,
-        help="Max concurrent SLURM array tasks. Defaults to 40.",
+        help="Max concurrent tasks (SLURM array throttle / Modal max containers). Defaults to 40.",
     )
     parser.add_argument(
         "-a",
@@ -139,7 +147,7 @@ def _add_submit_args(
         "--gpus-per-task",
         type=int,
         default=1,
-        help="GPUs requested per array task (--gres=gpu:N). Can be 0 for CPU-only tasks."
+        help="GPUs requested per task (--gres=gpu:N on SLURM). Can be 0 for CPU-only tasks. "
         "Scripts like run_boltz_batch.py set this automatically from --devices. "
         "Defaults to 1.",
     )
@@ -148,23 +156,23 @@ def _add_submit_args(
         "--cpus-per-task",
         type=int,
         default=None,
-        help="CPUs per array task (--cpus-per-task=N). Overrides the #SBATCH "
-        "directive in the tool's .sh. Default is unset (use the script's value).",
+        help="CPUs per task. Overrides the #SBATCH directive in the tool's .sh "
+        "(or RESOURCES in its modal_image.py). Default is unset (use the tool's value).",
     )
     parser.add_argument(
         "-T",
         "--time",
         type=str,
         default=None,
-        help="Wall-time limit per array task (--time, e.g. '04:00:00'). Overrides "
-        "the #SBATCH directive in the tool's .sh. Default is unset.",
+        help="Wall-time limit per task (e.g. '04:00:00'). Overrides the #SBATCH "
+        "directive in the tool's .sh (or its modal_image.py). Default is unset.",
     )
     parser.add_argument(
         "--mem",
         type=str,
         default=None,
-        help="Memory per array task (--mem, e.g. '32G'). Overrides the #SBATCH "
-        "directive in the tool's .sh. Default is unset.",
+        help="Memory per task (e.g. '32G'). Overrides the #SBATCH directive in "
+        "the tool's .sh (or its modal_image.py). Default is unset.",
     )
     parser.add_argument(
         "--force",

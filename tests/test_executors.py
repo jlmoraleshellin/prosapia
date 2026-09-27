@@ -1,12 +1,15 @@
-"""Executors + task prelude: SLURM argv and the prelude contract."""
+"""Executors + task prelude: SLURM argv, prelude contract, and Modal fan-out (stubbed)."""
 
 import subprocess
+import sys
+import types
 from argparse import Namespace
 from pathlib import Path
 
 import pytest
 
 from prosapia.core.executors import PRELUDE_PATH, SubmitCtx, get_executor
+from prosapia.core.executors import modal as modal_exec
 from prosapia.core.executors import slurm
 from prosapia.core.tool_registry import BUILTIN_TOOLS_DIR, discover
 
@@ -23,6 +26,7 @@ def _args(tmp_path: Path, **overrides) -> Namespace:
         cpus_per_task=None,
         time=None,
         mem=None,
+        modal_gpu=None,
     )
     base.update(overrides)
     return Namespace(**base)
@@ -147,6 +151,16 @@ def _run_prelude(tmp_path: Path, body: str, env: dict) -> subprocess.CompletedPr
     )
 
 
+def test_prelude_modal_selects_line_and_skips_activation(tmp_path):
+    r = _run_prelude(
+        tmp_path,
+        'sapia_activate SAPIA_ACTIVATE_MYTOOL\necho "$SAPIA_TASK_ID|$SAPIA_LINE|${ACTIVATED:-no}"',
+        {"SAPIA_TASK_ID": "2", "SAPIA_SCHEDULER": "modal"},
+    )
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "2|second\tB|no"
+
+
 def test_prelude_slurm_falls_back_to_array_id_and_activates(tmp_path):
     act = tmp_path / "act.sh"
     act.write_text("ACTIVATED=yes\necho $UNSET_IN_ACTIVATION >/dev/null\n")
@@ -168,6 +182,169 @@ def test_prelude_fails_when_activation_unset(tmp_path):
     assert r.returncode != 0
     assert "reached" not in r.stdout
     assert "set SAPIA_ACTIVATE_MYTOOL in your .env" in r.stderr
+
+
+# ── Modal (stubbed SDK) ───────────────────────────────────────────────────────
+
+
+class _FakeImage:
+    def __init__(self):
+        self.local = []
+
+    def add_local_file(self, local, remote_path):
+        self.local.append((str(local), remote_path))
+        return self
+
+    def add_local_dir(self, local, remote_path):
+        self.local.append((str(local), remote_path))
+        return self
+
+
+class _FakeVolume:
+    def __init__(self, name):
+        self.name = name
+        self.commits = 0
+
+    def commit(self):
+        self.commits += 1
+
+
+class _FakeFunction:
+    def __init__(self, fn, kwargs):
+        self.fn, self.kwargs, self.spawned = fn, kwargs, None
+
+    def spawn_map(self, inputs):
+        self.spawned = list(inputs)
+
+
+class _FakeApp:
+    last = None
+
+    def __init__(self, name):
+        self.name = name
+        self.run_kwargs = None
+        _FakeApp.last = self
+
+    def function(self, **kwargs):
+        def deco(fn):
+            self.fn = _FakeFunction(fn, kwargs)
+            return self.fn
+
+        return deco
+
+    def run(self, **kwargs):
+        self.run_kwargs = kwargs
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+@pytest.fixture
+def fake_modal(monkeypatch):
+    volumes = {}
+
+    def from_name(name, **_):
+        return volumes.setdefault(name, _FakeVolume(name))
+
+    mod = types.SimpleNamespace(
+        App=_FakeApp, Volume=types.SimpleNamespace(from_name=from_name)
+    )
+    monkeypatch.setitem(sys.modules, "modal", mod)
+    return volumes
+
+
+def _modal_tool(tmp_path: Path) -> Path:
+    tool_dir = tmp_path / "tool"
+    tool_dir.mkdir(exist_ok=True)
+    (tool_dir / "modal_image.py").write_text(
+        "import sys\n"
+        "RESOURCES = {'gpu': 'L4', 'cpu': 2, 'memory': '4G', 'timeout': '00:30:00'}\n"
+        "def image():\n"
+        "    return sys.modules['_test_fake_image']()\n"
+    )
+    script = tool_dir / "mytool.sh"
+    script.write_text(
+        'set -euo pipefail\nsource "$SAPIA_PRELUDE"\n'
+        "sapia_activate SAPIA_ACTIVATE_MYTOOL\n"
+        'echo "$SAPIA_SCHEDULER $SAPIA_TOOL $SAPIA_TASK_ID $SAPIA_LINE"\n'
+    )
+    return script
+
+
+def test_modal_submit_fans_out_and_runs_script(tmp_path, fake_modal, monkeypatch):
+    monkeypatch.setitem(sys.modules, "_test_fake_image", _FakeImage)
+    monkeypatch.setenv("SAPIA_MODAL_RUNS_VOLUME", "runs")
+    monkeypatch.setenv("SAPIA_MODAL_RUNS_MOUNT", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    script = _modal_tool(tmp_path)
+
+    ctx = _ctx(tmp_path, [("a",), ("b",), ("c",)], script=script, max_concurrent=7)
+    get_executor("modal")(ctx)
+
+    app = _FakeApp.last
+    assert app.name == "sapia-mytool"
+    assert app.run_kwargs == {"detach": True}
+    assert app.fn.spawned == [1, 2, 3]
+    kw = app.fn.kwargs
+    assert kw["max_containers"] == 7
+    assert kw["serialized"] is True
+    assert kw["gpu"] == "L4"
+    assert kw["cpu"] == 2.0
+    assert kw["memory"] == 4096
+    assert kw["timeout"] == 1800
+    assert kw["volumes"] == {str(tmp_path): fake_modal["runs"]}
+    assert (str(PRELUDE_PATH), str(PRELUDE_PATH)) in kw["image"].local
+    assert ctx.manifest_base.read_text() == "a\nb\nc\n"
+
+    # Run one task's function locally: the unchanged script runs with modal env.
+    assert app.fn.fn(2) == 0
+    assert (ctx.log_dir / "mytool_2.out").read_text().strip() == "modal mytool 2 b"
+    assert fake_modal["runs"].commits == 1
+
+
+def test_modal_rejects_run_dir_outside_mount(tmp_path, fake_modal, monkeypatch):
+    monkeypatch.setitem(sys.modules, "_test_fake_image", _FakeImage)
+    monkeypatch.setenv("SAPIA_MODAL_RUNS_VOLUME", "runs")
+    monkeypatch.setenv("SAPIA_MODAL_RUNS_MOUNT", str(tmp_path / "elsewhere"))
+    script = _modal_tool(tmp_path)
+    with pytest.raises(ValueError, match="not under SAPIA_MODAL_RUNS_MOUNT"):
+        get_executor("modal")(_ctx(tmp_path, [("a",)], script=script))
+
+
+def test_modal_requires_modal_image(tmp_path, fake_modal):
+    with pytest.raises(FileNotFoundError, match="modal_image.py"):
+        get_executor("modal")(_ctx(tmp_path, [("a",)]))
+
+
+def test_modal_resources_cli_overrides(tmp_path):
+    ctx = _ctx(
+        tmp_path, [], gpus_per_task=2, modal_gpu="H100", cpus_per_task=16, mem="1T", time="1-02:00:00"
+    )
+    assert modal_exec.resolve_resources(ctx, {"gpu": "L4", "cpu": 2}) == {
+        "gpu": "H100:2",
+        "cpu": 16.0,
+        "memory": 1024 * 1024,
+        "timeout": 26 * 3600,
+    }
+    with pytest.raises(ValueError, match="no GPU type"):
+        modal_exec.resolve_resources(_ctx(tmp_path, []), {})
+    assert modal_exec.resolve_resources(_ctx(tmp_path, [], gpus_per_task=0), {}) == {}
+
+
+@pytest.mark.parametrize(
+    "raw,secs", [("30", 1800), ("10:05", 605), ("02:00:00", 7200), ("2-00", 172800)]
+)
+def test_parse_time_seconds(raw, secs):
+    assert modal_exec.parse_time_seconds(raw) == secs
+
+
+@pytest.mark.parametrize("raw,mib", [("512M", 512), ("8G", 8192), ("2048", 2048)])
+def test_parse_mem_mib(raw, mib):
+    assert modal_exec.parse_mem_mib(raw) == mib
 
 
 # ── Bundled tools ─────────────────────────────────────────────────────────────

@@ -13,6 +13,9 @@ dependencies = [
 license = "MIT"
 license-files = ["LICENSE"]
 
+[project.optional-dependencies]
+modal = ["modal>=1.0"]
+
 [project.scripts]
 sapia = "prosapia.cli.cli:main"
 
