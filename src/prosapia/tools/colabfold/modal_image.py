@@ -7,7 +7,7 @@ so later tasks reuse them.
 
 import modal
 
-from prosapia.core.executors.modal import PYTHON_VERSION, named_volume
+from prosapia.core.executors.modal import PYTHON_VERSION, get_named_volume
 
 DATA_DIR = "/root/.cache/colabfold"
 RESOURCES = {"gpu": "A100", "cpu": 8, "memory": "32G", "timeout": "04:00:00"}
@@ -22,4 +22,4 @@ def image() -> modal.Image:
 
 
 def volumes() -> dict[str, modal.Volume]:
-    return {DATA_DIR: named_volume("SAPIA_MODAL_VOLUME_COLABFOLD_DATA", "sapia-colabfold-data")}
+    return {DATA_DIR: get_named_volume("SAPIA_MODAL_VOLUME_COLABFOLD_DATA", "sapia-colabfold-data")}

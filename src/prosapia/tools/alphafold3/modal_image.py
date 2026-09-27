@@ -18,7 +18,7 @@ import os
 
 import modal
 
-from prosapia.core.executors.modal import named_volume
+from prosapia.core.executors.modal import get_named_volume
 
 RESOURCES = {"gpu": "A100-80GB", "cpu": 24, "memory": "64G", "timeout": "04:00:00"}
 
@@ -35,6 +35,6 @@ def image() -> modal.Image:
 
 def volumes() -> dict[str, modal.Volume]:
     return {
-        "/root/models": named_volume("SAPIA_MODAL_VOLUME_AF3_PARAMS", "sapia-af3-params"),
-        "/root/public_databases": named_volume("SAPIA_MODAL_VOLUME_AF3_DB", "sapia-af3-db"),
+        "/root/models": get_named_volume("SAPIA_MODAL_VOLUME_AF3_PARAMS", "sapia-af3-params"),
+        "/root/public_databases": get_named_volume("SAPIA_MODAL_VOLUME_AF3_DB", "sapia-af3-db"),
     }

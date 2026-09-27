@@ -11,8 +11,10 @@ The tool's image comes from an optional ``modal_image.py`` next to its task scri
     def volumes() -> dict[str, modal.Volume]: ...   # optional extra mounts (weights, DBs)
 
 Run storage is one Modal Volume (``SAPIA_MODAL_RUNS_VOLUME``) mounted at
-``SAPIA_MODAL_RUNS_MOUNT``, the same absolute path the run_dir lives under where
-``sapia`` runs, so paths inside manifests and tables stay valid in the containers.
+``SAPIA_MODAL_RUNS_MOUNT``. ``sapia`` itself runs where that Volume is mounted at the
+same path (the ``sapia modal-shell`` workstation), so paths inside manifests and
+tables stay valid in the containers and nothing is stored locally. Tasks run with
+the mount as cwd and get the run's ``.env`` (``$SAPIA_DOTENV``, else ``./.env``).
 Submission is detached: ``sapia run`` returns once the tasks are queued, like sbatch.
 """
 
@@ -29,6 +31,7 @@ from . import PRELUDE_PATH, SubmitCtx, write_manifest
 
 RUNS_VOLUME_ENV = "SAPIA_MODAL_RUNS_VOLUME"
 RUNS_MOUNT_ENV = "SAPIA_MODAL_RUNS_MOUNT"
+DOTENV_ENV = "SAPIA_DOTENV"
 MODAL_IMAGE_FILENAME = "modal_image.py"
 
 # The task function is pickled by value on the client, so tool images must run the
@@ -36,7 +39,7 @@ MODAL_IMAGE_FILENAME = "modal_image.py"
 PYTHON_VERSION = f"{sys.version_info.major}.{sys.version_info.minor}"
 
 
-def named_volume(env_var: str, default: str):
+def get_named_volume(env_var: str, default: str):
     """A persisted Modal Volume named by ``$env_var`` (else ``default``), for tool
     weights, databases and caches that live outside the image."""
     import modal
@@ -44,6 +47,26 @@ def named_volume(env_var: str, default: str):
     return modal.Volume.from_name(
         os.environ.get(env_var) or default, create_if_missing=True
     )
+
+
+def get_runs_volume():
+    """The runs Volume, created as a v2 Volume so hundreds of task containers can
+    commit to it concurrently (v1 tolerates only a handful)."""
+    import modal
+
+    return modal.Volume.from_name(
+        require_env(RUNS_VOLUME_ENV), create_if_missing=True, version=2
+    )
+
+
+def get_dotenv_vars() -> dict[str, str | None]:
+    """The run's ``.env`` as a dict: ``$SAPIA_DOTENV`` if set, else ``./.env``."""
+    from dotenv import dotenv_values
+
+    path = Path(os.environ.get(DOTENV_ENV) or ".env")
+    if not path.is_file():
+        return {}
+    return {k: v for k, v in dotenv_values(path).items() if v is not None}
 
 
 def submit(ctx: SubmitCtx) -> None:
@@ -55,9 +78,8 @@ def submit(ctx: SubmitCtx) -> None:
         ) from e
 
     spec = _load_modal_image(ctx.script.resolve().parent)
-    runs_volume_name = _require_env(RUNS_VOLUME_ENV)
-    runs_mount = Path(_require_env(RUNS_MOUNT_ENV))
-    run_dir = Path(ctx.args.run_dir).resolve()
+    runs_mount = Path(require_env(RUNS_MOUNT_ENV))
+    run_dir = _volume_path(ctx.args.run_dir)
     if not run_dir.is_relative_to(runs_mount):
         raise ValueError(
             f"run_dir {run_dir} is not under {RUNS_MOUNT_ENV}={runs_mount}; the "
@@ -67,8 +89,8 @@ def submit(ctx: SubmitCtx) -> None:
     write_manifest(ctx.manifest_base, ctx.rows)
     n_tasks = len(ctx.rows)
 
-    runs_volume = modal.Volume.from_name(runs_volume_name)
-    volumes = {str(runs_mount): runs_volume, **_extra_volumes(spec)}
+    runs = get_runs_volume()
+    volumes = {str(runs_mount): runs, **_extra_volumes(spec)}
     resources = resolve_resources(ctx, getattr(spec, "RESOURCES", {}))
 
     # The task script, its siblings (workers) and the prelude are shipped into the
@@ -83,37 +105,36 @@ def submit(ctx: SubmitCtx) -> None:
 
     env = ctx.task_env("modal")
     script = str(ctx.script.resolve())
-    manifest = str(ctx.manifest_base.resolve())
-    out_dir = str(ctx.out_dir.resolve())
-    log_prefix = str(ctx.log_dir.resolve() / ctx.script.stem)
-    cwd = str(Path.cwd())
+    manifest = str(_volume_path(ctx.manifest_base))
+    out_dir = str(_volume_path(ctx.out_dir))
+    log_prefix = str(_volume_path(ctx.log_dir) / ctx.script.stem)
+    cwd = str(runs_mount)
 
     # Pickled by value (serialized=True): keep its imports local so the container
     # only needs the stdlib, not prosapia.
     def run_task(task_id: int) -> int:
         import os
         import subprocess
-        from pathlib import Path
 
-        Path(cwd).mkdir(parents=True, exist_ok=True)
         with (
             open(f"{log_prefix}_{task_id}.out", "w") as out,
             open(f"{log_prefix}_{task_id}.err", "w") as err,
         ):
             code = subprocess.run(
                 ["bash", script, manifest, out_dir],
-                env={**os.environ, **env, "SAPIA_TASK_ID": str(task_id)},
+                env={**os.environ, **env, "SAPIA_TASK_ID": str(task_id), "PWD": cwd},
                 stdout=out,
                 stderr=err,
                 cwd=cwd,
             ).returncode
-        runs_volume.commit()
+        runs.commit()
         return code
 
     app = modal.App(f"sapia-{ctx.tool_name}")
     fn = app.function(
         image=image,
         volumes=volumes,
+        secrets=[modal.Secret.from_dict(get_dotenv_vars())],
         max_containers=ctx.args.max_concurrent,
         serialized=True,
         **resources,
@@ -190,6 +211,18 @@ def parse_time_seconds(time: str | int) -> int:
     return ((days * 24 + h) * 60 + m) * 60 + s
 
 
+def _volume_path(path: str | os.PathLike) -> Path:
+    """Absolute path in the mount's form. Modal mounts Volumes as symlinks into
+    internal /__modal/volumes/... paths, and the workstation shell starts in that
+    physical dir, so paths under the mount's real path are mapped back to the mount."""
+    p = os.path.abspath(path)
+    mount = os.path.normpath(require_env(RUNS_MOUNT_ENV))
+    real = os.path.realpath(mount)
+    if p == real or p.startswith(real + os.sep):
+        p = mount + p[len(real):]
+    return Path(p)
+
+
 def _load_modal_image(tool_dir: Path) -> ModuleType:
     path = tool_dir / MODAL_IMAGE_FILENAME
     if not path.is_file():
@@ -212,7 +245,7 @@ def _extra_volumes(spec: ModuleType) -> dict:
     return spec.volumes() if hasattr(spec, "volumes") else {}
 
 
-def _require_env(name: str) -> str:
+def require_env(name: str) -> str:
     value = os.environ.get(name)
     if not value:
         raise RuntimeError(f"The modal executor needs {name} set (in your .env).")

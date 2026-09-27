@@ -9,7 +9,7 @@ image. An ``RFD3_CKPT`` override in ``.env`` must then be a path under
 
 import modal
 
-from prosapia.core.executors.modal import PYTHON_VERSION, named_volume
+from prosapia.core.executors.modal import PYTHON_VERSION, get_named_volume
 
 CHECKPOINT_DIR = "/checkpoints"
 RESOURCES = {"gpu": "A100", "cpu": 8, "memory": "32G", "timeout": "04:00:00"}
@@ -25,4 +25,4 @@ def image() -> modal.Image:
 
 
 def volumes() -> dict[str, modal.Volume]:
-    return {CHECKPOINT_DIR: named_volume("SAPIA_MODAL_VOLUME_RFD3_CKPT", "sapia-rfd3-checkpoints")}
+    return {CHECKPOINT_DIR: get_named_volume("SAPIA_MODAL_VOLUME_RFD3_CKPT", "sapia-rfd3-checkpoints")}

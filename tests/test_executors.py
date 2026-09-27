@@ -247,11 +247,15 @@ class _FakeApp:
 def fake_modal(monkeypatch):
     volumes = {}
 
-    def from_name(name, **_):
-        return volumes.setdefault(name, _FakeVolume(name))
+    def from_name(name, **kwargs):
+        vol = volumes.setdefault(name, _FakeVolume(name))
+        vol.from_name_kwargs = kwargs
+        return vol
 
     mod = types.SimpleNamespace(
-        App=_FakeApp, Volume=types.SimpleNamespace(from_name=from_name)
+        App=_FakeApp,
+        Volume=types.SimpleNamespace(from_name=from_name),
+        Secret=types.SimpleNamespace(from_dict=lambda d: ("secret", d)),
     )
     monkeypatch.setitem(sys.modules, "modal", mod)
     return volumes
@@ -270,7 +274,7 @@ def _modal_tool(tmp_path: Path) -> Path:
     script.write_text(
         'set -euo pipefail\nsource "$SAPIA_PRELUDE"\n'
         "sapia_activate SAPIA_ACTIVATE_MYTOOL\n"
-        'echo "$SAPIA_SCHEDULER $SAPIA_TOOL $SAPIA_TASK_ID $SAPIA_LINE"\n'
+        'echo "$SAPIA_SCHEDULER $SAPIA_TOOL $SAPIA_TASK_ID $SAPIA_LINE $PWD"\n'
     )
     return script
 
@@ -279,7 +283,13 @@ def test_modal_submit_fans_out_and_runs_script(tmp_path, fake_modal, monkeypatch
     monkeypatch.setitem(sys.modules, "_test_fake_image", _FakeImage)
     monkeypatch.setenv("SAPIA_MODAL_RUNS_VOLUME", "runs")
     monkeypatch.setenv("SAPIA_MODAL_RUNS_MOUNT", str(tmp_path))
-    monkeypatch.chdir(tmp_path)
+    dotenv = tmp_path / "ws.env"
+    dotenv.write_text("FOO=bar\n")
+    monkeypatch.setenv("SAPIA_DOTENV", str(dotenv))
+    # The client's cwd must not leak into the task: tasks run from the mount.
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
     script = _modal_tool(tmp_path)
 
     ctx = _ctx(tmp_path, [("a",), ("b",), ("c",)], script=script, max_concurrent=7)
@@ -297,13 +307,51 @@ def test_modal_submit_fans_out_and_runs_script(tmp_path, fake_modal, monkeypatch
     assert kw["memory"] == 4096
     assert kw["timeout"] == 1800
     assert kw["volumes"] == {str(tmp_path): fake_modal["runs"]}
+    assert fake_modal["runs"].from_name_kwargs == {"create_if_missing": True, "version": 2}
+    assert kw["secrets"] == [("secret", {"FOO": "bar"})]
     assert (str(PRELUDE_PATH), str(PRELUDE_PATH)) in kw["image"].local
     assert ctx.manifest_base.read_text() == "a\nb\nc\n"
 
     # Run one task's function locally: the unchanged script runs with modal env.
     assert app.fn.fn(2) == 0
-    assert (ctx.log_dir / "mytool_2.out").read_text().strip() == "modal mytool 2 b"
+    out = (ctx.log_dir / "mytool_2.out").read_text().strip()
+    assert out == f"modal mytool 2 b {tmp_path}"
     assert fake_modal["runs"].commits == 1
+
+
+def test_modal_keeps_symlinked_mount_paths(tmp_path, fake_modal, monkeypatch):
+    # In a Modal container the mount is a symlink into /__modal/volumes/<id>.
+    monkeypatch.setitem(sys.modules, "_test_fake_image", _FakeImage)
+    target = tmp_path / "vo-internal"
+    target.mkdir()
+    mount = tmp_path / "runs"
+    mount.symlink_to(target)
+    monkeypatch.setenv("SAPIA_MODAL_RUNS_VOLUME", "runs")
+    monkeypatch.setenv("SAPIA_MODAL_RUNS_MOUNT", str(mount))
+    # The workstation shell starts in the physical dir, not the mount.
+    monkeypatch.chdir(target)
+    script = _modal_tool(tmp_path)
+
+    (mount / "out" / "logs").mkdir(parents=True)
+    ctx = SubmitCtx(
+        args=_args(Path("."), script=script),
+        tool_name="mytool",
+        rows=[("a",)],
+        manifest_base=Path("mytool_manifest.txt"),
+        out_dir=Path("out"),
+        log_dir=Path("out/logs"),
+    )
+    get_executor("modal")(ctx)
+
+    assert _FakeApp.last.fn.fn(1) == 0
+    out = (target / "out" / "logs" / "mytool_1.out").read_text().split()
+    # Task sees the out_dir via the mount path, never the symlink target.
+    assert out[-1] == str(mount)
+    code = _FakeApp.last.fn.fn.__code__
+    cells = [c.cell_contents for c in _FakeApp.last.fn.fn.__closure__]
+    paths = dict(zip(code.co_freevars, cells))
+    for name in ("manifest", "out_dir", "log_prefix"):
+        assert paths[name].startswith(str(mount)), (name, paths[name])
 
 
 def test_modal_rejects_run_dir_outside_mount(tmp_path, fake_modal, monkeypatch):
@@ -345,6 +393,49 @@ def test_parse_time_seconds(raw, secs):
 @pytest.mark.parametrize("raw,mib", [("512M", 512), ("8G", 8192), ("2048", 2048)])
 def test_parse_mem_mib(raw, mib):
     assert modal_exec.parse_mem_mib(raw) == mib
+
+
+def test_modal_dotenv_falls_back_to_cwd(tmp_path, monkeypatch):
+    monkeypatch.delenv("SAPIA_DOTENV", raising=False)
+    monkeypatch.chdir(tmp_path)
+    assert modal_exec.get_dotenv_vars() == {}
+    (tmp_path / ".env").write_text("A=1\nB\n")
+    assert modal_exec.get_dotenv_vars() == {"A": "1"}
+
+
+# ── Modal workstation ─────────────────────────────────────────────────────────
+
+
+def test_modal_shell_argv():
+    from prosapia.cli.modal_shell import WORKSTATION, modal_shell_argv
+
+    assert WORKSTATION.is_file()
+    ref = f"{WORKSTATION}::workstation"
+    assert modal_shell_argv(Namespace(cmd=None)) == [sys.executable, "-m", "modal", "shell", ref]
+    assert modal_shell_argv(Namespace(cmd="sapia --help"))[-2:] == ["--cmd", "sapia --help"]
+
+
+def test_workstation_spec(tmp_path, monkeypatch):
+    pytest.importorskip("modal")
+    import importlib.util
+
+    (tmp_path / "tools").mkdir()
+    # Set via monkeypatch (restored after), so the module's load_dotenv adds nothing.
+    monkeypatch.setenv("SAPIA_MODAL_RUNS_VOLUME", "runs")
+    monkeypatch.setenv("SAPIA_MODAL_RUNS_MOUNT", "/runs")
+    monkeypatch.setenv("PROSAPIA_TOOLS_DIR", "tools")
+    monkeypatch.chdir(tmp_path)
+    from prosapia.cli.modal_shell import WORKSTATION
+
+    spec = importlib.util.spec_from_file_location("_sapia_workstation", WORKSTATION)
+    ws = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ws)
+
+    assert ws.MOUNT == "/runs"
+    deps = ws._dependencies()
+    assert any(d.startswith("pandas") for d in deps)
+    assert any(d.startswith("modal==") for d in deps)
+    assert not any("extra ==" in d for d in deps)
 
 
 # ── Bundled tools ─────────────────────────────────────────────────────────────

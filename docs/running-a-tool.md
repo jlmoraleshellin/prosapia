@@ -125,13 +125,23 @@ To change a tool's *baseline* resources permanently, edit (or [fork](writing-a-t
 
 ## Running on Modal
 
+On Modal, run_dirs live only on a Modal Volume, and `sapia` runs next to it in a small container, the **workstation**, instead of on your machine. Set `SAPIA_MODAL_RUNS_VOLUME` and `SAPIA_MODAL_RUNS_MOUNT` in your local `.env`, then open it from the project directory:
+
+```bash
+modal volume put sapia-runs inputs/ /inputs        # upload inputs once (PDBs, filters, YAMLs)
+sapia modal-shell                                  # interactive shell; cwd is the mount
+sapia modal-shell --cmd "sapia new_run --label x"  # or one command, then exit
+```
+
+Inside the workstation, `sapia` works as usual and `run` defaults to `--executor modal`. Relative paths resolve against the Volume root. Browse results on the Modal dashboard or with `modal volume ls|get`. The workstation is sized at 0.25 CPU / 1 GiB (`SAPIA_MODAL_SHELL_CPU`, `SAPIA_MODAL_SHELL_MEMORY`) and exits with the shell. Its image holds prosapia's dependencies, your prosapia source and your `$PROSAPIA_TOOLS_DIR`, and it receives your local `.env`, which it forwards to every task. If it can't launch task containers with its own credentials, store a Modal token as a Modal Secret and name it in `SAPIA_MODAL_TOKEN_SECRET`.
+
 `--executor modal` runs each manifest line in its own Modal container, using the tool's image instead of an activation script:
 
 - **Image.** The tool ships a `modal_image.py` next to its task script defining `image() -> modal.Image`, and optionally `RESOURCES` (`gpu`, `cpu`, `memory`, `timeout`, in the same formats as the SLURM flags) and `volumes() -> dict[str, modal.Volume]` for weights or databases. Tools without one can't run on Modal yet. The task script, its sibling files and the prelude are added to the image at their local paths.
-- **Storage.** Runs live on a Modal Volume: set `SAPIA_MODAL_RUNS_VOLUME` (volume name) and `SAPIA_MODAL_RUNS_MOUNT` (the absolute path it is mounted at) in `.env`. The `run_dir` must be under that mount so manifest and table paths resolve inside the containers.
+- **Storage.** Every container mounts the runs Volume at `SAPIA_MODAL_RUNS_MOUNT` and runs from there, so the `run_dir` must be under that mount. The Volume is created as a v2 Volume (concurrent commits from many tasks); keep in mind its limit of 262,144 files per directory.
 - **Resources.** `-g/--gpus-per-task`, `-c/--cpus-per-task`, `--mem` and `-T/--time` override the tool's `RESOURCES`; `--modal-gpu` picks the GPU type. `-C/--max-concurrent` caps the number of running containers. The SLURM-only flags (`--account`, `--partitions`, `--max-gpu-fraction`) are ignored.
 - **Submission** is detached, like `sbatch`: `sapia run` returns once the tasks are queued. Each task writes `<out_dir>/<script>_logs/<script>_<task_id>.{out,err}`, and `sapia collect` works unchanged.
-- **Serialization.** The task function is pickled on the client, so the image's Python version must match the one running `sapia`. Install the SDK with `prosapia[modal]`.
+- **Python versions.** The task function is pickled by the workstation, so each tool image's Python must match it (`PYTHON_VERSION` in `executors/modal.py`). That interpreter only runs the wrapper that calls `bash <tool>.sh`: a tool that needs another Python installs its own env inside the image and the `.sh` calls it. Install the SDK with `prosapia[modal]`.
 
 ## Tool-specific flags
 

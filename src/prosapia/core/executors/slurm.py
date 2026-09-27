@@ -99,6 +99,7 @@ def _submit_chunked(
             manifest = manifest_base
         else:
             manifest = manifest_base.with_stem(f"{manifest_base.stem}_{chunk_idx}")
+        # TODO: extract this side effect to base_run (somehow)
         write_manifest(manifest, chunk)
 
         if partition or len(chunks) > 1:

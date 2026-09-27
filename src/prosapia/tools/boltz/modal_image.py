@@ -7,7 +7,7 @@ tasks reuse them.
 
 import modal
 
-from prosapia.core.executors.modal import PYTHON_VERSION, named_volume
+from prosapia.core.executors.modal import PYTHON_VERSION, get_named_volume
 
 CACHE_DIR = "/boltz_cache"
 RESOURCES = {"gpu": "A100", "cpu": 24, "memory": "64G", "timeout": "08:00:00"}
@@ -22,4 +22,4 @@ def image() -> modal.Image:
 
 
 def volumes() -> dict[str, modal.Volume]:
-    return {CACHE_DIR: named_volume("SAPIA_MODAL_VOLUME_BOLTZ_CACHE", "sapia-boltz-cache")}
+    return {CACHE_DIR: get_named_volume("SAPIA_MODAL_VOLUME_BOLTZ_CACHE", "sapia-boltz-cache")}

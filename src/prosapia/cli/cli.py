@@ -22,10 +22,11 @@ from ..core.base_run import build_run_parser, run_from_args
 from ..core.tool import Tool
 from ..core.tool_registry import discover, BUILTIN_TOOLS_DIR
 from .fork_tool import build_fork_parser, fork_from_args
+from .modal_shell import build_modal_shell_parser, modal_shell_from_args
 from .new_run_dir import build_new_run_parser, new_run_from_args
 
 
-def _tools_dirs() -> list[Path]:
+def tools_dirs() -> list[Path]:
     """Built-in tools first, then user dirs from $PROSAPIA_TOOLS_DIR
     (os.pathsep-separated). Later dirs win, so user tools shadow built-ins."""
     dirs = [BUILTIN_TOOLS_DIR]
@@ -58,6 +59,13 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
         help="Copy a built-in tool into your tools dir to customize it.",
     )
     fork_p.set_defaults(_dispatch=fork_from_args)
+
+    modal_shell_p = verbs.add_parser(
+        "modal-shell",
+        parents=[build_modal_shell_parser()],
+        help="Open a shell on Modal with the runs Volume mounted.",
+    )
+    modal_shell_p.set_defaults(_dispatch=modal_shell_from_args)
 
     run_tools = verbs.add_parser(
         "run", help="Submit a tool's tasks (SLURM array or Modal)."
@@ -106,7 +114,7 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
 
 
 def main() -> None:
-    tools = discover(*_tools_dirs())
+    tools = discover(*tools_dirs())
     parser = _build_parser(tools)
     argcomplete.autocomplete(parser)
     args = parser.parse_args()

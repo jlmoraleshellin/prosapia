@@ -29,6 +29,7 @@ This project is a single Python package (`prosapia`), managed with `uv` (run tas
             - resolves cross-table lineage (linking child rows to a parent via `parent_name`/`parent_table`/`gen`);
             - exposes a read-only `lookup` that walks the lineage chain to fetch ancestor values.
     - `cli.py` (`src/prosapia/cli/`): the `sapia` CLI entrypoint. Discovers tools (built-ins first, then `$PROSAPIA_TOOLS_DIR`) and builds a `run`/`collect` subcommand pair per tool.
+    - `sapia modal-shell` (`cli/modal_shell.py`) opens the Modal workstation (`core/executors/workstation.py`): a small prosapia container with the runs Volume mounted, where `sapia` runs so run_dirs live only on the Volume.
 - A tool is a composition of declarative metadata, two behavioral hooks, and scripts. It carries no orchestration logic of its own, the drivers supply that. Components:
     - metadata: ToolMetadata -> name, action, description, default_input_column
     - build_manifest_fn: BuildManifestFn -> returns the manifest rows (the per-task inputs for the .sh task script); the driver writes them to a .txt manifest
