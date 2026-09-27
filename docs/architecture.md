@@ -48,7 +48,7 @@ The flow is the following:
 
 1. User calls `sapia run <tool>` on an (*optional*) input table (`table0.tsv`) inside a `run_dir`. The driver takes care of the rest:
     1. It accesses the `run_dir` to: open the input table, reserve the output one (*see below*) check the rows that are **ready**, filter them (*if set*) and hand them to the tool's `build_manifest_fn`, which writes a tab-separated **manifest** textfile containing one line per array task.
-    2. The driver then submits `tool.sbatch` (a SLURM array job) which consumes the manifest. Each task cuts its own fields out of its manifest line and writes results under `run_dir/<output_table>/<tool>/`  — keyed by the destination table reserved in step 1. The SLURM job parameters (concurrency, partitions, GPUs) can be specified through `sapia run` flags; documented in [Running a tool](running-a-tool.md).
+    2. The driver then hands the manifest to an executor (a SLURM array job by default, or Modal containers), which runs `tool.sh` once per manifest line. Each task cuts its own fields out of its manifest line and writes results under `run_dir/<output_table>/<tool>/`  — keyed by the destination table reserved in step 1. The SLURM job parameters (concurrency, partitions, GPUs) can be specified through `sapia run` flags; documented in [Running a tool](running-a-tool.md).
 
 2. User calls `sapia collec <tool>` on the output table (`table1.tsv`) inside the `run_dir`. The driver invokes the tool's `collect_fn`, which reads those on-disk outputs and writes rows into the destination table, creating it if needed.
 

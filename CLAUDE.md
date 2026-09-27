@@ -1,5 +1,5 @@
 # Where are you?
-This is a WIP shared workbench for protein-design tools on HPC: a shared table plus a two-phase SLURM runner, packaged as an importable library (package `prosapia`, CLI `sapia`) so users can wrap their own tools or use the bundled ones. The goal is to give users easy access to all protein design softwares (tools) in an HPC environment.
+This is a WIP shared workbench for protein-design tools on HPC: a shared table plus a two-phase runner (SLURM or Modal executors), packaged as an importable library (package `prosapia`, CLI `sapia`) so users can wrap their own tools or use the bundled ones. The goal is to give users easy access to all protein design softwares (tools) in an HPC environment.
 
 # Project structure
 This project is a single Python package (`prosapia`), managed with `uv` (run tasks via `uv run`). Its `pyproject.toml` defines the package and the `sapia` CLI entrypoint (`prosapia.cli.cli:main`). Layout: `src/prosapia/core/` (drivers + data layer), `src/prosapia/cli/`, `src/prosapia/tools/` (bundled tools), `src/prosapia/utils/`.
@@ -15,7 +15,7 @@ This project is a single Python package (`prosapia`), managed with `uv` (run tas
             1. opens a `DataManager` to load the input table;
             2. calls `resolve_output_table` to reserve the destination table (a new child/root for `create`, or the source table for `update`);
             3. invokes the tool's `build_manifest` hook to write the manifest `.txt`;
-            4. submits the SLURM array job, whose `.sbatch` consumes that manifest.
+            4. hands the manifest to the executor chosen by `--executor` (`core/executors/`: `slurm` array job or `modal` containers), which runs the tool's `.sh` once per manifest line.
         - Defines the `BuildManifestFn` hook contract that tools implement.
     - `base_collect.py`
         - `collect_from_args(metadata, collect_fn, args)` is the collect-phase driver, shared by all tools. Customized by passing `ToolMetadata` and the `CollectFn` hook. On each invocation it:
@@ -31,8 +31,9 @@ This project is a single Python package (`prosapia`), managed with `uv` (run tas
     - `cli.py` (`src/prosapia/cli/`): the `sapia` CLI entrypoint. Discovers tools (built-ins first, then `$PROSAPIA_TOOLS_DIR`) and builds a `run`/`collect` subcommand pair per tool.
 - A tool is a composition of declarative metadata, two behavioral hooks, and scripts. It carries no orchestration logic of its own, the drivers supply that. Components:
     - metadata: ToolMetadata -> name, action, description, default_input_column
-    - build_manifest_fn: BuildManifestFn -> returns the manifest rows (the per-task inputs for the .sbatch script); the driver writes them to a .txt manifest
+    - build_manifest_fn: BuildManifestFn -> returns the manifest rows (the per-task inputs for the .sh task script); the driver writes them to a .txt manifest
     - collect_fn: CollectFn -> reads tool output structure and returns a CollectorFactory.
-    - tool.sbatch: the per-array-task script file. Receives the manifest and the out_dir as positional arguments in that respective order.
-    - (optional) tool_worker.py: performs extra python actions necessary before running the tool. If the per-design step is a simple shell command, put it directly in tool.sbatch instead.
+    - tool.sh: the per-task script file, shared by every executor. Receives the manifest and the out_dir as positional arguments in that respective order; the prelude resolves its line from `SAPIA_TASK_ID` and `sapia_activate` sources the user's activation script (skipped under modal).
+    - (optional) modal_image.py: the tool's Modal image (`image()`, optional `RESOURCES` / `volumes()`), used by `--executor modal`.
+    - (optional) tool_worker.py: performs extra python actions necessary before running the tool. If the per-design step is a simple shell command, put it directly in tool.sh instead.
 - Execution model: a tool runs in two phases against a `run_dir`. The drivers own the flow; the tool's hooks fill in the variable steps.

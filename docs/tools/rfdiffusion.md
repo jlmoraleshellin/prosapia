@@ -44,7 +44,7 @@ They are commonly used together: `--replicate` writes out the per-chain contig, 
 
 ## How the array is distributed
 
-The submitter writes **one sub-manifest per array task**; the `.sbatch` reads its rows and launches them on the task's single GPU. Two levers shape the run, and they load the model differently:
+The submitter writes **one sub-manifest per array task**; the `.sh` task script reads its rows and launches them on the task's single GPU. Two levers shape the run, and they load the model differently:
 
 | Lever | Effect | Model load |
 | --- | --- | --- |
