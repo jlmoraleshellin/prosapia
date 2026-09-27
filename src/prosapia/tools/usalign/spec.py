@@ -3,7 +3,7 @@ from pathlib import Path
 from prosapia.core import Tool
 
 from .collect_usalign import add_collect_usalign_args, collect_usalign
-from .run_usalign_sbatch import (
+from .run_usalign import (
     add_run_usalign_args,
     build_usalign_manifest,
 )

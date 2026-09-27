@@ -3,7 +3,7 @@ from pathlib import Path
 from prosapia.core import Tool
 
 from .collect_rfdiffusion3 import collect_rfd3
-from .run_rfdiffusion3_sbatch import add_run_rfd3_args, build_rfd3_manifest
+from .run_rfdiffusion3 import add_run_rfd3_args, build_rfd3_manifest
 
 TOOL = Tool(
     name="rfdiffusion3",

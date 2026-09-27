@@ -3,7 +3,7 @@ from pathlib import Path
 from prosapia.core import Tool
 
 from .collect_alphafold3 import collect_af3
-from .run_alphafold3_sbatch import add_run_af3_args, build_af3_manifest
+from .run_alphafold3 import add_run_af3_args, build_af3_manifest
 
 TOOL = Tool(
     name="alphafold3",

@@ -3,7 +3,7 @@ from pathlib import Path
 from prosapia.core import Tool
 
 from .collect_make_symmdef import collect_make_symmdef
-from .run_make_symmdef_sbatch import build_make_symmdef_manifest
+from .run_make_symmdef import build_make_symmdef_manifest
 
 TOOL = Tool(
     name="make_symmdef",

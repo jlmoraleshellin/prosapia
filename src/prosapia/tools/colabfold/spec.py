@@ -3,7 +3,7 @@ from pathlib import Path
 from prosapia.core import Tool
 
 from .collect_colabfold import collect_colabfold
-from .run_colabfold_sbatch import (
+from .run_colabfold import (
     add_colabfold_args,
     build_colabfold_manifest,
 )

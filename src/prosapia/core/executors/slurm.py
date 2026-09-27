@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Sequence
 from . import SubmitCtx, write_manifest
 
 if TYPE_CHECKING:
-    from ..base_sbatch import ManifestRow
+    from ..base_run import ManifestRow
 
 SLURM_MAX_ARRAY_SIZE = int(os.getenv("SLURM_MAX_ARRAY_SIZE", 1000))
 

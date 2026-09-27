@@ -18,7 +18,7 @@ import argcomplete
 
 from .completion import build_init_parser, init_from_args
 from ..core.base_collect import build_collect_parser, collect_from_args
-from ..core.base_sbatch import build_run_parser, run_from_args
+from ..core.base_run import build_run_parser, run_from_args
 from ..core.tool import Tool
 from ..core.tool_registry import discover, BUILTIN_TOOLS_DIR
 from .fork_tool import build_fork_parser, fork_from_args

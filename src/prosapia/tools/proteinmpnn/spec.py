@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from .collect_proteinmpnn import collect_mpnn
-from .run_proteinmpnn_sbatch import (
+from .run_proteinmpnn import (
     add_run_proteinmpnn_args,
     build_proteinmpnn_manifest,
 )

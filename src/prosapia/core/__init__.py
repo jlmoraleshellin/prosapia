@@ -12,7 +12,7 @@ from .base_collect import (  # noqa: F401
     drop_collected,
 )
 from .base_parser import base_parser  # noqa: F401
-from .base_sbatch import (  # noqa: F401
+from .base_run import (  # noqa: F401
     CommonArgs,
     ManifestCtx,
     build_run_parser,

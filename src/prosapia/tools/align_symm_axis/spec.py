@@ -3,7 +3,7 @@ from pathlib import Path
 from prosapia.core import Tool
 
 from .collect_align_symm_axis import collect_align_symm_axis
-from .run_align_symm_axis_sbatch import build_align_symm_axis_manifest
+from .run_align_symm_axis import build_align_symm_axis_manifest
 
 TOOL = Tool(
     name="align_symm_axis",

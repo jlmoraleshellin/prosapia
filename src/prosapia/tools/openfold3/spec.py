@@ -3,7 +3,7 @@ from pathlib import Path
 from prosapia.core import Tool
 
 from .collect_openfold3 import collect_openfold3
-from .run_openfold3_sbatch import (
+from .run_openfold3 import (
     add_run_openfold3_args,
     build_openfold3_manifest,
 )

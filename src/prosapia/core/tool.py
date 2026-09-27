@@ -2,7 +2,7 @@ from dataclasses import dataclass, replace
 from typing import Callable, Literal, TypedDict, Unpack
 
 from .base_collect import CollectorFactory
-from .base_sbatch import BuildManifestFn
+from .base_run import BuildManifestFn
 
 Action = Literal["create", "update"]
 

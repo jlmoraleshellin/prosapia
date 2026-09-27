@@ -3,7 +3,7 @@ from pathlib import Path
 from prosapia.core import Tool
 
 from .collect_boltz import collect_boltz
-from .run_boltz_sbatch import add_run_boltz_args, build_boltz_manifest
+from .run_boltz import add_run_boltz_args, build_boltz_manifest
 
 TOOL = Tool(
     name="boltz",

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Sequence
 
 if TYPE_CHECKING:
-    from ..base_sbatch import CommonArgs, ManifestRow
+    from ..base_run import CommonArgs, ManifestRow
 
 # Sourced by every tool's .sh (via $SAPIA_PRELUDE) for shared task scaffolding. See core/scripts/sapia_task_prelude.sh.
 PRELUDE_PATH = Path(__file__).parent.parent / "scripts" / "sapia_task_prelude.sh"
