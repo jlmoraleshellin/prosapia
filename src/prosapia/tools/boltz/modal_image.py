@@ -10,7 +10,7 @@ import modal
 from prosapia.core.executors.modal import get_named_volume
 
 CACHE_DIR = "/boltz_cache"
-RESOURCES = {"gpu": "A100", "cpu": 24, "memory": "64G", "timeout": "08:00:00"}
+RESOURCES = {"gpu": "A10", "cpu": 24, "memory": "64G", "timeout": "08:00:00"}
 
 
 def image() -> modal.Image:

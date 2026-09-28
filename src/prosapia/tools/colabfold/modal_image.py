@@ -10,7 +10,7 @@ import modal
 from prosapia.core.executors.modal import get_named_volume
 
 DATA_DIR = "/root/.cache/colabfold"
-RESOURCES = {"gpu": "A100", "cpu": 8, "memory": "32G", "timeout": "04:00:00"}
+RESOURCES = {"gpu": "A10", "cpu": 8, "memory": "32G", "timeout": "04:00:00"}
 
 
 def image() -> modal.Image:
