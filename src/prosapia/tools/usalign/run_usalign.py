@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Submit a SLURM array to compare two predicted structures per design using USalign.
+Submit an array (SLURM or Modal) comparing two predicted structures per design with USalign.
 
 Both structures are converted to PDB (via gemmi) here at manifest-build time and
 cached under <run_dir>/.cif_to_pdb/; each array task then just runs USalign and
@@ -43,6 +43,8 @@ class USalignArgs(CommonArgs):
     col_b: str | None
     ref: str | None
     output_prefix: str | None
+    mm: int
+    ter: int
 
 
 def add_run_usalign_args(parser: ArgumentParser) -> None:
@@ -74,6 +76,24 @@ def add_run_usalign_args(parser: ArgumentParser) -> None:
         default=None,
         help="Prefix for output columns and subdirectory. Defaults to "
         "'<col_a_stem>_vs_<col_b_stem>' (e.g. 'boltz_vs_openfold3').",
+    )
+    parser.add_argument(
+        "--mm",
+        type=int,
+        choices=range(7),
+        default=1,
+        help="USalign -mm alignment mode: 0 monomer, 1 multimer (default), "
+        "2 chain-to-complex, 3 circular permutation, 4 alignment of >2 "
+        "structures, 5 fully non-sequential, 6 semi-non-sequential.",
+    )
+    parser.add_argument(
+        "--ter",
+        type=int,
+        choices=range(4),
+        default=0,
+        help="USalign -ter: which chains to align. 0 all chains in all models "
+        "(default), 1 all chains of the first model, 2 only the first chain, "
+        "3 only the first chain split at TER records.",
     )
 
 
@@ -113,6 +133,7 @@ def build_usalign_manifest(ctx: ManifestCtx[USalignArgs]) -> list[tuple[str, ...
         ready = ready[ready[status_col] != "OK"]
 
     ref_path = str(volume_path(ctx.args.ref)) if ctx.args.ref else None
+    mm, ter = str(ctx.args.mm), str(ctx.args.ter)
     col_b_label = "ref" if ctx.args.ref else cast(str, ctx.args.col_b)
 
     manifest_rows: list[tuple[str, ...]] = []
@@ -130,6 +151,8 @@ def build_usalign_manifest(ctx: ManifestCtx[USalignArgs]) -> list[tuple[str, ...
         # input is passed through raw so the task script records it as an error.
         pdb_a = ensure_pdb(src_a, ctx.args.run_dir) if src_a.exists() else src_a
         pdb_b = ensure_pdb(src_b, ctx.args.run_dir) if src_b.exists() else src_b
-        manifest_rows.append((name, str(pdb_a), str(pdb_b), col_a, col_b_label, prefix))
+        manifest_rows.append(
+            (name, str(pdb_a), str(pdb_b), col_a, col_b_label, prefix, mm, ter)
+        )
 
     return manifest_rows

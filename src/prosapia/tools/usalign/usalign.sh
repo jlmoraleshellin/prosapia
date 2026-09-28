@@ -22,6 +22,8 @@ PDB_B=$(echo "$SAPIA_LINE" | cut -f3)
 COL_A=$(echo "$SAPIA_LINE" | cut -f4)
 COL_B=$(echo "$SAPIA_LINE" | cut -f5)
 PREFIX=$(echo "$SAPIA_LINE" | cut -f6)
+MM=$(echo "$SAPIA_LINE" | cut -f7)
+TER=$(echo "$SAPIA_LINE" | cut -f8)
 
 USALIGN_BIN=${USALIGN_BIN:-USalign}
 # 9 USalign metrics, in the order collect_usalign.py expects.
@@ -47,7 +49,7 @@ echo "[$(date +%T)] task $SAPIA_TASK_ID: comparing $NAME ($COL_A vs $COL_B)"
 if [[ ! -f "$PDB_A" ]]; then write_error "missing: $PDB_A"; exit 0; fi
 if [[ ! -f "$PDB_B" ]]; then write_error "missing: $PDB_B"; exit 0; fi
 
-if ! OUTPUT=$("$USALIGN_BIN" "$PDB_A" "$PDB_B" -mm 1 -ter 0 -outfmt 2 -o "$SUP_PREFIX" 2>&1); then
+if ! OUTPUT=$("$USALIGN_BIN" "$PDB_A" "$PDB_B" -mm "$MM" -ter "$TER" -outfmt 2 -o "$SUP_PREFIX" 2>&1); then
     write_error "USalign failed: $(printf '%s' "$OUTPUT" | tr '\n' ' ')"
     exit 0
 fi
