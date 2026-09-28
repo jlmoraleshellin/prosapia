@@ -33,7 +33,7 @@ def volumes() -> dict[str, modal.Volume]: ...      # optional: weights, database
 
 Tools without one can't run on Modal yet. The task script, its sibling files and the prelude are added to the image at the same paths they have in the workstation.
 
-**Python versions.** The task function is pickled by the workstation, so each tool image's Python must match it (`PYTHON_VERSION` in `executors/modal.py`). That interpreter only runs the wrapper that calls `bash <tool>.sh`. A tool that needs another Python installs its own env inside the image, and the `.sh` calls it.
+**Python versions.** Each tool image picks its own Python; it doesn't have to match the workstation's. Modal mounts a small stdlib-only entrypoint (`executors/sapia_modal_task.py`) into the image and imports it, so the image's Python only needs to be one Modal supports. An image with no Python of its own (e.g. `Image.from_registry`) gets one with `add_python=...`.
 
 ## Resources
 

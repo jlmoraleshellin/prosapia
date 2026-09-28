@@ -7,7 +7,7 @@ so later tasks reuse them.
 
 import modal
 
-from prosapia.core.executors.modal import PYTHON_VERSION, get_named_volume
+from prosapia.core.executors.modal import get_named_volume
 
 DATA_DIR = "/root/.cache/colabfold"
 RESOURCES = {"gpu": "A100", "cpu": 8, "memory": "32G", "timeout": "04:00:00"}
@@ -15,7 +15,7 @@ RESOURCES = {"gpu": "A100", "cpu": 8, "memory": "32G", "timeout": "04:00:00"}
 
 def image() -> modal.Image:
     return (
-        modal.Image.debian_slim(python_version=PYTHON_VERSION)
+        modal.Image.debian_slim(python_version="3.12")
         .apt_install("git")
         .pip_install("colabfold[alphafold]", "jax[cuda12]")
     )

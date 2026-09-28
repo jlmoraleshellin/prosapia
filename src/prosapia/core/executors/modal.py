@@ -39,9 +39,7 @@ RUNS_VOLUME_ENV = "SAPIA_MODAL_RUNS_VOLUME"
 DOTENV_ENV = "SAPIA_DOTENV"
 MODAL_IMAGE_FILENAME = "modal_image.py"
 
-# The task function is pickled by value on the client, so tool images must run the
-# same Python minor version as the process calling `sapia run`.
-PYTHON_VERSION = f"{sys.version_info.major}.{sys.version_info.minor}"
+TASK_MODULE_PATH = Path(__file__).with_name("sapia_modal_task.py")
 
 
 def get_named_volume(env_var: str, default: str):
@@ -108,48 +106,23 @@ def submit(ctx: SubmitCtx) -> None:
         .add_local_dir(tool_dir, remote_path=str(tool_dir))
     )
 
-    env = ctx.task_env("modal")
-    script = str(ctx.script.resolve())
-    manifest = str(volume_path(ctx.manifest_base))
-    out_dir = str(volume_path(ctx.out_dir))
-    log_prefix = str(volume_path(ctx.log_dir) / ctx.script.stem)
-    cwd = str(runs_mount)
-
-    # Pickled by value (serialized=True): keep its imports local so the container
-    # only needs the stdlib, not prosapia.
-    def run_task(task_id: int) -> int:
-        import os
-        import subprocess
-
-        # 255 unless the script ran: the .exit file is written whatever happens.
-        code = 255
-        try:
-            with (
-                open(f"{log_prefix}_{task_id}.out", "w") as out,
-                open(f"{log_prefix}_{task_id}.err", "w") as err,
-            ):
-                code = subprocess.run(
-                    ["bash", script, manifest, out_dir],
-                    env={**os.environ, **env, "SAPIA_TASK_ID": str(task_id), "PWD": cwd},
-                    stdout=out,
-                    stderr=err,
-                    cwd=cwd,
-                ).returncode
-        finally:
-            with open(f"{log_prefix}_{task_id}.exit", "w") as f:
-                f.write(f"{code}\n")
-            runs.commit()
-        return code
-
     app = modal.App(f"sapia-{ctx.tool_name}")
     fn = app.function(
         image=image,
         volumes=volumes,
         secrets=[modal.Secret.from_dict(get_dotenv_vars())],
         max_containers=ctx.args.max_concurrent,
-        serialized=True,
         **resources,
-    )(run_task)
+    )(_load_task_module().run_task)
+    task_kwargs = {
+        "script": str(ctx.script.resolve()),
+        "manifest": str(volume_path(ctx.manifest_base)),
+        "out_dir": str(volume_path(ctx.out_dir)),
+        "log_prefix": str(volume_path(ctx.log_dir) / ctx.script.stem),
+        "cwd": str(runs_mount),
+        "env": ctx.task_env("modal"),
+        "runs_volume": require_env(RUNS_VOLUME_ENV),
+    }
 
     print(
         f"Submitting {n_tasks} task(s) to Modal app {app.name!r} "
@@ -159,7 +132,7 @@ def submit(ctx: SubmitCtx) -> None:
         (volume_path(ctx.log_dir) / f"{ctx.script.stem}_modal.json").write_text(
             json.dumps({"app_id": app.app_id, "n_tasks": n_tasks}) + "\n"
         )
-        fn.spawn_map(range(1, n_tasks + 1))
+        fn.spawn_map(range(1, n_tasks + 1), kwargs=task_kwargs)
 
 
 def resolve_resources(ctx: SubmitCtx, defaults: dict) -> dict:
@@ -241,6 +214,20 @@ def _load_modal_image(tool_dir: Path) -> ModuleType:
     if not hasattr(module, "image"):
         raise AttributeError(f"{path} does not define an 'image' function")
     return module
+
+
+def _load_task_module() -> ModuleType:
+    """``sapia_modal_task`` as a standalone top-level module, not part of prosapia,
+    so Modal mounts just that file into the image and imports ``run_task`` from it."""
+    name = TASK_MODULE_PATH.stem
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, TASK_MODULE_PATH)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Could not load module from {TASK_MODULE_PATH}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
 
 
 def _extra_volumes(spec: ModuleType) -> dict:

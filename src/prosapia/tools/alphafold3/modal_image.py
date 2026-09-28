@@ -4,7 +4,7 @@ AlphaFold3 has no public image and its weights are licensed per user, so all of 
 is supplied by you:
 
 - ``SAPIA_MODAL_AF3_IMAGE``: a registry tag of an image built from the AF3 repo's
-  Dockerfile. Its Python must match the one running ``sapia`` (see PYTHON_VERSION).
+  Dockerfile.
 - ``SAPIA_MODAL_VOLUME_AF3_PARAMS`` (default ``sapia-af3-params``): model params,
   mounted at ``/root/models``.
 - ``SAPIA_MODAL_VOLUME_AF3_DB`` (default ``sapia-af3-db``): public databases,

@@ -12,6 +12,7 @@ run in, so the local ``.env`` (runs volume, mount, per-tool settings) is read he
 
 import importlib.metadata
 import os
+import sys
 from pathlib import Path
 
 import modal
@@ -21,12 +22,13 @@ from prosapia.cli.cli import tools_dirs
 from prosapia.core.executors import RUNS_MOUNT
 from prosapia.core.executors.modal import (
     DOTENV_ENV,
-    PYTHON_VERSION,
     get_dotenv_vars,
     get_runs_volume,
 )
 
 REMOTE_DOTENV = "/root/sapia.env"
+# The local Python, so the workstation resolves the same dependency set.
+PYTHON_VERSION = f"{sys.version_info.major}.{sys.version_info.minor}"
 # `sapia` without installing the package: prosapia is shipped as source. Written by
 # printf, so the \n escapes stay literal here.
 SAPIA_LAUNCHER = '#!/bin/sh\\nexec python -c "from prosapia.cli.cli import main; main()" "$@"\\n'

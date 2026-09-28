@@ -9,7 +9,7 @@ image. An ``RFD3_CKPT`` override in ``.env`` must then be a path under
 
 import modal
 
-from prosapia.core.executors.modal import PYTHON_VERSION, get_named_volume
+from prosapia.core.executors.modal import get_named_volume
 
 CHECKPOINT_DIR = "/checkpoints"
 RESOURCES = {"gpu": "A100", "cpu": 8, "memory": "32G", "timeout": "04:00:00"}
@@ -17,7 +17,7 @@ RESOURCES = {"gpu": "A100", "cpu": 8, "memory": "32G", "timeout": "04:00:00"}
 
 def image() -> modal.Image:
     return (
-        modal.Image.debian_slim(python_version=PYTHON_VERSION)
+        modal.Image.debian_slim(python_version="3.12")
         .apt_install("git")
         .pip_install("rc-foundry[all]")
         .env({"FOUNDRY_CHECKPOINT_DIRS": CHECKPOINT_DIR})

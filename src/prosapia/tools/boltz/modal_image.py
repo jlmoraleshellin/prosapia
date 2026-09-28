@@ -7,7 +7,7 @@ tasks reuse them.
 
 import modal
 
-from prosapia.core.executors.modal import PYTHON_VERSION, get_named_volume
+from prosapia.core.executors.modal import get_named_volume
 
 CACHE_DIR = "/boltz_cache"
 RESOURCES = {"gpu": "A100", "cpu": 24, "memory": "64G", "timeout": "08:00:00"}
@@ -15,7 +15,7 @@ RESOURCES = {"gpu": "A100", "cpu": 24, "memory": "64G", "timeout": "08:00:00"}
 
 def image() -> modal.Image:
     return (
-        modal.Image.debian_slim(python_version=PYTHON_VERSION)
+        modal.Image.debian_slim(python_version="3.12")
         .pip_install("boltz[cuda]")
         .env({"BOLTZ_CACHE": CACHE_DIR})
     )

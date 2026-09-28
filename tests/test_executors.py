@@ -218,8 +218,12 @@ class _FakeFunction:
     def __init__(self, fn, kwargs):
         self.fn, self.kwargs, self.spawned = fn, kwargs, None
 
-    def spawn_map(self, inputs):
+    def spawn_map(self, inputs, kwargs):
         self.spawned = list(inputs)
+        self.task_kwargs = kwargs
+
+    def task(self, task_id):
+        return self.fn(task_id, **self.task_kwargs)
 
 
 class _FakeApp:
@@ -307,7 +311,7 @@ def test_modal_submit_fans_out_and_runs_script(tmp_path, fake_modal, monkeypatch
     assert app.fn.spawned == [1, 2, 3]
     kw = app.fn.kwargs
     assert kw["max_containers"] == 7
-    assert kw["serialized"] is True
+    assert "serialized" not in kw
     assert kw["gpu"] == "L4"
     assert kw["cpu"] == 2.0
     assert kw["memory"] == 4096
@@ -319,7 +323,7 @@ def test_modal_submit_fans_out_and_runs_script(tmp_path, fake_modal, monkeypatch
     assert ctx.manifest_base.read_text() == "a\nb\nc\n"
 
     # Run one task's function locally: the unchanged script runs with modal env.
-    assert app.fn.fn(2) == 0
+    assert app.fn.task(2) == 0
     out = (ctx.log_dir / "mytool_2.out").read_text().strip()
     assert out == f"modal mytool 2 b {tmp_path}"
     assert (ctx.log_dir / "mytool_2.exit").read_text() == "0\n"
@@ -338,7 +342,7 @@ def test_modal_task_records_failures(tmp_path, fake_modal, monkeypatch):
     script.write_text('source "$SAPIA_PRELUDE"\nexit 3\n')
     ctx = _ctx(tmp_path, [("a",)], script=script)
     get_executor("modal")(ctx)
-    run_task = _FakeApp.last.fn.fn
+    run_task = _FakeApp.last.fn.task
 
     assert run_task(1) == 3
     assert (ctx.log_dir / "mytool_1.exit").read_text() == "3\n"
@@ -377,13 +381,11 @@ def test_modal_keeps_symlinked_mount_paths(tmp_path, fake_modal, monkeypatch):
     )
     get_executor("modal")(ctx)
 
-    assert _FakeApp.last.fn.fn(1) == 0
+    assert _FakeApp.last.fn.task(1) == 0
     out = (target / "out" / "logs" / "mytool_1.out").read_text().split()
     # Task sees the out_dir via the mount path, never the symlink target.
     assert out[-1] == str(mount)
-    code = _FakeApp.last.fn.fn.__code__
-    cells = [c.cell_contents for c in _FakeApp.last.fn.fn.__closure__]
-    paths = dict(zip(code.co_freevars, cells))
+    paths = _FakeApp.last.fn.task_kwargs
     for name in ("manifest", "out_dir", "log_prefix"):
         assert paths[name].startswith(str(mount)), (name, paths[name])
 
