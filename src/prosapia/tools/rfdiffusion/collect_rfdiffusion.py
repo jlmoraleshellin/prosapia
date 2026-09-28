@@ -25,6 +25,7 @@ from prosapia.core import (
     CollectEach,
     DesignCtx,
 )
+from prosapia.utils import polymer_chain_lengths
 
 MARKER_FILENAME = "command.txt"
 
@@ -65,7 +66,10 @@ def collect_diffusion(ctx: CollectCtx[CollectArgs]) -> CollectEach:
                 name=f"{d.name}_{i}",
                 parent=d.name,
                 path=pdb_path,
-                data={"iteration": i},
+                data={
+                    "iteration": i,
+                    "length": "/".join(map(str, polymer_chain_lengths(pdb_path))),
+                },
             )
         print(f"{d.name}: OK ({len(pdbs)} iteration(s))")
 

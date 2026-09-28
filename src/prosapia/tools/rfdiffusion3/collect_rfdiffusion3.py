@@ -36,7 +36,7 @@ from prosapia.core import (
     Collected,
     DesignCtx,
 )
-from prosapia.utils import ensure_pdb
+from prosapia.utils import ensure_pdb, polymer_chain_lengths
 
 # Metadata keys pulled from the per-design sidecar JSON when present.
 RFD3_METADATA_KEYS = ["ca_rmsd_to_input"]
@@ -85,6 +85,7 @@ def collect_rfd3(ctx: CollectCtx[CollectArgs]) -> CollectEach:
                 "iteration": i,
                 "rfd3_batch": batch,
                 "rfd3_model": model,
+                "length": "/".join(map(str, polymer_chain_lengths(pdb_path))),
             }
             data.update(_load_metadata(cif_gz.with_suffix("").with_suffix(".json")))
             yield Collected(
