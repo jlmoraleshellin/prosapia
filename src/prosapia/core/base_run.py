@@ -28,6 +28,7 @@ from .executors import EXECUTORS, SubmitCtx, get_executor
 from .data_manager import Table, DataManager, LookupFn, RegistryManager, filter_ready
 from .naming import (
     RUN_META_FILENAME,
+    build_tool_leaf,
     resolve_dir_name,
     status_column,
 )
@@ -362,7 +363,10 @@ def run_from_args(
         manifest_dir = args.run_dir / ".manifests"
         manifest_dir.mkdir(parents=True, exist_ok=True)
 
-        manifest_base = manifest_dir / f"{args.script.stem}_manifest.txt"
+        leaf = build_tool_leaf(args.script.stem, args.dir_label)
+        manifest_base = (
+            manifest_dir / f"{output_table.table_name}_{leaf}_manifest.txt"
+        )
         ctx = ManifestCtx(
             df=df,
             args=args,
