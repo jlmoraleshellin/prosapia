@@ -40,7 +40,7 @@ $EDITOR /shared/lab/activation/rfdiffusion.sh
 The goal of the activation script is to make the tool available to the SLURM job's shell. There are two ways to do it:
 
 1. **Activate an environment** — the common option: activate a conda env / load a module / source a script, then export the tool's input paths.
-2. **Point straight at an interpreter/binary.** — the raw option. Some tools take an optional path variable that pins the interpreter/binary so the job runs without conda/module activation: `RFDIFFUSION_PYTHON`, `PROTEIN_MPNN_PYTHON`, `USALIGN_BIN`, `PIPELINE_PYTHON`. Left unset, each falls back to the tool's command on `PATH` (which activating an environment supplies). Export it from the activation script when the binary isn't already on `PATH`.
+2. **Point straight at an interpreter/binary.** — the raw option. Some tools take an optional path variable that pins the interpreter/binary so the job runs without conda/module activation: `RFDIFFUSION_PYTHON`, `PROTEIN_MPNN_PYTHON`, `USALIGN_BIN`, `PYROSETTA_PYTHON`, `PIPELINE_PYTHON`. Left unset, each falls back to the tool's command on `PATH` (which activating an environment supplies). Export it from the activation script when the binary isn't already on `PATH`.
 
 
 ```bash
@@ -134,6 +134,14 @@ Template: `activation/usalign.sh`.
 | Variable | Where | Required | Meaning |
 | --- | --- | --- | --- |
 | `USALIGN_BIN` | activation script | no | Path to the `USalign` binary. Defaults to `USalign` on `PATH`. |
+
+### PyRosetta — `SAPIA_ACTIVATE_PYROSETTA`
+
+Template: `activation/pyrosetta.sh`. The activation script must make `pyrosetta` importable. Under `--executor modal` the tool's image installs PyRosetta itself (free for non-commercial use; commercial use needs a Rosetta license).
+
+| Variable | Where | Required | Meaning |
+| --- | --- | --- | --- |
+| `PYROSETTA_PYTHON` | activation script | no | Interpreter with `pyrosetta` installed. Defaults to `python` on `PATH`. |
 
 ### Rosetta — `SAPIA_ACTIVATE_RELAXED` (rosetta_relax), `SAPIA_ACTIVATE_SYMMDEF` (make_symmdef)
 
