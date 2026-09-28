@@ -37,6 +37,8 @@ def modal_shell_argv(args: argparse.Namespace) -> list[str]:
         # Base64 has no quotes; process substitution keeps the command's stdin.
         b64 = base64.b64encode(args.cmd.encode()).decode()
         argv += ["--cmd", f"bash <(echo {b64} | base64 -d)"]
+    if args.cmd and not sys.stdin.isatty():
+        argv.insert(4, "--no-pty")
     return argv
 
 
