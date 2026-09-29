@@ -93,6 +93,8 @@ def submit(ctx: SubmitCtx) -> None:
     n_tasks = len(ctx.rows)
 
     runs = get_runs_volume()
+    # Publish the manifest before any task can read it.
+    runs.commit()
     volumes = {str(runs_mount): runs, **_extra_volumes(spec)}
     resources = resolve_resources(ctx, getattr(spec, "RESOURCES", {}))
 
