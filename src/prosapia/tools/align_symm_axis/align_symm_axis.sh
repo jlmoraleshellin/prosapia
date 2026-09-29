@@ -11,13 +11,11 @@
 
 set -euo pipefail
 
-# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_TASK_ID/SAPIA_LINE.
 source "${SAPIA_PRELUDE:?}"
 
 # Site-specific activation (required) — see docs/configuration.md.
-set +u
-source "${SAPIA_ACTIVATE_ALIGN_SYMM_AXIS:?set SAPIA_ACTIVATE_ALIGN_SYMM_AXIS in your .env to a tool activation script}"
-set -u
+sapia_activate SAPIA_ACTIVATE_ALIGN_SYMM_AXIS
 
 # The interpreter defaults to `python` (made right by the Activation hook, or already on
 # PATH — it must carry prosapia + gemmi + numpy). Set PIPELINE_PYTHON to point
@@ -31,9 +29,9 @@ SYMM_DEF=$(echo "$SAPIA_LINE" | cut -f3)
 RESULT_TSV="$OUT_DIR/${NAME}.tsv"
 OUT_PDB="$OUT_DIR/${NAME}_aligned.pdb"
 
-echo "[$(date +%T)] task $SLURM_ARRAY_TASK_ID: align_symm_axis for $NAME"
+echo "[$(date +%T)] task $SAPIA_TASK_ID: align_symm_axis for $NAME"
 
-# The worker lives next to this .sbatch inside the package; SAPIA_TOOL_DIR (exported
+# The worker lives next to this .sh inside the package; SAPIA_TOOL_DIR (exported
 # by the driver) points there, independent of the submit cwd. If the worker itself
 # crashes (before it can record error-as-data), write a fallback error TSV so collect
 # still sees this design.

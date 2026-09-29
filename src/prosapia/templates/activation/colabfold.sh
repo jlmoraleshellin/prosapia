@@ -1,5 +1,5 @@
 # Activation script for the `colabfold` tool — point SAPIA_ACTIVATE_COLABFOLD here.
-# Sourced by colabfold.sbatch before it runs `colabfold_batch`.
+# Sourced by colabfold.sh before it runs `colabfold_batch`.
 # Job: put `colabfold_batch` on PATH. Use whichever of these matches your install.
 
 # --- activation (use whatever your site provides) ---

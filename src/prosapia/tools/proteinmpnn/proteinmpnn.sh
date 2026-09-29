@@ -9,13 +9,11 @@
 
 set -euo pipefail
 
-# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_LINE.
+# Shared scaffolding: sets MANIFEST/OUT_DIR/SAPIA_TASK_ID/SAPIA_LINE.
 source "${SAPIA_PRELUDE:?}"
 
 # Site-specific activation (required) — see docs/configuration.md.
-set +u
-source "${SAPIA_ACTIVATE_PROTEINMPNN:?set SAPIA_ACTIVATE_PROTEINMPNN in your .env to a tool activation script}"
-set -u
+sapia_activate SAPIA_ACTIVATE_PROTEINMPNN
 
 PROTEIN_MPNN_PYTHON=${PROTEIN_MPNN_PYTHON:-python}
 
@@ -37,7 +35,7 @@ run_one_group() {
     local fixed="$grp_dir/fixed_pdbs.jsonl"
     local tied="$grp_dir/tied_pdbs.jsonl"
 
-    echo "Task ${SLURM_ARRAY_TASK_ID}: $(basename "$grp_dir") ($(ls "$inputs" | wc -l) design(s))"
+    echo "Task ${SAPIA_TASK_ID}: $(basename "$grp_dir") ($(ls "$inputs" | wc -l) design(s))"
 
     "$PROTEIN_MPNN_PYTHON" "$PROTEIN_MPNN/helper_scripts/parse_multiple_chains.py" \
         --input_path="$inputs" --output_path="$parsed"

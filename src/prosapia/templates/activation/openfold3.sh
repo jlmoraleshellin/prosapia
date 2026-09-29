@@ -1,5 +1,5 @@
 # Activation script for the `openfold3` tool — point SAPIA_ACTIVATE_OPENFOLD3 here.
-# Sourced by openfold3.sbatch before it runs `run_openfold`.
+# Sourced by openfold3.sh before it runs `run_openfold`.
 # Job: put `run_openfold` on PATH.
 
 # --- activation (use whatever your site provides) ---

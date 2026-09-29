@@ -1,5 +1,5 @@
 # Activation script for the `proteinmpnn` tool (ProteinMPNN) — point SAPIA_ACTIVATE_PROTEINMPNN here.
-# Sourced by proteinmpnn.sbatch before it runs ProteinMPNN's scripts.
+# Sourced by proteinmpnn.sh before it runs ProteinMPNN's scripts.
 # Job: put a suitable Python on PATH and point at the ProteinMPNN checkout.
 
 # --- activation (use whatever your site provides) ---

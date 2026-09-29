@@ -18,7 +18,7 @@ import shutil
 from pathlib import Path
 
 # Bundled templates live at src/prosapia/templates/ (this module is in cli/).
-# Same Path(__file__).parent idiom as core.base_sbatch.PRELUDE_PATH / BUILTIN_TOOLS_DIR.
+# Same Path(__file__).parent idiom as core.executors.PRELUDE_PATH / BUILTIN_TOOLS_DIR.
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 ENV_TEMPLATE = TEMPLATES_DIR / "env.example"
 ACTIVATION_DIR = TEMPLATES_DIR / "activation"

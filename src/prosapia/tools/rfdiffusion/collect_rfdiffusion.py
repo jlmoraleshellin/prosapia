@@ -3,7 +3,7 @@
 Rebuild the diffusion table from a run directory's diffused/ outputs.
 
 For each parent design folder under <run_dir>/<diffused-dir-name>/, this looks
-for a command.txt marker file (written by rfdiffusion.sbatch once a task has
+for a command.txt marker file (written by rfdiffusion.sh once a task has
 run) and, if present, registers every <name>_<i>.pdb it finds as an OK row in the
 diffusion table. Parents missing the marker file (or with no PDBs) contribute no rows.
 
@@ -25,6 +25,7 @@ from prosapia.core import (
     CollectEach,
     DesignCtx,
 )
+from prosapia.utils import polymer_chain_lengths
 
 MARKER_FILENAME = "command.txt"
 
@@ -65,7 +66,10 @@ def collect_diffusion(ctx: CollectCtx[CollectArgs]) -> CollectEach:
                 name=f"{d.name}_{i}",
                 parent=d.name,
                 path=pdb_path,
-                data={"iteration": i},
+                data={
+                    "iteration": i,
+                    "length": "/".join(map(str, polymer_chain_lengths(pdb_path))),
+                },
             )
         print(f"{d.name}: OK ({len(pdbs)} iteration(s))")
 

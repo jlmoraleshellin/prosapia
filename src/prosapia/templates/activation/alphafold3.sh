@@ -1,5 +1,5 @@
 # Activation script for the `alphafold3` tool — point SAPIA_ACTIVATE_ALPHAFOLD3 here.
-# Sourced by alphafold3.sbatch before it runs `singularity exec ... "$AF3_CONTAINER"`.
+# Sourced by alphafold3.sh before it runs `singularity exec ... "$AF3_CONTAINER"`.
 # Job: make `singularity` available and export the container + data locations.
 
 # --- module setup (use whatever your site provides) ---

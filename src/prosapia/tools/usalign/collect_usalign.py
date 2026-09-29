@@ -3,7 +3,7 @@
 Collect USalign comparison results into the table.
 
 Scans <run_dir>/USalign/<prefix>_results/ for per-design TSV files written
-by usalign.sbatch, and merges the metrics back into the specified table.
+by usalign.sh, and merges the metrics back into the specified table.
 
 Usage:
     sapia collect usalign outputs/RUN \

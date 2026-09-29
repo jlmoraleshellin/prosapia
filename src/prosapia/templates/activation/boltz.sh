@@ -1,5 +1,5 @@
 # Activation script for the `boltz` tool — point SAPIA_ACTIVATE_BOLTZ here.
-# Sourced by boltz.sbatch before it runs `boltz predict`.
+# Sourced by boltz.sh before it runs `boltz predict`.
 # Job: put `boltz` on PATH, plus any site-specific runtime setup the job needs.
 
 # --- activation (use whatever your site provides) ---

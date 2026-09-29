@@ -1,6 +1,6 @@
 # Collecting a tool
 
-`sapia collect` is the second phase: it turns a tool's on-disk outputs into table rows and columns. Where [`sapia run`](running-a-tool.md) submits a SLURM array, collect runs **locally and immediately** — no scheduling, no array — so it is intentionally small: a couple of flags and no SLURM knobs at all. See [the two-phase execution model](architecture.md#the-two-phase-execution-model) for how the two phases fit together.
+`sapia collect` is the second phase: it turns a tool's on-disk outputs into table rows and columns. Where [`sapia run`](running-a-tool.md) hands tasks to a scheduler, collect runs **in place and immediately** — no scheduling, no array — so it is intentionally small: a couple of flags and no scheduler knobs at all. On Modal it runs in the [workstation](running-on-modal.md#the-workstation), where the outputs live. See [the two-phase execution model](architecture.md#the-two-phase-execution-model) for how the two phases fit together.
 
 ## The shape
 

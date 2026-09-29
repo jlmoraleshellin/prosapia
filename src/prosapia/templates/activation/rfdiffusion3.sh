@@ -1,5 +1,5 @@
 # Activation script for the `rfdiffusion3` tool — point SAPIA_ACTIVATE_RFDIFFUSION3 here.
-# Sourced by rfdiffusion3.sbatch before it runs `rfd3 design`.
+# Sourced by rfdiffusion3.sh before it runs `rfd3 design`.
 # Job: put `rfd3` on PATH and point foundry at its checkpoints.
 
 # --- activation (use whatever your site provides) ---

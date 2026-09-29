@@ -3,7 +3,7 @@
 Collect align_symm_axis results into the table.
 
 Scans <run_dir>/<table>/align_symm_axis/ for the per-design TSV files written
-by align_symm_axis.sbatch, and merges the alignment status, aligned-PDB path and
+by align_symm_axis.sh, and merges the alignment status, aligned-PDB path and
 axis-quality metric back into the table as <prefix>_status / <prefix>_path /
 <prefix>_max_dev_deg columns.
 

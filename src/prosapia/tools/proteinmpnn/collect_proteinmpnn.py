@@ -9,7 +9,7 @@ Lineage is derived from the directory structure:
 
     <output_dir>/grp_<g>/seqs/<fasta_stem>.fa
 
-  * grp_<g>     = a batched subgroup run by proteinmpnn.sbatch (several designs
+  * grp_<g>     = a batched subgroup run by proteinmpnn.sh (several designs
     sharing params, run in one protein_mpnn_run call).
   * fasta_stem  = the staged input filename ProteinMPNN processed. The submitter
     symlinks each input as ``<design_name>.pdb``, so the stem IS the immediate

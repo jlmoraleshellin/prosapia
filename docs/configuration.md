@@ -6,13 +6,13 @@
 
 Every tool needs **activation**: making its binary available to the job, by activating a conda env, loading a module, or sourcing an activate script. Most tools also need their own **input paths** — a script path like `RUN_INFERENCE`, a checkout root like `PROTEIN_MPNN`, the AF3 container/params/database. Both live together in a per-tool **activation script**.
 
-Each tool's `.sbatch` sources that script before it runs the tool. It finds the script through the variable **`SAPIA_ACTIVATE_<NAME>`**. The `.sbatch` sources it unconditionally; if the variable is unset the job fails fast with a clear message. That is the whole contract, open any tool's `.sbatch` and you will see the exact lines:
+Each tool's `.sh` task script sources that script before it runs the tool. It finds the script through the variable **`SAPIA_ACTIVATE_<NAME>`**, via the prelude's `sapia_activate` helper; if the variable is unset the task fails fast with a clear message. That is the whole contract, open any tool's `.sh` task script and you will see the exact line:
 
 ```bash
-set +u
-source "${SAPIA_ACTIVATE_COLABFOLD:?set SAPIA_ACTIVATE_COLABFOLD in your .env to a tool activation script}"
-set -u
+sapia_activate SAPIA_ACTIVATE_COLABFOLD
 ```
+
+Under the Modal executor (`--executor modal`) activation is skipped: the tool's Modal image already provides its environment, so `SAPIA_ACTIVATE_<NAME>` is not needed there.
 
 So `.env` itself holds only:
 
@@ -40,7 +40,7 @@ $EDITOR /shared/lab/activation/rfdiffusion.sh
 The goal of the activation script is to make the tool available to the SLURM job's shell. There are two ways to do it:
 
 1. **Activate an environment** — the common option: activate a conda env / load a module / source a script, then export the tool's input paths.
-2. **Point straight at an interpreter/binary.** — the raw option. Some tools take an optional path variable that pins the interpreter/binary so the job runs without conda/module activation: `RFDIFFUSION_PYTHON`, `PROTEIN_MPNN_PYTHON`, `USALIGN_BIN`, `PIPELINE_PYTHON`. Left unset, each falls back to the tool's command on `PATH` (which activating an environment supplies). Export it from the activation script when the binary isn't already on `PATH`.
+2. **Point straight at an interpreter/binary.** — the raw option. Some tools take an optional path variable that pins the interpreter/binary so the job runs without conda/module activation: `RFDIFFUSION_PYTHON`, `PROTEIN_MPNN_PYTHON`, `USALIGN_BIN`, `PYROSETTA_PYTHON`, `PIPELINE_PYTHON`. Left unset, each falls back to the tool's command on `PATH` (which activating an environment supplies). Export it from the activation script when the binary isn't already on `PATH`.
 
 
 ```bash
@@ -58,7 +58,7 @@ conda activate SE3nv # or module load RFdiffusion, or whatever your system accep
 
 An activation script is also the natural place for any per-tool runtime setup the job needs — pointing framework caches at node-local scratch, exporting extra env vars, etc.
 
-**3. Point `SAPIA_ACTIVATE_<NAME>` at your script in `.env`**. The tool's `.sbatch` script will source it before running the tool.
+**3. Point `SAPIA_ACTIVATE_<NAME>` at your script in `.env`**. The tool's `.sh` task script script will source it before running the tool.
 
 ```bash
 # .env
@@ -66,7 +66,7 @@ SAPIA_ACTIVATE_RFDIFFUSION="/shared/lab/activation/rfdiffusion.sh"
 ```
 
 > [!NOTE]
-> **Fork the tool** (`sapia fork-tool <name>`) and edit its `.sbatch` directly for changes deeper than activation and inputs.
+> **Fork the tool** (`sapia fork-tool <name>`) and edit its `.sh` task script directly for changes deeper than activation and inputs.
 
 ## Global settings
 
@@ -90,7 +90,7 @@ Template: `activation/rfdiffusion.sh`.
 
 ### RFdiffusion3 / foundry — `SAPIA_ACTIVATE_RFDIFFUSION3`
 
-Template: `activation/rfdiffusion3.sh`. Do `conda activate <env>` and `export FOUNDRY_CHECKPOINT_DIRS=…` there; the sbatch then calls `rfd3`.
+Template: `activation/rfdiffusion3.sh`. Do `conda activate <env>` and `export FOUNDRY_CHECKPOINT_DIRS=…` there; the task script then calls `rfd3`.
 
 | Variable | Where | Required | Meaning |
 | --- | --- | --- | --- |
@@ -98,7 +98,7 @@ Template: `activation/rfdiffusion3.sh`. Do `conda activate <env>` and `export FO
 
 ### ProteinMPNN — `SAPIA_ACTIVATE_PROTEINMPNN`
 
-Template: `activation/proteinmpnn.sh`. Activate env and point `PROTEIN_MPNN` to the install path. The sbatch calls its scripts from there.
+Template: `activation/proteinmpnn.sh`. Activate env and point `PROTEIN_MPNN` to the install path. The task script calls its scripts from there.
 
 | Variable | Where | Required | Meaning |
 | --- | --- | --- | --- |
@@ -107,7 +107,7 @@ Template: `activation/proteinmpnn.sh`. Activate env and point `PROTEIN_MPNN` to 
 
 ### AlphaFold3 — `SAPIA_ACTIVATE_ALPHAFOLD3`
 
-Template: `activation/alphafold3.sh`. Put module setup (`ml purge`, `module load singularity`) there; the sbatch runs `singularity exec … "$AF3_CONTAINER"`.
+Template: `activation/alphafold3.sh`. Put module setup (`ml purge`, `module load singularity`) there; the task script runs `singularity exec … "$AF3_CONTAINER"`.
 
 | Variable | Where | Required | Meaning |
 | --- | --- | --- | --- |
@@ -125,7 +125,7 @@ Template: `activation/openfold3.sh`. Activation script must put `run_openfold` o
 
 ### Boltz — `SAPIA_ACTIVATE_BOLTZ`
 
-Template `activation/boltz.sh`. Activation script must put `boltz` on `PATH`. The template also shows the optional framework-cache setup in the sbatch.
+Template `activation/boltz.sh`. Activation script must put `boltz` on `PATH`. The template also shows the optional framework-cache setup in the task script.
 
 ### USalign — `SAPIA_ACTIVATE_USALIGN`
 
@@ -135,13 +135,21 @@ Template: `activation/usalign.sh`.
 | --- | --- | --- | --- |
 | `USALIGN_BIN` | activation script | no | Path to the `USalign` binary. Defaults to `USalign` on `PATH`. |
 
+### PyRosetta — `SAPIA_ACTIVATE_PYROSETTA`
+
+Template: `activation/pyrosetta.sh`. The activation script must make `pyrosetta` importable. Under `--executor modal` the tool's image installs PyRosetta itself (free for non-commercial use; commercial use needs a Rosetta license).
+
+| Variable | Where | Required | Meaning |
+| --- | --- | --- | --- |
+| `PYROSETTA_PYTHON` | activation script | no | Interpreter with `pyrosetta` installed. Defaults to `python` on `PATH`. |
+
 ### Rosetta — `SAPIA_ACTIVATE_RELAXED` (rosetta_relax), `SAPIA_ACTIVATE_SYMMDEF` (make_symmdef)
 
 One template serves both: `activation/rosetta.sh`; point both variables at your copy.
 
 | Variable | Where | Required | Meaning |
 | --- | --- | --- | --- |
-| `ROSETTA` | activation script | yes | Rosetta install root (the sbatch calls `$ROSETTA/bin/rosetta_scripts…` and `$ROSETTA/src/…`). |
+| `ROSETTA` | activation script | yes | Rosetta install root (the task script calls `$ROSETTA/bin/rosetta_scripts…` and `$ROSETTA/src/…`). |
 
 ### Pure-Python tools — `SAPIA_ACTIVATE_ALIGN_SYMM_AXIS` (align_symm_axis)
 

@@ -25,7 +25,7 @@ Everything else is opt-in and appended to run_inference.py only when set:
 ``--symmetry`` (``auto`` derives c<n_chains> from the input), ``--partial-T``,
 ``--num-designs``, ``--ckpt``, ``--config-name`` / ``--config-dir`` (Hydra), and
 repeatable ``--set key=value``. All per-design activation happens here at manifest-build
-time (renumber + contig resolution); the sbatch just launches the binary.
+time (renumber + contig resolution); the task script just launches the binary.
 
 Each array task gets a sub-manifest of --per-card x --shard-size designs, split
 into --per-card lanes that run concurrently on the task's single GPU; each lane
@@ -274,7 +274,7 @@ def _assemble_design(
     """Resolve one design's contig/symmetry/replicate and return its manifest tuple.
 
     ``staged_input`` is the already-renumbered input PDB, or ``None`` for a de-novo
-    design (the sbatch then omits ``inference.input_pdb``, leaving the field empty).
+    design (the task script then omits ``inference.input_pdb``, leaving the field empty).
     Raises ValueError on an unresolvable contig, or on an auto symmetry/replicate that
     needs a chain count but has no input structure to read one from.
     """
@@ -328,7 +328,7 @@ def _build_create_designs(
             continue
 
         # Activation (deterministic, input-derived): renumber the input per-chain into a
-        # staged PDB so the sbatch only launches the binary.
+        # staged PDB so the task script only launches the binary.
         staged_input = (
             ctx.out_dir / name / "_diffusion_input" / f"{name}_renumbered.pdb"
         )
@@ -400,7 +400,7 @@ def build_rfdiff_manifest(ctx: ManifestCtx[RFDiffArgs]) -> list[tuple[str, ...]]
             )
         designs = _build_create_designs(ctx, global_extra)
 
-    # One sub-manifest per task. Each row is prefixed with its lane: the sbatch
+    # One sub-manifest per task. Each row is prefixed with its lane: the task script
     # runs lanes concurrently on the task's single GPU, and each lane's rows in series.
     task_dir = ctx.out_dir / "diffusion_tasks"
     task_dir.mkdir(parents=True, exist_ok=True)

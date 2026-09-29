@@ -1,5 +1,5 @@
 # PYTHON_ARGCOMPLETE_OK
-"""Generic SLURM array submission.
+"""Generic task submission (scheduler chosen by ``--executor``, see ``core.executors``).
 
 Every batch-submission script delegates here, supplying a ``build_manifest_fn``
 (filters the table, returns one manifest row per array task) and optionally an
@@ -12,7 +12,6 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
-import subprocess
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -25,9 +24,11 @@ from dotenv import load_dotenv
 from pandas import DataFrame
 
 from .base_parser import base_parser
+from .executors import EXECUTORS, SubmitCtx, get_executor
 from .data_manager import Table, DataManager, LookupFn, RegistryManager, filter_ready
 from .naming import (
     RUN_META_FILENAME,
+    build_tool_leaf,
     resolve_dir_name,
     status_column,
 )
@@ -37,17 +38,14 @@ if TYPE_CHECKING:
 
 load_dotenv()
 
-SLURM_MAX_ARRAY_SIZE = int(os.getenv("SLURM_MAX_ARRAY_SIZE", 1000))
-
-# Sourced by every tool's .sbatch (via $SAPIA_PRELUDE) for shared task scaffolding. See core/sbatch/sapia_task_prelude.sh.
-PRELUDE_PATH = Path(__file__).parent / "sbatch" / "sapia_task_prelude.sh"
-
 
 ## ARGPARSER
 class CommonArgs(Namespace):
     run_dir: Path
     table: str | None
-    sbatch_script: Path
+    script: Path
+    executor: str
+    modal_gpu: str | None
     input_column: str
     dir_label: str
     table_label: str
@@ -63,18 +61,32 @@ class CommonArgs(Namespace):
     force: bool
 
 
-def _add_sbatch_args(
+def _add_submit_args(
     parser: ArgumentParser,
-    default_sbatch: str,
+    default_script: str,
     default_input_column: str,
 ) -> None:
-    """Add the SLURM-array flags shared by every run parser (standalone or ``sapia``)."""
+    """Add the submission flags shared by every run parser (standalone or ``sapia``)."""
     parser.add_argument(
         "-s",
-        "--sbatch-script",
+        "--script",
         type=Path,
-        default=default_sbatch,
-        help=f"Path to the sbatch script. Defaults to '{default_sbatch}'.",
+        default=default_script,
+        help=f"Path to the per-task script. Defaults to '{default_script}'.",
+    )
+    parser.add_argument(
+        "-e",
+        "--executor",
+        choices=EXECUTORS,
+        default=os.getenv("SAPIA_EXECUTOR", "slurm"),
+        help="Scheduler that runs the tasks. Defaults to $SAPIA_EXECUTOR, else 'slurm'.",
+    )
+    parser.add_argument(
+        "--modal-gpu",
+        type=str,
+        default=None,
+        help="Modal GPU type (e.g. 'A100', 'H100'). Only used with --executor modal; "
+        "overrides RESOURCES['gpu'] in the tool's modal_image.py.",
     )
     parser.add_argument(
         "-i",
@@ -105,7 +117,7 @@ def _add_sbatch_args(
         "--max-concurrent",
         type=int,
         default=40,
-        help="Max concurrent SLURM array tasks. Defaults to 40.",
+        help="Max concurrent tasks (SLURM array throttle / Modal max containers). Defaults to 40.",
     )
     parser.add_argument(
         "-a",
@@ -136,7 +148,7 @@ def _add_sbatch_args(
         "--gpus-per-task",
         type=int,
         default=1,
-        help="GPUs requested per array task (--gres=gpu:N). Can be 0 for CPU-only tasks."
+        help="GPUs requested per task (--gres=gpu:N on SLURM). Can be 0 for CPU-only tasks. "
         "Scripts like run_boltz_batch.py set this automatically from --devices. "
         "Defaults to 1.",
     )
@@ -145,23 +157,23 @@ def _add_sbatch_args(
         "--cpus-per-task",
         type=int,
         default=None,
-        help="CPUs per array task (--cpus-per-task=N). Overrides the #SBATCH "
-        "directive in the tool's .sbatch. Default is unset (use the script's value).",
+        help="CPUs per task. Overrides the #SBATCH directive in the tool's .sh "
+        "(or RESOURCES in its modal_image.py). Default is unset (use the tool's value).",
     )
     parser.add_argument(
         "-T",
         "--time",
         type=str,
         default=None,
-        help="Wall-time limit per array task (--time, e.g. '04:00:00'). Overrides "
-        "the #SBATCH directive in the tool's .sbatch. Default is unset.",
+        help="Wall-time limit per task (e.g. '04:00:00'). Overrides the #SBATCH "
+        "directive in the tool's .sh (or its modal_image.py). Default is unset.",
     )
     parser.add_argument(
         "--mem",
         type=str,
         default=None,
-        help="Memory per array task (--mem, e.g. '32G'). Overrides the #SBATCH "
-        "directive in the tool's .sbatch. Default is unset.",
+        help="Memory per task (e.g. '32G'). Overrides the #SBATCH directive in "
+        "the tool's .sh (or its modal_image.py). Default is unset.",
     )
     parser.add_argument(
         "--force",
@@ -173,7 +185,7 @@ def _add_sbatch_args(
 
 def build_run_parser(
     metadata: "ToolMetadata",
-    default_sbatch: str,
+    default_script: str,
     default_input_column: str,
     add_extra_args_fn: AddArgsFn | None = None,
 ) -> ArgumentParser:
@@ -188,7 +200,7 @@ def build_run_parser(
         add_help=False,
         parents=[base_parser(require_table=not metadata.creates_table)],
     )
-    _add_sbatch_args(parser, default_sbatch, default_input_column)
+    _add_submit_args(parser, default_script, default_input_column)
     if metadata.creates_table:
         parser.add_argument(
             "--table-label",
@@ -243,7 +255,7 @@ def _get_filter_fn_from_module(module_path: Path) -> FilterFn:
     return module.apply_filter
 
 
-## MANIFEST BUILDING AND SBATCH SUBMISSION
+## MANIFEST BUILDING AND SUBMISSION
 ManifestRow = Sequence[str]
 AddArgsFn = Callable[[ArgumentParser], None]
 
@@ -281,39 +293,6 @@ class ManifestCtx(Generic[ArgsT]):
 BuildManifestFn = Callable[[ManifestCtx[ArgsT]], Sequence[ManifestRow]]
 
 
-def _query_partition_gpus(partition: str) -> int:
-    """Query total GPU count for a SLURM partition via ``sinfo``."""
-    result = subprocess.run(
-        ["sinfo", "-p", partition, "-h", "-N", "-o", "%G"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"sinfo failed for partition {partition!r}: {result.stderr.strip()}\n"
-            f"Specify GPU counts explicitly: --partitions {partition}:<gpu_count>"
-        )
-    total = 0
-    for line in result.stdout.strip().splitlines():
-        for entry in line.split(","):
-            if entry.startswith("gpu"):
-                parts = entry.split(":")
-                total += int(parts[-1])
-    if total == 0:
-        raise RuntimeError(
-            f"No GPUs found in partition {partition!r}. "
-            f"Specify GPU counts explicitly: --partitions {partition}:<gpu_count>"
-        )
-    return total
-
-
-def _write_manifest(path: Path, rows: Sequence[ManifestRow]) -> None:
-    """Manifest is tab-separated"""
-    with open(path, "w") as f:
-        for row in rows:
-            f.write("\t".join(str(v) for v in row) + "\n")
-
-
 def write_run_meta(out_dir: Path, **fields) -> None:
     """Merge ``fields`` into the run's ``.meta.json`` sidecar, creating it if absent.
 
@@ -330,139 +309,6 @@ def write_run_meta(out_dir: Path, **fields) -> None:
             meta = {}
     meta.update(fields)
     path.write_text(json.dumps(meta, indent=2))
-
-
-def _submit_array(
-    args: CommonArgs,
-    manifest: Path,
-    n_tasks: int,
-    log_dir: Path,
-    out_dir: Path,
-    max_concurrent: int,
-    partition: str | None = None,
-) -> None:
-    cmd = [
-        "sbatch",
-        f"--account={args.account}" if args.account else "",
-        f"--array=1-{n_tasks}%{max_concurrent}",
-        f"--partition={partition}" if partition else "",
-        f"--gres=gpu:{args.gpus_per_task}" if args.gpus_per_task > 0 else "",
-        f"--cpus-per-task={args.cpus_per_task}" if args.cpus_per_task else "",
-        f"--time={args.time}" if args.time else "",
-        f"--mem={args.mem}" if args.mem else "",
-        f"--output={log_dir}/{args.sbatch_script.stem}_%A_%a.out",
-        f"--error={log_dir}/{args.sbatch_script.stem}_%A_%a.err",
-        str(args.sbatch_script),
-        str(manifest),
-        str(out_dir),
-    ]
-    cmd = [c for c in cmd if c]  # Remove empty arguments
-    print("Submitting:", " ".join(cmd))
-    result = subprocess.run(
-        cmd,
-        env={
-            **os.environ,
-            "SAPIA_PRELUDE": str(PRELUDE_PATH),
-            "SAPIA_TOOL_DIR": str(Path(args.sbatch_script).resolve().parent),
-        },
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"sbatch exited {result.returncode}")
-
-
-def _submit_chunked(
-    args: CommonArgs,
-    rows: Sequence[ManifestRow],
-    manifest_base: Path,
-    log_dir: Path,
-    out_dir: Path,
-    max_concurrent: int,
-    partition: str | None = None,
-) -> None:
-    """Split rows into chunks of SLURM_MAX_ARRAY_SIZE, write a manifest for
-    each chunk, and submit separate array jobs."""
-    chunks = [
-        rows[i : i + SLURM_MAX_ARRAY_SIZE]
-        for i in range(0, len(rows), SLURM_MAX_ARRAY_SIZE)
-    ]
-
-    for chunk_idx, chunk in enumerate(chunks):
-        if len(chunks) == 1:
-            manifest = manifest_base
-        else:
-            manifest = manifest_base.with_stem(f"{manifest_base.stem}_{chunk_idx}")
-        _write_manifest(manifest, chunk)
-
-        if partition or len(chunks) > 1:
-            parts = []
-            if partition:
-                parts.append(partition)
-            if len(chunks) > 1:
-                parts.append(f"chunk {chunk_idx + 1}/{len(chunks)}")
-            print(f"[{', '.join(parts)}]")
-
-        _submit_array(
-            args,
-            manifest,
-            len(chunk),
-            log_dir,
-            out_dir,
-            max_concurrent,
-            partition,
-        )
-
-
-def _submit_multi_partition(
-    args: CommonArgs,
-    rows: Sequence[ManifestRow],
-    manifest_base: Path,
-    log_dir: Path,
-    out_dir: Path,
-) -> None:
-    """Submit one SLURM array per partition, each capped at a GPU fraction.
-    Each partition's share is further chunked to respect SLURM_MAX_ARRAY_SIZE."""
-
-    def parse_partitions(raw: str) -> list[tuple[str, int | None]]:
-        """Parse ``'part1[:gpus],part2[:gpus]'`` into (name, gpu_count | None)."""
-        result: list[tuple[str, int | None]] = []
-        for token in raw.split(","):
-            if ":" in token:
-                name, count = token.rsplit(":", 1)
-                result.append((name, int(count)))
-            else:
-                result.append((token, None))
-        return result
-
-    parsed = parse_partitions(args.partitions)  # type: ignore[arg-type]
-
-    partition_caps: list[tuple[str, int]] = []
-    for name, gpu_count in parsed:
-        if gpu_count is None:
-            gpu_count = _query_partition_gpus(name)
-        cap = max(1, int(gpu_count * args.max_gpu_fraction) // args.gpus_per_task)
-        partition_caps.append((name, cap))
-
-    n_tasks = len(rows)
-    n_parts = len(partition_caps)
-    chunk = n_tasks // n_parts
-    remainder = n_tasks % n_parts
-    start = 0
-    for i, (partition, cap) in enumerate(partition_caps):
-        size = chunk + (1 if i < remainder else 0)
-        if size == 0:
-            continue
-        partition_rows = rows[start : start + size]
-        part_manifest = manifest_base.with_stem(f"{manifest_base.stem}_{partition}")
-        _submit_chunked(
-            args,
-            partition_rows,
-            part_manifest,
-            log_dir,
-            out_dir,
-            cap,
-            partition,
-        )
-        start += size
 
 
 def run_from_args(
@@ -491,7 +337,7 @@ def run_from_args(
 
         # Dirs (created below, so resolve without the existence guard).
         out_dir = resolve_dir_name(args, output_table, metadata, must_exist=False)
-        log_dir = out_dir / f"{args.sbatch_script.stem}_logs"
+        log_dir = out_dir / f"{args.script.stem}_logs"
         out_dir.mkdir(parents=True, exist_ok=True)
         log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -517,7 +363,10 @@ def run_from_args(
         manifest_dir = args.run_dir / ".manifests"
         manifest_dir.mkdir(parents=True, exist_ok=True)
 
-        manifest_base = manifest_dir / f"{args.sbatch_script.stem}_manifest.txt"
+        leaf = build_tool_leaf(args.script.stem, args.dir_label)
+        manifest_base = (
+            manifest_dir / f"{output_table.table_name}_{leaf}_manifest.txt"
+        )
         ctx = ManifestCtx(
             df=df,
             args=args,
@@ -536,15 +385,14 @@ def run_from_args(
     print(f"Output:  {out_dir}")
     print(f"Logs:    {log_dir}")
 
-    # Submit array jobs, chunking into groups of SLURM_MAX_ARRAY_SIZE.
-    if args.partitions:
-        _submit_multi_partition(args, manifest_rows, manifest_base, log_dir, out_dir)
-    else:
-        _submit_chunked(
-            args,
-            manifest_rows,
-            manifest_base,
-            log_dir,
-            out_dir,
-            args.max_concurrent,
+    submit = get_executor(args.executor)
+    submit(
+        SubmitCtx(
+            args=args,
+            tool_name=metadata.name,
+            rows=manifest_rows,
+            manifest_base=manifest_base,
+            out_dir=out_dir,
+            log_dir=log_dir,
         )
+    )

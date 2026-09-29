@@ -3,7 +3,7 @@ from pathlib import Path
 from prosapia.core import Tool
 
 from .collect_colabfold import collect_colabfold
-from .run_colabfold_sbatch import (
+from .run_colabfold import (
     add_colabfold_args,
     build_colabfold_manifest,
 )
@@ -12,7 +12,7 @@ TOOL = Tool(
     name="colabfold",
     action="update",
     description="Run ColabFold structure predictions.",
-    default_sbatch=str(Path(__file__).parent / "colabfold.sbatch"),
+    default_script=str(Path(__file__).parent / "colabfold.sh"),
     default_input_column="proteinmpnn_sequence",
     build_manifest_fn=build_colabfold_manifest,
     add_run_args_fn=add_colabfold_args,

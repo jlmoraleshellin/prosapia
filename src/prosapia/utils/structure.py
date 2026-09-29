@@ -24,3 +24,10 @@ def polymer_chain_names(pdb_path: Path) -> list[str]:
 def count_polymer_chains(pdb_path: Path) -> int:
     """Number of polymer chains in the first model (a cyclic symmetry order)."""
     return len(polymer_chain_names(pdb_path))
+
+
+def polymer_chain_lengths(pdb_path: Path) -> list[int]:
+    """Residue count of each polymer chain in the first model, in file order."""
+    structure = gemmi.read_structure(str(pdb_path))
+    structure.setup_entities()
+    return [len(p) for chain in structure[0] if len(p := chain.get_polymer()) > 0]
