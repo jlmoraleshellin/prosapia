@@ -72,6 +72,31 @@ def get_dotenv_vars() -> dict[str, str | None]:
     return {k: v for k, v in dotenv_values(path).items() if v is not None}
 
 
+def publish_manifest(runs, local_path: Path) -> None:
+    """Make the manifest visible to task containers before any of them starts.
+
+    Writing it through the ``/runs`` mount is not enough. A task container has its
+    own mount, and every mount is created with ``allow_background_commits=True``, so
+    a mount write reaches the volume backend on a background schedule that
+    ``spawn_map`` can outrun. The task then reads a truncated manifest, or no file at
+    all -- ``sed: can't read <...>_manifest.txt``, and the task exits 0 having
+    written nothing.
+
+    ``runs.commit()`` would force the push, but ``sapia modal-shell`` runs the
+    workstation as a Modal *Sandbox* (``modal shell <file>::workstation``), and the
+    server rejects VolumeCommit from one. ``batch_upload`` writes server-side through
+    the Volume API, so it needs no mount at all and is valid from the Sandbox, from a
+    task container and from a laptop alike. ``force=True`` so a rerun under the same
+    label overwrites rather than raising.
+
+    The mount write in ``write_manifest`` is kept as well: that is the copy this
+    container reads back (e.g. at collect), while this is the copy tasks read.
+    """
+    remote = "/" + str(volume_path(local_path).relative_to(executors.RUNS_MOUNT))
+    with runs.batch_upload(force=True) as batch:
+        batch.put_file(str(local_path), remote)
+
+
 def submit(ctx: SubmitCtx) -> None:
     try:
         import modal
@@ -93,8 +118,9 @@ def submit(ctx: SubmitCtx) -> None:
     n_tasks = len(ctx.rows)
 
     runs = get_runs_volume()
-    # Publish the manifest before any task can read it.
-    runs.commit()
+    # Publish the manifest before any task can read it. Not runs.commit(): the
+    # workstation is a Modal Sandbox, which the server refuses to commit from.
+    publish_manifest(runs, ctx.manifest_base)
     volumes = {str(runs_mount): runs, **_extra_volumes(spec)}
     resources = resolve_resources(ctx, getattr(spec, "RESOURCES", {}))
 
