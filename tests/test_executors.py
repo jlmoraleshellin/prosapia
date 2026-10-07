@@ -13,7 +13,13 @@ from pathlib import Path
 import pytest
 
 import prosapia.core.executors as executors
-from prosapia.core.executors import PRELUDE_PATH, SubmitCtx, get_executor, volume_path
+from prosapia.core.executors import (
+    PRELUDE_PATH,
+    SubmitCtx,
+    get_executor,
+    get_publisher,
+    volume_path,
+)
 from prosapia.core.executors import modal as modal_exec
 from prosapia.core.executors import slurm
 from prosapia.core.tool_registry import BUILTIN_TOOLS_DIR, discover
@@ -205,13 +211,31 @@ class _FakeImage:
         return self
 
 
+class _FakeBatch:
+    def __init__(self, volume, force):
+        self.volume, self.force = volume, force
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def put_file(self, local, remote):
+        self.volume.uploads.append((str(local), remote))
+
+
 class _FakeVolume:
     def __init__(self, name):
         self.name = name
         self.commits = 0
+        self.uploads = []
 
     def commit(self):
         self.commits += 1
+
+    def batch_upload(self, force=False):
+        return _FakeBatch(self, force)
 
 
 class _FakeFunction:
@@ -321,6 +345,11 @@ def test_modal_submit_fans_out_and_runs_script(tmp_path, fake_modal, monkeypatch
     assert kw["secrets"] == [("secret", {"FOO": "bar"})]
     assert (str(PRELUDE_PATH), str(PRELUDE_PATH)) in kw["image"].local
     assert ctx.manifest_base.read_text() == "a\nb\nc\n"
+    # The manifest goes through the Volume API too: a mount write alone can be
+    # outrun by spawn_map.
+    assert fake_modal["runs"].uploads == [
+        (str(ctx.manifest_base), "/mytool_manifest.txt")
+    ]
 
     # Run one task's function locally: the unchanged script runs with modal env.
     assert app.fn.task(2) == 0
@@ -388,6 +417,38 @@ def test_modal_keeps_symlinked_mount_paths(tmp_path, fake_modal, monkeypatch):
     paths = _FakeApp.last.fn.task_kwargs
     for name in ("manifest", "out_dir", "log_prefix"):
         assert paths[name].startswith(str(mount)), (name, paths[name])
+
+
+def test_slurm_publisher_is_a_noop():
+    # SLURM tasks read the filesystem the submitter wrote to, so there is nothing
+    # to publish; a tool still calls ctx.publish unconditionally.
+    assert get_publisher("slurm")([Path("/nonexistent")]) is None
+
+
+def test_modal_publisher_batches_side_files(tmp_path, fake_modal, monkeypatch):
+    # A build_manifest_fn's side files (sub-manifests, staged inputs) reach tasks the
+    # same way the manifest does, in one batch.
+    monkeypatch.setenv("SAPIA_MODAL_RUNS_VOLUME", "runs")
+    monkeypatch.setattr(executors, "RUNS_MOUNT", str(tmp_path))
+    sub = tmp_path / "out" / "tasks" / "task_0.tsv"
+    staged = tmp_path / "out" / "d1" / "input.pdb"
+    for f in (sub, staged):
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("x")
+
+    publish = get_publisher("modal")
+    publish([sub, staged])
+
+    assert fake_modal["runs"].uploads == [
+        (str(sub), "/out/tasks/task_0.tsv"),
+        (str(staged), "/out/d1/input.pdb"),
+    ]
+
+    # Nothing to publish must not open the Volume at all.
+    fake_modal["runs"].uploads.clear()
+    monkeypatch.delenv("SAPIA_MODAL_RUNS_VOLUME")
+    publish([])
+    assert fake_modal["runs"].uploads == []
 
 
 def test_modal_rejects_run_dir_outside_mount(tmp_path, fake_modal, monkeypatch):
@@ -516,3 +577,18 @@ def test_bundled_tools_use_portable_task_scripts():
         text = script.read_text()
         assert "SLURM_ARRAY_TASK_ID" not in text, name
         assert "sapia_activate SAPIA_ACTIVATE_" in text, name
+
+
+def test_bundled_modal_images_are_loadable():
+    # Every modal_image.py a bundled tool ships must define the hooks the executor
+    # looks up, so --executor modal fails at the scheduler, never at import.
+    for name, tool in discover(BUILTIN_TOOLS_DIR).items():
+        tool_dir = Path(tool.default_script).parent
+        if not (tool_dir / "modal_image.py").is_file():
+            continue
+        spec = modal_exec._load_modal_image(tool_dir)
+        assert callable(spec.image), name
+        resources = getattr(spec, "RESOURCES", {})
+        assert set(resources) <= {"gpu", "cpu", "memory", "timeout"}, (name, resources)
+        if hasattr(spec, "volumes"):
+            assert all(k.startswith("/") for k in spec.volumes()), name
