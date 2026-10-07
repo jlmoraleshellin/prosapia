@@ -48,6 +48,10 @@ def image() -> modal.Image:
             "git clone --depth 1 https://github.com/RosettaCommons/RFdiffusion "
             f"{RFDIFFUSION_DIR}"
         )
+        # numpy first and pinned: torch 1.12 predates the numpy 2 ABI, and without
+        # this pip resolves numpy>=2, which leaves torch's bridge dead. It fails late
+        # and obscurely, as `RuntimeError: Numpy is not available` from .numpy().
+        .pip_install("numpy<2")
         # dgl and torch ship CUDA-11.6 builds on their own indexes; the rest are the
         # Dockerfile's pins.
         .pip_install(
