@@ -12,6 +12,7 @@ import importlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 from typing import TYPE_CHECKING, Callable, Sequence
 
 if TYPE_CHECKING:
@@ -50,16 +51,36 @@ class SubmitCtx:
 
 
 ExecutorFn = Callable[[SubmitCtx], None]
+PublishFn = Callable[["Sequence[Path]"], None]
 
 # name -> module under prosapia.core.executors defining ``submit``. Imported lazily
 # so optional scheduler SDKs (modal) are only needed when that executor is used.
 EXECUTORS = ("slurm", "modal")
 
 
-def get_executor(name: str) -> ExecutorFn:
+def _executor_module(name: str) -> ModuleType:
     if name not in EXECUTORS:
         raise ValueError(f"Unknown executor {name!r}. Available: {', '.join(EXECUTORS)}.")
-    return importlib.import_module(f"{__name__}.{name}").submit
+    return importlib.import_module(f"{__name__}.{name}")
+
+
+def get_executor(name: str) -> ExecutorFn:
+    return _executor_module(name).submit
+
+
+def _publish_noop(paths: "Sequence[Path]") -> None:
+    """``PublishFn`` for an executor whose tasks already share this filesystem."""
+    return None
+
+
+def get_publisher(name: str) -> PublishFn:
+    """The ``PublishFn`` of executor ``name``.
+
+    An executor publishes by defining a module-level ``publish(paths)``. One whose
+    tasks read the same filesystem the submitter wrote to (slurm) defines none and
+    gets the no-op, so a tool calls ``ctx.publish`` unconditionally.
+    """
+    return getattr(_executor_module(name), "publish", _publish_noop)
 
 
 def write_manifest(path: Path, rows: "Sequence[ManifestRow]") -> None:

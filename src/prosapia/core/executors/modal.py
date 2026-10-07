@@ -31,6 +31,7 @@ import re
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Sequence
 
 from . import PRELUDE_PATH, SubmitCtx, volume_path, write_manifest
 import prosapia.core.executors as executors
@@ -72,8 +73,8 @@ def get_dotenv_vars() -> dict[str, str | None]:
     return {k: v for k, v in dotenv_values(path).items() if v is not None}
 
 
-def publish_manifest(runs, local_path: Path) -> None:
-    """Make the manifest visible to task containers before any of them starts.
+def publish_files(runs, local_paths: "Sequence[Path]") -> None:
+    """Make submit-time files visible to task containers before any of them starts.
 
     Writing it through the ``/runs`` mount is not enough. A task container has its
     own mount, and every mount is created with ``allow_background_commits=True``, so
@@ -89,12 +90,30 @@ def publish_manifest(runs, local_path: Path) -> None:
     task container and from a laptop alike. ``force=True`` so a rerun under the same
     label overwrites rather than raising.
 
-    The mount write in ``write_manifest`` is kept as well: that is the copy this
-    container reads back (e.g. at collect), while this is the copy tasks read.
+    The mount writes are kept as well: those are the copies this container reads back
+    (e.g. at collect), while these are the copies tasks read.
+
+    This applies to every file written at submit time that a task then reads: the
+    manifest itself, and whatever side files a ``build_manifest_fn`` wrote beside it
+    (sub-manifests, shard inputs, staged structures) and passed to ``ctx.publish``.
     """
-    remote = "/" + str(volume_path(local_path).relative_to(executors.RUNS_MOUNT))
     with runs.batch_upload(force=True) as batch:
-        batch.put_file(str(local_path), remote)
+        for local_path in local_paths:
+            remote = "/" + str(
+                volume_path(local_path).relative_to(executors.RUNS_MOUNT)
+            )
+            batch.put_file(str(local_path), remote)
+
+
+def publish(paths: "Sequence[Path]") -> None:
+    """``PublishFn`` for this executor, handed to a tool as ``ctx.publish``.
+
+    Opens the runs Volume itself, because a manifest is built before any executor is
+    entered. See ``publish_files`` for why a mount write is not enough.
+    """
+    if not paths:
+        return
+    publish_files(get_runs_volume(), list(paths))
 
 
 def submit(ctx: SubmitCtx) -> None:
@@ -120,7 +139,7 @@ def submit(ctx: SubmitCtx) -> None:
     runs = get_runs_volume()
     # Publish the manifest before any task can read it. Not runs.commit(): the
     # workstation is a Modal Sandbox, which the server refuses to commit from.
-    publish_manifest(runs, ctx.manifest_base)
+    publish_files(runs, [ctx.manifest_base])
     volumes = {str(runs_mount): runs, **_extra_volumes(spec)}
     resources = resolve_resources(ctx, getattr(spec, "RESOURCES", {}))
 

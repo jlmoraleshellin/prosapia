@@ -52,6 +52,7 @@ from typing import Callable, cast
 import gemmi
 
 from prosapia.core import CommonArgs, ManifestCtx
+from prosapia.core.executors import volume_path
 from prosapia.utils import count_polymer_chains, resolve_template
 
 # A fixed contig segment references an input chain: an uppercase chain letter
@@ -322,7 +323,7 @@ def _build_create_designs(
     designs: list[tuple[str, ...]] = []
     for name in ctx.ready.index:
         name = cast(str, name)
-        input_path = Path(str(ctx.ready.at[name, ctx.args.input_column]))
+        input_path = volume_path(str(ctx.ready.at[name, ctx.args.input_column]))
         if not input_path.exists():
             print(f"{name}: MISSING {input_path} (skipping)")
             continue
@@ -365,7 +366,7 @@ def _build_root_designs(
         )
 
     if ctx.args.input_pdb is not None:
-        input_path = Path(ctx.args.input_pdb)
+        input_path = volume_path(ctx.args.input_pdb)
         if not input_path.exists():
             raise FileNotFoundError(f"--input-pdb {input_path} does not exist.")
         name = f"{input_path.stem}_diff"
@@ -408,11 +409,21 @@ def build_rfdiff_manifest(ctx: ManifestCtx[RFDiffArgs]) -> list[tuple[str, ...]]
     per_card = ctx.args.per_card
     per_task = per_card * ctx.args.shard_size
     manifest_rows: list[tuple[str, ...]] = []
+    sub_manifests: list[Path] = []
     for i in range(0, len(designs), per_task):
         chunk = designs[i : i + per_task]
         sub = task_dir / f"task_{i // per_task}.tsv"
         with open(sub, "w") as f:
             for j, row in enumerate(chunk):
                 f.write("\t".join((str(j % per_card), *row)) + "\n")
+        sub_manifests.append(sub)
         manifest_rows.append((str(sub),))
+
+    # Every file this builder wrote that a task then reads: its sub-manifest, and the
+    # renumbered input staged for each design (field 1, empty for a de-novo row). The
+    # driver publishes only the top-level manifest, so on an executor that doesn't
+    # share this filesystem these would otherwise be missing when the task starts.
+    staged_inputs = [Path(d[1]) for d in designs if d[1]]
+    ctx.publish([*sub_manifests, *staged_inputs])
+
     return manifest_rows
