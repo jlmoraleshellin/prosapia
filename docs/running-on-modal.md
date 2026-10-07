@@ -49,6 +49,8 @@ Every container, the workstation and each task, mounts the runs Volume at `/runs
 
 The Volume is created as a v2 Volume, which allows concurrent commits from many tasks. Keep in mind its limit of 262,144 files per directory.
 
+Mounts commit in the background, so a file written at submit time can still be in flight when a task starts. The driver pushes the manifest through the Volume API before fanning out; a tool that writes its own side files (sub-manifests, shard inputs, staged structures) does the same by passing them to [`ctx.publish`](writing-a-build-manifest-function.md#side-files-ctxpublish).
+
 ## Submission, logs and task status
 
 Submission is detached, like `sbatch`: `sapia run` returns once the tasks are queued. The run's log folder holds:
