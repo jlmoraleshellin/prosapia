@@ -22,7 +22,7 @@ Every field is written as a string, so cast paths and numbers yourself. Return a
 
 ## The context
 
-`ctx` is a `ManifestCtx` that exposes everything the hook may read. The most important field is **`ctx.ready`**: the designs this run should submit — rows with a present `--input-column`, minus those the tool already finished (`<leaf>_status == "OK"`) unless `--force`. Iterate `ctx.ready` and you get resume-on-rerun and input filtering for free; you never filter or resume by hand (see [the ready set](running-a-tool.md#the-ready-set)). The rest: **`ctx.df`** is the full source frame (use it only when you deliberately select rows a different way than `--input-column`), **`ctx.args`** is the parsed CLI namespace (the base flags plus any your `add_run_args_fn` added), **`ctx.out_dir`** is the destination output dir for this run (write any staged inputs under it), **`ctx.lookup`** walks the lineage to inherit an ancestor's value — `ctx.lookup(name, "n_subunits")` reads that column from the row or its nearest ancestor — and **`ctx.write_meta(**fields)`** records extra run params into this run's sidecar (used by root runs, see below), and **`ctx.publish(paths)`** makes submit-time side files readable by the tasks (see below).
+`ctx` is a `ManifestCtx` that exposes everything the hook may read. The most important field is **`ctx.ready`**: the designs this run should submit — rows with a present `--input-column`, minus those the tool already finished (`<leaf>_status == "OK"`) unless `--force`. Iterate `ctx.ready` and you get resume-on-rerun and input filtering for free; you never filter or resume by hand (see [the ready set](running-a-tool.md#the-ready-set)). The rest: **`ctx.df`** is the full source frame (use it only when you deliberately select rows a different way than `--input-column`), **`ctx.args`** is the parsed CLI namespace (the base flags plus any your `add_run_args_fn` added), **`ctx.out_dir`** is the destination output dir for this run (write any staged inputs under it), **`ctx.lookup`** walks the lineage to inherit an ancestor's value — `ctx.lookup(name, "n_subunits")` reads that column from the row or its nearest ancestor — and **`ctx.write_meta(**fields)`** records extra run params into this run's sidecar (used by root runs, see below).
 
 ## Rows and the `.sh` task script
 
@@ -32,15 +32,9 @@ A row's fields become one tab-separated manifest line, and the tool's `.sh` task
 
 The one-row-per-design loop above is the base case; bundled tools layer three variations on it. **Per-design staging** does deterministic, input-derived prep *here* at submit time and puts only the staged path in the row, so the `.sh` task script just launches the binary — RFdiffusion renumbers each input PDB into `ctx.out_dir`, ColabFold writes a FASTA per design, and the row carries the staged file's path. **Sub-manifests** let one array task cover several designs: pack N designs into a per-task file and emit that file's path as the row's single field (RFdiffusion's `--per-card` / `--shard-size` group diffusions onto one GPU this way). **Custom selection** bypasses `ctx.ready` when a tool keys off its own columns rather than `--input-column` — USalign filters `ctx.df` by `--col-a` — but if you do this, replicate the resume skip yourself (drop rows whose `<prefix>_status == "OK"` unless `--force`), since you're no longer getting it from `ctx.ready`.
 
-## Side files: `ctx.publish`
+## Side files
 
-Anything you write at submit time that a **task** then reads — a sub-manifest, a shard input, a staged structure — must be handed to `ctx.publish` once it is on disk:
-
-```python
-ctx.publish([*sub_manifests, *staged_inputs])
-```
-
-The driver publishes only the top-level manifest. On an executor whose tasks share your filesystem (`slurm`) this is a no-op; on one whose tasks don't (`modal`, where the run dir is a Volume mounted with background commits) a task can otherwise start before your file has reached the backend and read a truncated file or none at all. Pass real paths to files that already exist; publishing is a single batched call, so make it the last thing the hook does.
+Anything you write at submit time that a **task** then reads — a sub-manifest, a shard input, a staged structure — reaches the task for you, with no call on your part and no rule about where you put it. On `modal` the executor commits the Volume once before fanning out, which flushes everything the submitting process wrote; on `slurm` the tasks already share your filesystem.
 
 ## Root runs (no `--table`)
 

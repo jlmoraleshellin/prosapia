@@ -75,8 +75,7 @@ def _image() -> modal.Image:
 
 app = modal.App("sapia-workstation")
 
-
-@app.function(
+workstation_function = app.function(
     image=_image(),
     volumes={RUNS_MOUNT: get_runs_volume()},
     secrets=[modal.Secret.from_dict(get_dotenv_vars())],
@@ -84,5 +83,37 @@ app = modal.App("sapia-workstation")
     memory=int(os.environ.get("SAPIA_MODAL_SHELL_MEMORY", 1024)),
     timeout=24 * 3600,
 )
+
+
+@workstation_function
 def workstation() -> None:
     """Spec for ``modal shell``; never called."""
+
+
+@workstation_function
+def shell() -> int:
+    """Interactive shell, in a *function* container rather than a Sandbox.
+
+    ``modal.interact()`` asks the server for a PTY and wires it to the local terminal;
+    it only works when the app was started with ``interactive=True``. Running the shell
+    here rather than through ``modal shell`` is what lets a submit typed inside it flush
+    the Volume with one commit, which a Sandbox may not do.
+    """
+    import subprocess
+
+    modal.interact()
+    return subprocess.run(["bash", "-l"], cwd=RUNS_MOUNT).returncode
+
+
+@workstation_function
+def run_cmd(cmd: str) -> int:
+    """Run one command in the workstation, as a *function* container.
+
+    ``modal shell`` gives a Sandbox, and the server refuses ``Volume.commit()`` from
+    one. A function container may commit, which lets a submit inside it flush
+    everything it staged with a single call instead of uploading the staged files one
+    by one -- the difference between one request and ten thousand on a large run.
+    """
+    import subprocess
+
+    return subprocess.run(["bash", "-lc", cmd], cwd=RUNS_MOUNT).returncode

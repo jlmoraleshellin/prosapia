@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 from pandas import DataFrame
 
 from .base_parser import base_parser
-from .executors import EXECUTORS, PublishFn, SubmitCtx, get_executor, get_publisher
+from .executors import EXECUTORS, SubmitCtx, get_executor
 from .data_manager import Table, DataManager, LookupFn, RegistryManager, filter_ready
 from .naming import (
     RUN_META_FILENAME,
@@ -264,15 +264,13 @@ ArgsT = TypeVar("ArgsT", bound=CommonArgs)
 
 @dataclass
 class ManifestCtx(Generic[ArgsT]):
-    """Inputs a manifest builder may read (frame, args, out_dir, lookup), plus the
-    side effects it may cause (write_meta, publish)."""
+    """Inputs a manifest builder may read (frame, args, out_dir, lookup)."""
 
     df: pd.DataFrame
     args: ArgsT
     out_dir: Path
     lookup: LookupFn
     write_meta: Callable[..., None]
-    publish: PublishFn
 
     @property
     def ready(self) -> pd.DataFrame:
@@ -375,7 +373,6 @@ def run_from_args(
             out_dir=out_dir,
             lookup=partial(dm.lookup, df),
             write_meta=partial(write_run_meta, out_dir),
-            publish=get_publisher(args.executor),
         )
         manifest_rows = build_manifest_fn(ctx)
 

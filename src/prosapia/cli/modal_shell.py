@@ -10,9 +10,6 @@ Usage:
 """
 
 import argparse
-import base64
-import subprocess
-import sys
 from pathlib import Path
 
 WORKSTATION = Path(__file__).parent.parent / "core" / "executors" / "workstation.py"
@@ -30,17 +27,40 @@ def build_modal_shell_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def modal_shell_argv(args: argparse.Namespace) -> list[str]:
-    argv = [sys.executable, "-m", "modal", "shell", f"{WORKSTATION}::workstation"]
-    if args.cmd:
-        # Modal wraps --cmd as `bash -c "<cmd>"`, so any `"` in it would break out.
-        # Base64 has no quotes; process substitution keeps the command's stdin.
-        b64 = base64.b64encode(args.cmd.encode()).decode()
-        argv += ["--cmd", f"bash <(echo {b64} | base64 -d)"]
-    if args.cmd and not sys.stdin.isatty():
-        argv.insert(4, "--no-pty")
-    return argv
+def _load_workstation():
+    """Import the workstation module by path, the way the modal CLI used to."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("sapia_workstation", WORKSTATION)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load the workstation from {WORKSTATION}")
+    workstation = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(workstation)
+    return workstation
 
 
 def modal_shell_from_args(args: argparse.Namespace) -> None:
-    raise SystemExit(subprocess.run(modal_shell_argv(args)).returncode)
+    """Open the workstation, or run one command in it, as a *function* container.
+
+    Not ``modal shell``: that gives a Sandbox, and the server refuses
+    ``Volume.commit()`` from one, which would force the submit path to upload every
+    staged file instead of flushing them all at once.
+
+    ``enable_output`` is required twice over: without it modal swallows the container's
+    stdout, and interactive mode refuses to start without progress output.
+    """
+    import sys
+
+    import modal
+
+    if not args.cmd and not sys.stdin.isatty():
+        raise SystemExit(
+            "sapia modal-shell needs a terminal. Without one, modal has no PTY to "
+            "attach and the shell would hang; use --cmd to run a single command."
+        )
+
+    workstation = _load_workstation()
+    with modal.enable_output(), workstation.app.run(interactive=not args.cmd):
+        if args.cmd:
+            raise SystemExit(workstation.run_cmd.remote(args.cmd))
+        raise SystemExit(workstation.shell.remote())

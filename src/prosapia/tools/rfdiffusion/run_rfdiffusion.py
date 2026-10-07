@@ -409,21 +409,11 @@ def build_rfdiff_manifest(ctx: ManifestCtx[RFDiffArgs]) -> list[tuple[str, ...]]
     per_card = ctx.args.per_card
     per_task = per_card * ctx.args.shard_size
     manifest_rows: list[tuple[str, ...]] = []
-    sub_manifests: list[Path] = []
     for i in range(0, len(designs), per_task):
         chunk = designs[i : i + per_task]
         sub = task_dir / f"task_{i // per_task}.tsv"
         with open(sub, "w") as f:
             for j, row in enumerate(chunk):
                 f.write("\t".join((str(j % per_card), *row)) + "\n")
-        sub_manifests.append(sub)
         manifest_rows.append((str(sub),))
-
-    # Every file this builder wrote that a task then reads: its sub-manifest, and the
-    # renumbered input staged for each design (field 1, empty for a de-novo row). The
-    # driver publishes only the top-level manifest, so on an executor that doesn't
-    # share this filesystem these would otherwise be missing when the task starts.
-    staged_inputs = [Path(d[1]) for d in designs if d[1]]
-    ctx.publish([*sub_manifests, *staged_inputs])
-
     return manifest_rows

@@ -1,7 +1,5 @@
 """Executors + task prelude: SLURM argv, prelude contract, and Modal fan-out (stubbed)."""
 
-import base64
-import shlex
 import subprocess
 import sys
 import types
@@ -13,13 +11,7 @@ from pathlib import Path
 import pytest
 
 import prosapia.core.executors as executors
-from prosapia.core.executors import (
-    PRELUDE_PATH,
-    SubmitCtx,
-    get_executor,
-    get_publisher,
-    volume_path,
-)
+from prosapia.core.executors import PRELUDE_PATH, SubmitCtx, get_executor, volume_path
 from prosapia.core.executors import modal as modal_exec
 from prosapia.core.executors import slurm
 from prosapia.core.tool_registry import BUILTIN_TOOLS_DIR, discover
@@ -230,8 +222,12 @@ class _FakeVolume:
         self.name = name
         self.commits = 0
         self.uploads = []
+        # Sandboxes and laptops are refused by the server; function containers are not.
+        self.commit_fails = False
 
     def commit(self):
+        if self.commit_fails:
+            raise RuntimeError("commit() can only be called on a mounted volume")
         self.commits += 1
 
     def batch_upload(self, force=False):
@@ -347,16 +343,16 @@ def test_modal_submit_fans_out_and_runs_script(tmp_path, fake_modal, monkeypatch
     assert ctx.manifest_base.read_text() == "a\nb\nc\n"
     # The manifest goes through the Volume API too: a mount write alone can be
     # outrun by spawn_map.
-    assert fake_modal["runs"].uploads == [
-        (str(ctx.manifest_base), "/mytool_manifest.txt")
-    ]
+    # One commit covers the manifest and anything else staged, so nothing is uploaded.
+    assert fake_modal["runs"].uploads == []
+    assert fake_modal["runs"].commits == 1
 
     # Run one task's function locally: the unchanged script runs with modal env.
     assert app.fn.task(2) == 0
     out = (ctx.log_dir / "mytool_2.out").read_text().strip()
     assert out == f"modal mytool 2 b {tmp_path}"
     assert (ctx.log_dir / "mytool_2.exit").read_text() == "0\n"
-    assert fake_modal["runs"].commits == 1
+    assert fake_modal["runs"].commits == 2  # submit flushed, then the task committed
     assert json.loads((ctx.log_dir / "mytool_modal.json").read_text()) == {
         "app_id": "ap-test",
         "n_tasks": 3,
@@ -383,7 +379,7 @@ def test_modal_task_records_failures(tmp_path, fake_modal, monkeypatch):
     with pytest.raises(IsADirectoryError):
         run_task(1)
     assert (ctx.log_dir / "mytool_1.exit").read_text() == "255\n"
-    assert fake_modal["runs"].commits == 2
+    assert fake_modal["runs"].commits == 3  # submit, then both task attempts
 
 
 def test_modal_keeps_symlinked_mount_paths(tmp_path, fake_modal, monkeypatch):
@@ -419,36 +415,34 @@ def test_modal_keeps_symlinked_mount_paths(tmp_path, fake_modal, monkeypatch):
         assert paths[name].startswith(str(mount)), (name, paths[name])
 
 
-def test_slurm_publisher_is_a_noop():
-    # SLURM tasks read the filesystem the submitter wrote to, so there is nothing
-    # to publish; a tool still calls ctx.publish unconditionally.
-    assert get_publisher("slurm")([Path("/nonexistent")]) is None
-
-
-def test_modal_publisher_batches_side_files(tmp_path, fake_modal, monkeypatch):
-    # A build_manifest_fn's side files (sub-manifests, staged inputs) reach tasks the
-    # same way the manifest does, in one batch.
+def test_modal_submit_fails_when_it_cannot_commit(tmp_path, fake_modal, monkeypatch):
+    # Refused anywhere but a function container. Failing here beats tasks that start,
+    # read a file the backend does not have yet, and exit 0 having written nothing.
+    monkeypatch.setitem(sys.modules, "_test_fake_image", _FakeImage)
     monkeypatch.setenv("SAPIA_MODAL_RUNS_VOLUME", "runs")
     monkeypatch.setattr(executors, "RUNS_MOUNT", str(tmp_path))
-    sub = tmp_path / "out" / "tasks" / "task_0.tsv"
-    staged = tmp_path / "out" / "d1" / "input.pdb"
-    for f in (sub, staged):
-        f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text("x")
+    script = _modal_tool(tmp_path)
+    ctx = _ctx(tmp_path, [("a",)], script=script)
+    fake_modal.setdefault("runs", _FakeVolume("runs")).commit_fails = True
 
-    publish = get_publisher("modal")
-    publish([sub, staged])
+    with pytest.raises(RuntimeError, match="only from a Modal function container"):
+        get_executor("modal")(ctx)
 
-    assert fake_modal["runs"].uploads == [
-        (str(sub), "/out/tasks/task_0.tsv"),
-        (str(staged), "/out/d1/input.pdb"),
-    ]
 
-    # Nothing to publish must not open the Volume at all.
-    fake_modal["runs"].uploads.clear()
-    monkeypatch.delenv("SAPIA_MODAL_RUNS_VOLUME")
-    publish([])
-    assert fake_modal["runs"].uploads == []
+def test_modal_flushes_with_one_commit(tmp_path, fake_modal, monkeypatch):
+    # One commit covers the manifest and every file the tool staged, however many.
+    monkeypatch.setitem(sys.modules, "_test_fake_image", _FakeImage)
+    monkeypatch.setenv("SAPIA_MODAL_RUNS_VOLUME", "runs")
+    monkeypatch.setattr(executors, "RUNS_MOUNT", str(tmp_path))
+    script = _modal_tool(tmp_path)
+    staged = tmp_path / "out" / "staged" / "d1.pdb"
+    staged.parent.mkdir(parents=True, exist_ok=True)
+    staged.write_text("ATOM\n")
+
+    get_executor("modal")(_ctx(tmp_path, [(str(staged),)], script=script))
+
+    assert fake_modal["runs"].commits == 1
+    assert fake_modal["runs"].uploads == []  # nothing is uploaded file by file
 
 
 def test_modal_rejects_run_dir_outside_mount(tmp_path, fake_modal, monkeypatch):
@@ -520,29 +514,22 @@ def test_modal_dotenv_falls_back_to_cwd(tmp_path, monkeypatch):
 # ── Modal workstation ─────────────────────────────────────────────────────────
 
 
-def test_modal_shell_argv():
-    from prosapia.cli.modal_shell import WORKSTATION, modal_shell_argv
+def test_modal_shell_runs_in_a_function_container():
+    # Both paths go through workstation *functions*: a Sandbox may not commit the
+    # Volume, which is what lets a submit flush its staged files in one call.
+    from prosapia.cli.modal_shell import WORKSTATION, _load_workstation, modal_shell_from_args
 
     assert WORKSTATION.is_file()
-    ref = f"{WORKSTATION}::workstation"
-    assert modal_shell_argv(Namespace(cmd=None)) == [sys.executable, "-m", "modal", "shell", ref]
-    flag, wrapped = modal_shell_argv(Namespace(cmd="sapia --help"))[-2:]
-    assert flag == "--cmd"
-    assert '"' not in wrapped and "'" not in wrapped
+    src = WORKSTATION.read_text()
+    assert "def shell()" in src and "def run_cmd(" in src
+    assert "modal.interact()" in src
 
+    import prosapia.cli.modal_shell as module
 
-def test_modal_shell_cmd_survives_modals_bash_wrapper(tmp_path):
-    from prosapia.cli.modal_shell import modal_shell_argv
-
-    (tmp_path / "a b").mkdir()
-    cmd = """for f in *; do echo "got: $f"; done; echo 'single $HOME'; exit 7"""
-    wrapped = modal_shell_argv(Namespace(cmd=cmd))[-1]
-    assert base64.b64encode(cmd.encode()).decode() in wrapped
-    # Exactly what modal/cli/shell.py does with --cmd.
-    argv = shlex.split(f'/bin/bash -c "{wrapped}"')
-    result = subprocess.run(argv, cwd=tmp_path, capture_output=True, text=True)
-    assert result.returncode == 7
-    assert result.stdout == "got: a b\nsingle $HOME\n"
+    # the old `modal shell` subprocess route is gone, not merely unused
+    assert not hasattr(module, "modal_shell_argv")
+    assert "subprocess" not in vars(module)
+    assert callable(_load_workstation) and callable(modal_shell_from_args)
 
 
 def test_workstation_spec(tmp_path, monkeypatch):
