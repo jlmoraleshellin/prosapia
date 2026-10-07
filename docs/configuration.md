@@ -146,6 +146,7 @@ Template: `activation/pyrosetta.sh`. The activation script must make `pyrosetta`
 ### Rosetta — `SAPIA_ACTIVATE_RELAXED` (rosetta_relax), `SAPIA_ACTIVATE_SYMMDEF` (make_symmdef)
 
 One template serves both: `activation/rosetta.sh`; point both variables at your copy.
+Under `--executor modal`, make_symmdef needs no Rosetta install: its image fetches the standalone `make_symmdef_file.pl` from the public Rosetta repository and sets `ROSETTA` itself.
 
 | Variable | Where | Required | Meaning |
 | --- | --- | --- | --- |
