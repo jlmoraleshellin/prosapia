@@ -50,6 +50,7 @@ class CommonArgs(Namespace):
     dir_label: str
     table_label: str
     filter: Path | None
+    where: list[str] | None
     max_concurrent: int
     partitions: str | None
     account: str | None
@@ -111,6 +112,16 @@ def _add_submit_args(
         default=None,
         help="Path to a Python module defining an apply_filter(df) -> df function, "
         "applied to the DataFrame before the manifest is built.",
+    )
+    parser.add_argument(
+        "-w",
+        "--where",
+        action="append",
+        default=None,
+        metavar="COL=VALUE",
+        help="Keep only rows whose COL equals VALUE (string compare). Repeatable; "
+        "applied after --filter. E.g. -w merge_source=table1_a for a per-fork run "
+        "on a merged table.",
     )
     parser.add_argument(
         "-C",
@@ -255,6 +266,18 @@ def _get_filter_fn_from_module(module_path: Path) -> FilterFn:
     return module.apply_filter
 
 
+def apply_where(df: DataFrame, clauses: Sequence[str]) -> DataFrame:
+    """Keep rows matching every ``COL=VALUE`` clause (values compared as strings)."""
+    for clause in clauses:
+        col, sep, value = clause.partition("=")
+        if not sep or not col:
+            raise ValueError(f"--where expects COL=VALUE, got {clause!r}")
+        if col not in df.columns:
+            raise KeyError(f"--where column {col!r} not in table columns")
+        df = df[df[col].astype(str) == value]
+    return df
+
+
 ## MANIFEST BUILDING AND SUBMISSION
 ManifestRow = Sequence[str]
 AddArgsFn = Callable[[ArgumentParser], None]
@@ -348,6 +371,7 @@ def run_from_args(
             input_column=args.input_column,
             dir_label=args.dir_label,
             filter=str(args.filter) if args.filter else None,
+            where=args.where,
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
 
@@ -358,14 +382,19 @@ def run_from_args(
         if args.filter:
             apply_filter = _get_filter_fn_from_module(args.filter)
             df = apply_filter(df)
+        if args.where:
+            df = apply_where(df, args.where)
 
         # Manifest
         manifest_dir = args.run_dir / ".manifests"
         manifest_dir.mkdir(parents=True, exist_ok=True)
 
+        # Stamped per submission: a resubmit on the same table/leaf must not
+        # overwrite a manifest that still-pending tasks of an earlier array read.
         leaf = build_tool_leaf(args.script.stem, args.dir_label)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
         manifest_base = (
-            manifest_dir / f"{output_table.table_name}_{leaf}_manifest.txt"
+            manifest_dir / f"{output_table.table_name}_{leaf}_{stamp}_manifest.txt"
         )
         ctx = ManifestCtx(
             df=df,

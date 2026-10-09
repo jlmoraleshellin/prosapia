@@ -1,13 +1,20 @@
 """Tests for ``sapia merge``: pooling sibling tables into one child table."""
 
 import json
-from argparse import Namespace
 
 import pandas as pd
 import pytest
 
-from prosapia.cli.merge import merge_from_args, name_suffix
-from prosapia.core import GEN, PARENT_NAME, PARENT_TABLE, ROOT_PARENT, Table, DataManager
+from prosapia.cli.merge import MergeArgs, merge_from_args, name_suffix
+from prosapia.core import (
+    GEN,
+    MERGE_SOURCE,
+    PARENT_NAME,
+    PARENT_TABLE,
+    ROOT_PARENT,
+    Table,
+    DataManager,
+)
 from prosapia.core.naming import RUN_META_FILENAME
 
 
@@ -44,7 +51,7 @@ def _siblings(tmp_path):
 
 
 def _merge(tmp_path, *tables, label="merged"):
-    merge_from_args(Namespace(run_dir=tmp_path, tables=list(tables), table_label=label))
+    merge_from_args(MergeArgs(run_dir=tmp_path, tables=list(tables), table_label=label))
 
 
 def test_name_suffix_strips_parent_label():
@@ -69,6 +76,7 @@ def test_merge_siblings(tmp_path, capsys):
     assert (df[PARENT_NAME] == "S0").all()
     assert (df[PARENT_TABLE] == "table0_worms").all()
     assert (df[GEN] == 1).all()
+    assert list(df[MERGE_SOURCE]) == ["table1_worms_a", "table1_worms_b"]
 
     merged = dm.rm.get_table("table1_worms_merged")
     assert merged.parent_table_name == "table0_worms"
@@ -103,9 +111,10 @@ def test_merge_roots(tmp_path):
 
     df = dm.read_frame("table0_pooled")
     assert list(df.index) == ["D0_x", "D0_y"]
+    assert list(df[MERGE_SOURCE]) == ["table0_x", "table0_y"]
     reg = dm.rm.get_registry()
     assert reg.at["table0_pooled", PARENT_TABLE] == ROOT_PARENT
-    assert int(reg.at["table0_pooled", GEN]) == 0
+    assert int(reg.at["table0_pooled", GEN]) == 0 # type: ignore
 
 
 def test_unlabelled_source_keeps_bare_names(tmp_path):

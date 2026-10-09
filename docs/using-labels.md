@@ -78,6 +78,20 @@ The rules:
 
 The merged table name is printed as the only stdout line so it can be captured, and its sources are recorded in `run_dir/<merged>/merge/.meta.json`.
 
+### Per-fork inputs after a merge
+
+Merge the forks as soon as the `create` step that made them is collected, and keep working on one table. Every merged row carries a `merge_source` column with the table it came from, so a tool that needs fork-specific arguments is run once per fork on the merged table with `--where`, under the **same** leaf:
+
+```bash
+sapia run     boltz "$RUN_DIR" -t table1_merged -w merge_source=table1_lowT  --use-msa-server
+sapia run     boltz "$RUN_DIR" -t table1_merged -w merge_source=table1_highT --msa-empty-chains
+sapia collect boltz "$RUN_DIR" -t table1_merged      # one collect picks up both runs
+```
+
+Both runs write to `run_dir/table1_merged/boltz/` and the `boltz_*` columns, so downstream tools see one table and one column set. Each submission gets its own manifest, so a second run never disturbs tasks still pending from the first. The one limit: runs sharing a leaf must use the same `--input-column`, because collect reads the input column recorded by the last run.
+
+This is the recommended way to analyse forks differently. Running each fork through its own child table instead leaves you with cousin tables, which are harder to pool.
+
 ## Combining them
 
 #TODO improve combination explanation and logic
