@@ -60,6 +60,24 @@ Both children record `table0` as their parent in the registry, so lineage stays 
 - **Collect has no `--table-label`.** The label lives in the *table name*, so you pass that name to `collect -t`. The `sapia run` output prints the destination table path, so you can read the name there (or check `_registry.tsv`).
 - **The label carries forward.** It accumulates down generations, so a `create` tool run on `table1_lowT` reserves `table2_lowT` (and `table2_lowT_<new>` if you add another `--table-label`). The table name always tells you which fork you're on.
 
+## Merging sibling tables: `sapia merge`
+
+A fork is useful for comparing settings, but once you have picked (or want to keep both) the downstream tools would have to be run once per table. `sapia merge` pools sibling tables into one new child table, so the rest of the workflow runs once over all the designs:
+
+```bash
+sapia merge "$RUN_DIR" -t table1_lowT table1_highT          # -> table1_merged
+sapia run   alphafold3 "$RUN_DIR" -t table1_merged ...
+```
+
+The rules:
+
+- **Sources must share the same parent table.** Roots merge with roots. The merged table is registered as an ordinary child of that parent (same gen as its sources), so lineage, `lookup` and every later `run`/`collect` on it work unchanged. To pool lineages that diverged at the root, merge the roots first and run the next tool once on the merged root.
+- **Sources are copied, not moved.** Rows keep their `parent_name`/`parent_table`/`gen` and every column (status, path, metrics); columns missing from one source are left empty. The source tables stay as they were.
+- **Row names get a suffix** so they stay unique: the part of the source's label that distinguishes it from its siblings (`S0_f0` from `table1_lowT` becomes `S0_f0_lowT`). An unlabelled source keeps bare names. The merge refuses if names still collide.
+- **`--table-label` names the merged table** by the usual child rule; it defaults to `merged`. The merge refuses to overwrite an existing table.
+
+The merged table name is printed as the only stdout line so it can be captured, and its sources are recorded in `run_dir/<merged>/merge/.meta.json`.
+
 ## Combining them
 
 #TODO improve combination explanation and logic

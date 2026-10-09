@@ -22,6 +22,7 @@ from ..core.base_run import build_run_parser, run_from_args
 from ..core.tool import Tool
 from ..core.tool_registry import discover, BUILTIN_TOOLS_DIR
 from .fork_tool import build_fork_parser, fork_from_args
+from .merge import build_merge_parser, merge_from_args
 from .modal_shell import build_modal_shell_parser, modal_shell_from_args
 from .new_run_dir import build_new_run_parser, new_run_from_args
 
@@ -59,6 +60,13 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
         help="Copy a built-in tool into your tools dir to customize it.",
     )
     fork_p.set_defaults(_dispatch=fork_from_args)
+
+    merge_p = verbs.add_parser(
+        "merge",
+        parents=[build_merge_parser()],
+        help="Pool sibling tables (same parent) into one new child table.",
+    )
+    merge_p.set_defaults(_dispatch=merge_from_args)
 
     modal_shell_p = verbs.add_parser(
         "modal-shell",
