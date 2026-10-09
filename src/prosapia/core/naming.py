@@ -23,6 +23,10 @@ GEN = "gen"  # generation depth (root = 0); per-row for concat
 # parent_table sentinel for a root table (no parent)
 ROOT_PARENT = "root"
 
+# Stamped by ``sapia merge``: the source table a merged row came from (filter on it
+# with ``sapia run ... --where merge_source=<table>`` for per-fork runs).
+MERGE_SOURCE = "merge_source"
+
 # Per-out_dir sidecar: records the run parameters
 # that aren't recoverable from the table itself
 RUN_META_FILENAME = ".meta.json"

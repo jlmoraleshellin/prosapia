@@ -17,7 +17,10 @@ Rules:
   - row names are suffixed with the source's distinguishing label (its registry
     label minus the parent's label prefix), e.g. ``S0_f0`` from ``table1_worms_a``
     under ``table0_worms`` becomes ``S0_f0_a``. An unlabelled source keeps bare
-    names. The merge refuses if names still collide.
+    names. The merge refuses if names still collide;
+  - every merged row gets a ``merge_source`` column holding its source table, so
+    per-fork runs on the merged table are ``sapia run <tool> ... --where
+    merge_source=<source>`` (same leaf, so downstream sees one column set).
 
 The merged table is named by the usual child rule (``table<gen>_<parent_label>_<label>``,
 label ``merged`` by default) and recorded in the registry with ``tool=merge``; its
@@ -33,6 +36,7 @@ import pandas as pd
 
 from ..core.base_run import write_run_meta
 from ..core.data_manager import DataManager, Table
+from ..core.naming import MERGE_SOURCE
 
 MERGE_TOOL = "merge"
 
@@ -113,6 +117,7 @@ def merge_from_args(args: MergeArgs) -> None:
         suffixes: dict[str, str] = {}
         for source in sources:
             df = read_frame(source.table_name)
+            df[MERGE_SOURCE] = source.table_name
             suffix = name_suffix(source, parent_label)
             suffixes[source.table_name] = suffix
             if suffix:
