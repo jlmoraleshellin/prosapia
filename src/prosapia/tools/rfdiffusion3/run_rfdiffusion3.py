@@ -50,23 +50,17 @@ Usage:
 """
 
 import json
-import os
 import re
 from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any, cast
 
 import yaml
-from dotenv import load_dotenv
 
 from prosapia.core import CommonArgs, ManifestCtx
 from prosapia.core.data_manager import LookupFn
 from prosapia.core.executors import volume_path
 from prosapia.utils import count_polymer_chains, resolve_template
-
-load_dotenv()
-
-RFD3_CKPT = os.getenv("RFD3_CKPT", "")
 
 # A {expr} placeholder island in a contig/length template, resolved per-design up
 # the table lineage. Meaningless in a root run (no table), so we reject it there.
@@ -89,7 +83,6 @@ class RFD3Args(CommonArgs):
     num_timesteps: int
     step_scale: float
     partial_t: float | None
-    ckpt_path: str
     low_memory: bool
     shard_size: int
     set: list[str]
@@ -173,13 +166,6 @@ def add_run_rfd3_args(parser: ArgumentParser) -> None:
         default=None,
         help="Partial-diffusion noise in Angstroms (per-design `partial_t`, "
         "recommended 5.0-15.0). Omitted by default (full diffusion).",
-    )
-    parser.add_argument(
-        "--ckpt-path",
-        type=str,
-        default=RFD3_CKPT,
-        help="RFD3 checkpoint path (-> ckpt_path). Defaults to $RFD3_CKPT, else "
-        "rfd3's own default (auto-discovered via foundry install).",
     )
     parser.add_argument(
         "--low-memory",
@@ -400,8 +386,6 @@ def _cli_overrides(args: RFD3Args) -> str:
         overrides.append("inference_sampler.kind=symmetry")
     if args.low_memory:
         overrides.append("low_memory_mode=True")
-    if args.ckpt_path:
-        overrides.append(f"ckpt_path={args.ckpt_path}")
     overrides.extend(args.set)
     return " ".join(overrides)
 
