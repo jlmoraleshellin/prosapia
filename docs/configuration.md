@@ -94,7 +94,7 @@ Template: `activation/rfdiffusion3.sh`. Do `conda activate <env>` and `export FO
 
 | Variable | Where | Required | Meaning |
 | --- | --- | --- | --- |
-| `RFD3_CKPT` | `.env` (submit time) | no | Explicit checkpoint override. Optional — foundry auto-discovers checkpoints after `foundry install rfd3`. #TODO make it an arg instead |
+| `RFD3_CKPT` | the activation script (task time) | no | Explicit checkpoint, passed to rfd3 as `ckpt_path` by `rfdiffusion3.sh` after activation. Optional — foundry finds checkpoints through `FOUNDRY_CHECKPOINT_DIRS` after `foundry install rfd3`. Do not set it in `.env`: Modal tasks receive `.env` too. |
 
 ### ProteinMPNN — `SAPIA_ACTIVATE_PROTEINMPNN`
 
@@ -114,6 +114,11 @@ Template: `activation/alphafold3.sh`. Put module setup (`ml purge`, `module load
 | `AF3_CONTAINER` | activation script | yes | AlphaFold3 container image (`.sif`). |
 | `AF3_PARAMETERS` | activation script | yes | Model parameters directory (bound to `/root/models`). |
 | `AF3_DATABASE` | activation script | yes | Public databases directory (bound to `/root/public_databases`). |
+| `AF3_PYTHON` | image / activation script | no | Interpreter able to run `run_alphafold.py`. Used by the modal branch only; defaults to `python`. The tool's own Modal image points it at its uv venv. |
+
+The run's out_dir is bind-mounted at its own path, so the MSAs and templates that `--msa-file` / `--paired-msa-file` / `--templates-json` copy into the run resolve inside the container.
+
+AF3 checks that the databases exist whenever its data pipeline is on, even if every chain carries its own MSA and templates. The task script therefore passes `--norun_data_pipeline` only when every chain has a policy (`--no-msa`, `--msa-empty-chains` or `--msa-file`), which is what lets a database-free setup work. Chains no flag names are still searched, so `--msa-empty-chains B` alone needs the databases.
 
 ### ColabFold — `SAPIA_ACTIVATE_COLABFOLD`
 

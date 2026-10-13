@@ -90,7 +90,7 @@ Because one process serves a whole shard, `--shard-size` is memory-safe — ther
 
 ## Other overrides
 
-`--num-timesteps` (`inference_sampler.num_timesteps`), `--step-scale` (`inference_sampler.step_scale`), `--partial-t` (per-design `partial_t`, ~5–15 Å), `--low-memory` (`low_memory_mode`), `--ckpt-path` (defaults to `$RFD3_CKPT`), and repeatable `--set key=value` (the escape hatch for any Hydra option without a dedicated flag, e.g. `--set n_batches=2`). Each is appended to `rfd3 design` only when set.
+`--num-timesteps` (`inference_sampler.num_timesteps`), `--step-scale` (`inference_sampler.step_scale`), `--partial-t` (per-design `partial_t`, ~5–15 Å), `--low-memory` (`low_memory_mode`), and repeatable `--set key=value` (the escape hatch for any Hydra option without a dedicated flag, e.g. `--set n_batches=2`). Each is appended to `rfd3 design` only when set. There is no checkpoint flag: export `RFD3_CKPT` in the activation script or use `--set ckpt_path=...` for one run.
 
 ## Example
 
