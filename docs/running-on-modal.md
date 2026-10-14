@@ -83,4 +83,5 @@ Every task writes its `.exit` file, even when it fails. Before collecting, read 
 | `SAPIA_MODAL_RUNS_VOLUME` | — | **Required.** Name of the runs Volume, created on first use. |
 | `SAPIA_MODAL_SHELL_CPU` | `0.25` | Workstation CPUs. |
 | `SAPIA_MODAL_SHELL_MEMORY` | `1024` | Workstation memory, in MiB. |
-| `SAPIA_MODAL_VOLUME_*`, `SAPIA_MODAL_AF3_IMAGE` | per tool | Weight, database and cache Volumes used by the bundled tools' images (see `env.example`). |
+| `SAPIA_MODAL_VOLUME_*` | per tool | Weight, database and cache Volumes used by the bundled tools' images (see `env.example`). |
+| `SAPIA_MODAL_AF3_IMAGE` | — | Registry tag of a prebuilt AlphaFold3 image. Optional: unset, alphafold3 builds AF3 v3.0.4 from source following the repo's `docker/Dockerfile`. Model parameters always come from `SAPIA_MODAL_VOLUME_AF3_PARAMS`, never from the image. |

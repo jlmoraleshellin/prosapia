@@ -33,6 +33,8 @@ from prosapia.core import (
     DesignCtx,
 )
 
+from .run_alphafold3 import af3_sanitised_name
+
 AF3_JSON_KEYS: List[str] = [
     "ranking_score",
     "ptm",
@@ -61,8 +63,9 @@ def find_prediction_files(
 def load_metrics(json_path: Path) -> Dict[str, Any]:
     with open(json_path) as f:
         data = json.load(f)
-    # Bare column names; the driver leaf-prefixes them.
-    return {k: data.get(k, pd.NA) for k in AF3_JSON_KEYS}
+    # Bare column names; the driver leaf-prefixes them. AF3 writes NaN as null, and
+    # `iptm` is NaN for a single-entity input, so null maps to NA, not None.
+    return {k: pd.NA if data.get(k) is None else data[k] for k in AF3_JSON_KEYS}
 
 
 def collect_af3(ctx: CollectCtx) -> CollectEach:
@@ -87,7 +90,10 @@ def collect_af3(ctx: CollectCtx) -> CollectEach:
     na_metrics: Dict[str, Any] = {k: pd.NA for k in AF3_JSON_KEYS}
 
     def one(d: DesignCtx) -> Iterable[Collected]:
-        design_dir = design_dirs.get(d.name)
+        # AF3 writes each design to its sanitised name, which may differ from d.name.
+        design_dir = design_dirs.get(d.name) or design_dirs.get(
+            af3_sanitised_name(d.name)
+        )
         if design_dir is None:
             yield Collected(
                 status=f"missing: no output dir for {d.name}", data=na_metrics
@@ -103,7 +109,7 @@ def collect_af3(ctx: CollectCtx) -> CollectEach:
 
         try:
             metrics = load_metrics(summary_path)
-        except (OSError, json.JSONDecodeError) as exc:
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             yield Collected(
                 status=f"error: {exc.__class__.__name__}: {exc}", data=na_metrics
             )
