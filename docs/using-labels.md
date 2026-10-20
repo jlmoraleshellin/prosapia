@@ -71,7 +71,7 @@ sapia run   alphafold3 "$RUN_DIR" -t table1_merged ...
 
 The rules:
 
-- **Sources must share the same parent table.** Roots merge with roots. The merged table is registered as an ordinary child of that parent (same gen as its sources), so lineage, `lookup` and every later `run`/`collect` on it work unchanged. To pool lineages that diverged at the root, merge the roots first and run the next tool once on the merged root.
+- **Sources must share the same gen.** Siblings (same parent) merge into an ordinary child of that parent, so lineage, `lookup` and every later `run`/`collect` on it work unchanged. Roots merge with roots. Cousins work too, see [Merging cousins](#merging-cousins) below.
 - **Sources are copied, not moved.** Rows keep their `parent_name`/`parent_table`/`gen` and every column (status, path, metrics); columns missing from one source are left empty. The source tables stay as they were.
 - **Row names get a suffix** so they stay unique: the part of the source's label that distinguishes it from its siblings (`S0_f0` from `table1_lowT` becomes `S0_f0_lowT`). An unlabelled source keeps bare names. The merge refuses if names still collide.
 - **`--table-label` names the merged table** by the usual child rule; it defaults to `merged`. The merge refuses to overwrite an existing table.
@@ -91,6 +91,34 @@ sapia collect boltz "$RUN_DIR" -t table1_merged      # one collect picks up both
 Both runs write to `run_dir/table1_merged/boltz/` and the `boltz_*` columns, so downstream tools see one table and one column set. Each submission gets its own manifest, so a second run never disturbs tasks still pending from the first. The one limit: runs sharing a leaf must use the same `--input-column`, because collect reads the input column recorded by the last run.
 
 This is the recommended way to analyse forks differently. Running each fork through its own child table instead leaves you with cousin tables, which are harder to pool.
+
+### Merging cousins
+
+If forks already went through a generation on their own, their children are cousins: same gen, different parents. `sapia merge` still pools them, by first merging their parents (recursively, up to the common ancestor or the roots) under the same label. Those intermediate tables are ordinary merged tables, so every table keeps one parent and every row's parent resolves:
+
+```bash
+sapia merge "$RUN_DIR" -t table2_x_a table2_x_b
+# creates table1_x_merged (rows of table1_x_a/table1_x_b, suffixed a/b)
+# then    table2_x_merged (rows re-pointed to their copies in table1_x_merged)
+```
+
+Keep in mind:
+
+- The intermediate merges **copy** the ancestor rows. Columns added to the original parents after the merge are not reflected in the copies.
+- If you merged the parents earlier under the same label, that table is reused as long as it lists the same sources; otherwise the merge refuses and asks for another label.
+- Row suffixes accumulate along the path (`S0_f0_d0` from `table2_x_a` becomes `S0_f0_d0_a`), and labels do not: the levels are `table1_x_merged`, `table2_x_merged`.
+
+#### Gen gaps: `--lift`
+
+If one fork took an extra step (say a relax round) and the other did not, the tables you want to pool differ in gen. `sapia merge ... --lift` accepts that: the shallower table joins the merge at its own gen (as a ghost source) and is then carried up through pass-through copies, one per missing level, each copy pointing at its own copy one level down with `gen` restamped. Without `--lift` a gen gap is refused, because padding a lineage asserts that the shallower fork legitimately skipped a step, which the merge cannot check.
+
+```bash
+sapia merge "$RUN_DIR" -t table3_x_a table2_x_b --lift
+# table2_x_merged <- table2_x_a + table2_x_b          (ghost, parent table1_x)
+# table3_x_merged <- table3_x_a + lifted table2_x_b   (parent table2_x_merged)
+```
+
+Prefer merging siblings right after the fork and using `--where` for fork-specific runs; cousin merges are the escape hatch.
 
 ## Combining them
 
