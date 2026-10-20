@@ -92,10 +92,14 @@ def score_metrics(pose: Any, sfxn: Any) -> dict[str, Any]:
 def interface_metrics(pose: Any, sfxn: Any, interface: str) -> dict[str, Any]:
     from pyrosetta import rosetta
 
-    partners = rosetta.core.pose.DockingPartners.docking_partners_from_string(
-        _interface_spec(pose, interface)
-    )
-    analyzer = rosetta.protocols.analysis.InterfaceAnalyzerMover(partners)
+    spec = _interface_spec(pose, interface)
+    # Newer builds (2026.39) only take DockingPartners; older ones (2025.37) have no
+    # DockingPartners and only take the dock-chains string.
+    if hasattr(rosetta.core.pose, "DockingPartners"):
+        partners = rosetta.core.pose.DockingPartners.docking_partners_from_string(spec)
+        analyzer = rosetta.protocols.analysis.InterfaceAnalyzerMover(partners)
+    else:
+        analyzer = rosetta.protocols.analysis.InterfaceAnalyzerMover(spec)
     analyzer.set_scorefunction(sfxn)
     analyzer.set_pack_separated(True)
     analyzer.set_compute_packstat(True)
