@@ -29,6 +29,7 @@ from .data_manager import (  # noqa: F401
 )
 from .naming import (  # noqa: F401
     GEN,
+    MERGE_SOURCE,
     PARENT_TABLE,
     PARENT_NAME,
     ROOT_DESIGNS_KEY,
