@@ -54,7 +54,7 @@ ExecutorFn = Callable[[SubmitCtx], None]
 
 # name -> module under prosapia.core.executors defining ``submit``. Imported lazily
 # so optional scheduler SDKs (modal) are only needed when that executor is used.
-EXECUTORS = ("slurm", "modal")
+EXECUTORS = ("slurm", "modal", "local")
 
 
 def _executor_module(name: str) -> ModuleType:
