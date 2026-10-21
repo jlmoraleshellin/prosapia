@@ -76,7 +76,7 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
     modal_shell_p.set_defaults(_dispatch=modal_shell_from_args)
 
     run_tools = verbs.add_parser(
-        "run", help="Submit a tool's tasks (SLURM array or Modal)."
+        "run", help="Submit a tool's tasks (SLURM array, Modal, or local)."
     ).add_subparsers(dest="tool", required=True)
     collect_tools = verbs.add_parser(
         "collect", help="Collect a tool's outputs into its table."

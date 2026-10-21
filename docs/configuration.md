@@ -12,7 +12,7 @@ Each tool's `.sh` task script sources that script before it runs the tool. It fi
 sapia_activate SAPIA_ACTIVATE_COLABFOLD
 ```
 
-Under the Modal executor (`--executor modal`) activation is skipped: the tool's Modal image already provides its environment, so `SAPIA_ACTIVATE_<NAME>` is not needed there.
+Under the Modal executor (`--executor modal`) activation is skipped: the tool's Modal image already provides its environment, so `SAPIA_ACTIVATE_<NAME>` is not needed there. The `local` executor activates exactly like SLURM does.
 
 So `.env` itself holds only:
 

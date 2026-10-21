@@ -80,7 +80,8 @@ def _add_submit_args(
         "--executor",
         choices=EXECUTORS,
         default=os.getenv("SAPIA_EXECUTOR", "slurm"),
-        help="Scheduler that runs the tasks. Defaults to $SAPIA_EXECUTOR, else 'slurm'.",
+        help="Who runs the tasks: a scheduler (slurm, modal) or this machine "
+        "(local). Defaults to $SAPIA_EXECUTOR, else 'slurm'.",
     )
     parser.add_argument(
         "--modal-gpu",
@@ -128,7 +129,8 @@ def _add_submit_args(
         "--max-concurrent",
         type=int,
         default=40,
-        help="Max concurrent tasks (SLURM array throttle / Modal max containers). Defaults to 40.",
+        help="Max concurrent tasks (SLURM array throttle / Modal max containers / "
+        "local slots). Defaults to 40.",
     )
     parser.add_argument(
         "-a",

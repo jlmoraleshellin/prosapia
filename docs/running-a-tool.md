@@ -6,6 +6,7 @@ This page covers what every run shares: selecting what runs, the executors and t
 
 - **[Running on SLURM](running-on-slurm.md)**: `sbatch` arrays on an HPC cluster, the default.
 - **[Running on Modal](running-on-modal.md)**: Modal containers, with runs stored on a Modal Volume.
+- **[Running locally](running-locally.md)**: subprocesses on this machine, with no scheduler in between.
 
 ## The shape of a run
 
@@ -56,19 +57,21 @@ The manifest and the task script are the same for every scheduler. An executor o
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
-| `-e`, `--executor` | `$SAPIA_EXECUTOR`, else `slurm` | Which scheduler runs the tasks: `slurm` or `modal`. |
+| `-e`, `--executor` | `$SAPIA_EXECUTOR`, else `slurm` | Who runs the tasks: `slurm`, `modal` or `local`. |
 | `-s`, `--script` | tool's `default_script` | The `.sh` task script each task runs (`<script> <manifest> <out_dir>`). Override to point at a customized script. |
 
 How the two compare:
 
-| | SLURM | Modal |
-| --- | --- | --- |
-| Where `sapia` runs | a login node | the `sapia modal-shell` workstation |
-| Where runs are stored | the cluster filesystem | the runs Volume, at `/runs` |
-| Tool environment | your activation script (`sapia_activate`) | the tool's `modal_image.py` |
-| One task is | an array task | a container |
-| Baseline resources | `#SBATCH` lines in the `.sh` | `RESOURCES` in `modal_image.py` |
-| Task status | `squeue` / `sacct` | `.exit` files and the Modal app |
+| | SLURM | Modal | Local |
+| --- | --- | --- | --- |
+| Where `sapia` runs | a login node | the `sapia modal-shell` workstation | the machine doing the work |
+| Where runs are stored | the cluster filesystem | the runs Volume, at `/runs` | this machine's filesystem |
+| Tool environment | your activation script (`sapia_activate`) | the tool's `modal_image.py` | your activation script (`sapia_activate`) |
+| One task is | an array task | a container | a subprocess |
+| Baseline resources | `#SBATCH` lines in the `.sh` | `RESOURCES` in `modal_image.py` | none; limits are not enforced |
+| Concurrency is | the array throttle | the container cap | the number of GPU/CPU slots |
+| `sapia run` returns | once queued | once queued | once every task has finished |
+| Task status | `squeue` / `sacct` | `.exit` files and the Modal app | the exit codes printed by the run |
 
 ### Resource flags
 
@@ -76,13 +79,13 @@ These flags exist under both executors. Each executor translates them into its o
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
-| `-C`, `--max-concurrent` | `40` | Maximum number of tasks running at once. |
+| `-C`, `--max-concurrent` | `40` | Maximum number of tasks running at once (a cap only: `local` cannot exceed its slot count). |
 | `-g`, `--gpus-per-task` | `1` | GPUs per task; `0` for CPU-only tasks. |
 | `-c`, `--cpus-per-task` | unset | CPUs per task. Overrides the tool's baseline. |
 | `-T`, `--time` | unset | Wall time per task, e.g. `04:00:00`. Overrides the tool's baseline. |
 | `--mem` | unset | Memory per task, e.g. `32G`. Overrides the tool's baseline. |
 
-Flags that belong to one scheduler (`--account`, `--partitions` and `--max-gpu-fraction` for SLURM, `--modal-gpu` for Modal) are documented on its page and ignored by the other.
+Flags that belong to one scheduler (`--account`, `--partitions` and `--max-gpu-fraction` for SLURM, `--modal-gpu` for Modal) are documented on its page and ignored by the others. The `local` executor enforces no limits at all, so it uses only `-g` and `-c`, to size its slots.
 
 ## The task contract
 
@@ -91,15 +94,15 @@ Every task runs `<script> <manifest> <out_dir>` with these variables set:
 | Variable | Meaning |
 | --- | --- |
 | `SAPIA_TASK_ID` | This task's 1-based manifest line. |
-| `SAPIA_SCHEDULER` | `slurm` or `modal`. |
+| `SAPIA_SCHEDULER` | `slurm`, `modal` or `local`. |
 | `SAPIA_PRELUDE` | The shared prelude the `.sh` sources; it resolves `SAPIA_LINE` and provides `sapia_activate`. |
 | `SAPIA_TOOL_DIR`, `SAPIA_TOOL` | The tool's directory and name. |
 
-So the same script runs unchanged under either executor. See [Writing a task script](writing-a-tool.md#writing-a-task-script).
+So the same script runs unchanged under every executor. See [Writing a task script](writing-a-tool.md#writing-a-task-script).
 
 ## Where to run `sapia` from
 
-Stored paths are relative to where `sapia` ran, and tasks start in that same directory: the submit directory on SLURM, `/runs` on Modal. Always run `sapia` from that root and pass the run_dir path that `new_run` prints. Don't `cd` into a run_dir: a table collected from inside one points at files no downstream task can find.
+Stored paths are relative to where `sapia` ran, and tasks start in that same directory: the submit directory on SLURM and `local`, `/runs` on Modal. Always run `sapia` from that root and pass the run_dir path that `new_run` prints. Don't `cd` into a run_dir: a table collected from inside one points at files no downstream task can find.
 
 ## Logs
 

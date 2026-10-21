@@ -12,6 +12,7 @@ import pytest
 
 import prosapia.core.executors as executors
 from prosapia.core.executors import PRELUDE_PATH, SubmitCtx, get_executor, volume_path
+from prosapia.core.executors import local as local_exec
 from prosapia.core.executors import modal as modal_exec
 from prosapia.core.executors import slurm
 from prosapia.core.tool_registry import BUILTIN_TOOLS_DIR, discover
@@ -112,7 +113,9 @@ def test_slurm_chunks_over_max_array_size(tmp_path, sbatch_calls, monkeypatch):
     ctx = _ctx(tmp_path, [(str(i),) for i in range(5)])
     get_executor("slurm")(ctx)
 
-    arrays = [next(c for c in cmd if c.startswith("--array")) for cmd, _ in sbatch_calls]
+    arrays = [
+        next(c for c in cmd if c.startswith("--array")) for cmd, _ in sbatch_calls
+    ]
     assert arrays == ["--array=1-2%40", "--array=1-2%40", "--array=1-1%40"]
     manifests = [Path(cmd[-2]) for cmd, _ in sbatch_calls]
     assert [m.name for m in manifests] == [
@@ -134,7 +137,10 @@ def test_slurm_multi_partition_caps(tmp_path, sbatch_calls):
         )
         for cmd, _ in sbatch_calls
     ]
-    assert got == [("--partition=a", "--array=1-3%2"), ("--partition=b", "--array=1-2%4")]
+    assert got == [
+        ("--partition=a", "--array=1-3%2"),
+        ("--partition=b", "--array=1-2%4"),
+    ]
 
 
 # ── Prelude ───────────────────────────────────────────────────────────────────
@@ -337,7 +343,10 @@ def test_modal_submit_fans_out_and_runs_script(tmp_path, fake_modal, monkeypatch
     assert kw["memory"] == 4096
     assert kw["timeout"] == 1800
     assert kw["volumes"] == {str(tmp_path): fake_modal["runs"]}
-    assert fake_modal["runs"].from_name_kwargs == {"create_if_missing": True, "version": 2}
+    assert fake_modal["runs"].from_name_kwargs == {
+        "create_if_missing": True,
+        "version": 2,
+    }
     assert kw["secrets"] == [("secret", {"FOO": "bar"})]
     assert (str(PRELUDE_PATH), str(PRELUDE_PATH)) in kw["image"].local
     assert ctx.manifest_base.read_text() == "a\nb\nc\n"
@@ -468,7 +477,10 @@ def test_volume_path_maps_real_mount_back(tmp_path, monkeypatch):
     link = tmp_path / "link"
     link.symlink_to(tmp_path / "vo-internal-2", target_is_directory=True)
     assert volume_path(link) == link
-    assert volume_path(str(tmp_path / "vo-internal-sibling")) == tmp_path / "vo-internal-sibling"
+    assert (
+        volume_path(str(tmp_path / "vo-internal-sibling"))
+        == tmp_path / "vo-internal-sibling"
+    )
 
 
 def test_modal_requires_modal_image(tmp_path, fake_modal):
@@ -478,7 +490,13 @@ def test_modal_requires_modal_image(tmp_path, fake_modal):
 
 def test_modal_resources_cli_overrides(tmp_path):
     ctx = _ctx(
-        tmp_path, [], gpus_per_task=2, modal_gpu="H100", cpus_per_task=16, mem="1T", time="1-02:00:00"
+        tmp_path,
+        [],
+        gpus_per_task=2,
+        modal_gpu="H100",
+        cpus_per_task=16,
+        mem="1T",
+        time="1-02:00:00",
     )
     assert modal_exec.resolve_resources(ctx, {"gpu": "L4", "cpu": 2}) == {
         "gpu": "H100:2",
@@ -511,13 +529,120 @@ def test_modal_dotenv_falls_back_to_cwd(tmp_path, monkeypatch):
     assert modal_exec.get_dotenv_vars() == {"A": "1"}
 
 
+# ── Local ─────────────────────────────────────────────────────────────────────
+
+
+def _local_script(tmp_path: Path, body: str = "") -> Path:
+    script = tmp_path / "tool" / "mytool.sh"
+    script.parent.mkdir(exist_ok=True)
+    script.write_text(
+        'set -euo pipefail\nsource "$SAPIA_PRELUDE"\n'
+        'echo "$SAPIA_SCHEDULER|$SAPIA_TASK_ID|$SAPIA_LINE|${CUDA_VISIBLE_DEVICES:-}" '
+        '> "$OUT_DIR/task_$SAPIA_TASK_ID"\n' + body
+    )
+    return script
+
+
+def test_local_runs_every_line_and_logs(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    ctx = _ctx(tmp_path, [("a", "x"), ("b", "y"), ("c", "z")], gpus_per_task=0)
+    _local_script(tmp_path, 'echo "to stderr $SAPIA_TASK_ID" >&2')
+
+    get_executor("local")(ctx)
+
+    assert ctx.manifest_base.read_text() == "a\tx\nb\ty\nc\tz\n"
+    assert (tmp_path / "out" / "task_2").read_text() == "local|2|b\ty|\n"
+    for i in (1, 2, 3):
+        assert (ctx.log_dir / f"mytool_{i}.exit").read_text() == "0\n"
+        assert (ctx.log_dir / f"mytool_{i}.err").read_text() == f"to stderr {i}\n"
+
+
+def test_local_finishes_all_then_raises_on_failure(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    ctx = _ctx(tmp_path, [("a",), ("b",), ("c",)], gpus_per_task=0)
+    _local_script(tmp_path, '[ "$SAPIA_TASK_ID" = 2 ] && exit 3\ntrue')
+
+    with pytest.raises(RuntimeError, match=r"1/3 task\(s\) failed: 2"):
+        get_executor("local")(ctx)
+
+    assert (tmp_path / "out" / "task_3").exists()
+    assert (ctx.log_dir / "mytool_2.exit").read_text() == "3\n"
+    assert (ctx.log_dir / "mytool_3.exit").read_text() == "0\n"
+
+
+def test_local_pins_each_task_to_its_gpu_slot(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1,2,3")
+    ctx = _ctx(tmp_path, [("a",), ("b",), ("c",), ("d",)], gpus_per_task=2)
+    _local_script(tmp_path)
+
+    assert local_exec.resolve_slots(ctx) == [
+        {"CUDA_VISIBLE_DEVICES": "0,1"},
+        {"CUDA_VISIBLE_DEVICES": "2,3"},
+    ]
+    get_executor("local")(ctx)
+    seen = {
+        (tmp_path / "out" / f"task_{i}").read_text().strip().rsplit("|", 1)[1]
+        for i in range(1, 5)
+    }
+    assert seen <= {"0,1", "2,3"}
+
+
+def test_local_slots_follow_resources(tmp_path, monkeypatch):
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1,2")
+    assert len(local_exec.resolve_slots(_ctx(tmp_path, [], gpus_per_task=1))) == 3
+    assert (
+        len(
+            local_exec.resolve_slots(
+                _ctx(tmp_path, [], gpus_per_task=1, max_concurrent=2)
+            )
+        )
+        == 2
+    )
+    with pytest.raises(RuntimeError, match="only 3 GPU"):
+        local_exec.resolve_slots(_ctx(tmp_path, [], gpus_per_task=4))
+
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
+    with pytest.raises(RuntimeError, match="-g 0"):
+        local_exec.resolve_slots(_ctx(tmp_path, [], gpus_per_task=1))
+
+    monkeypatch.setattr(local_exec.os, "cpu_count", lambda: 8)
+    assert len(local_exec.resolve_slots(_ctx(tmp_path, [], gpus_per_task=0))) == 8
+    assert (
+        len(
+            local_exec.resolve_slots(
+                _ctx(tmp_path, [], gpus_per_task=0, cpus_per_task=3)
+            )
+        )
+        == 2
+    )
+    assert (
+        len(
+            local_exec.resolve_slots(
+                _ctx(tmp_path, [], gpus_per_task=0, cpus_per_task=16)
+            )
+        )
+        == 1
+    )
+
+
+def test_local_visible_gpus_without_nvidia_smi(monkeypatch):
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    monkeypatch.setattr(local_exec.shutil, "which", lambda _: None)
+    assert local_exec.visible_gpus() == []
+
+
 # ── Modal workstation ─────────────────────────────────────────────────────────
 
 
 def test_modal_shell_runs_in_a_function_container():
     # Both paths go through workstation *functions*: a Sandbox may not commit the
     # Volume, which is what lets a submit flush its staged files in one call.
-    from prosapia.cli.modal_shell import WORKSTATION, _load_workstation, modal_shell_from_args
+    from prosapia.cli.modal_shell import (
+        WORKSTATION,
+        _load_workstation,
+        modal_shell_from_args,
+    )
 
     assert WORKSTATION.is_file()
     src = WORKSTATION.read_text()

@@ -9,7 +9,7 @@
 #   .env            loaded (exported) so tool config + activation-script paths are available
 #   MANIFEST        $1 — the tab-separated manifest for this submission
 #   OUT_DIR         $2 — the tool's output directory
-#   SAPIA_SCHEDULER the executor running this task (slurm | modal); defaults to slurm
+#   SAPIA_SCHEDULER the executor running this task (slurm | modal | local); defaults to slurm
 #   SAPIA_TASK_ID   this task's 1-based manifest index (SLURM_ARRAY_TASK_ID under slurm)
 #   SAPIA_LINE      this task's manifest line (tools cut their own fields)
 #   sapia_activate  VAR — source the activation script named by $VAR (skipped under modal)
