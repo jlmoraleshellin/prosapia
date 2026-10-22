@@ -12,6 +12,7 @@ New here? The [README](../README.md) has the pitch, installation, and a quick st
   - **[Running on SLURM](running-on-slurm.md)** — how a run maps to `sbatch` arrays: partitions, chunking, `#SBATCH` overrides.
   - **[Running on Modal](running-on-modal.md)** — the `sapia modal-shell` workstation, tool images, the runs Volume and task status.
   - **[Running locally](running-locally.md)** — running the manifest on this machine: GPU/CPU slots, blocking runs, no resource limits.
+- **[Browsing a run](browsing-a-run.md)** — `sapia serve`: the workflow tree, tables, plots and structures in the browser.
 - **[Collecting a tool](collecting-a-tool.md)** — the `sapia collect` phase that writes a tool's outputs back into the table.
 - **[Deleting a tool run](deleting-a-tool.md)** — `sapia delete`: remove a leaf's outputs and columns, or a created table, as a unit.
 - **[Using RFdiffusion](tools/rfdiffusion.md)**, **[Using RFdiffusion3](tools/rfdiffusion3.md)**, and **[Using ProteinMPNN](tools/proteinmpnn.md)** — guides to bundled tools with their own expression languages.
