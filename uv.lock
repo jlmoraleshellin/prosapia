@@ -1143,6 +1143,14 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
 ]
+modal = [
+    { name = "modal" },
+]
+server = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "uvicorn" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -1159,6 +1167,12 @@ provides-extras = ["modal"]
 dev = [
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.16.4" },
+]
+modal = [{ name = "modal", specifier = ">=1.0" }]
+server = [
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "uvicorn", specifier = ">=0.30" },
 ]
 
 [[package]]
