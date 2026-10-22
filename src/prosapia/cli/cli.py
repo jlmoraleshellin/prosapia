@@ -25,6 +25,7 @@ from .fork_tool import build_fork_parser, fork_from_args
 from .merge import build_merge_parser, merge_from_args
 from .modal_shell import build_modal_shell_parser, modal_shell_from_args
 from .new_run_dir import build_new_run_parser, new_run_from_args
+from .serve import build_serve_parser, serve_from_args
 
 
 def tools_dirs() -> list[Path]:
@@ -67,6 +68,13 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
         help="Pool sibling tables (same parent) into one new child table.",
     )
     merge_p.set_defaults(_dispatch=merge_from_args)
+
+    serve_p = verbs.add_parser(
+        "serve",
+        parents=[build_serve_parser()],
+        help="Browse a run_dir's lineage, tables and structures in a local web UI.",
+    )
+    serve_p.set_defaults(_dispatch=serve_from_args)
 
     modal_shell_p = verbs.add_parser(
         "modal-shell",

@@ -16,7 +16,7 @@ sapia modal-shell --cmd "sapia new_run --label x"  # or one command, then exit
 
 - **Usage.** Inside the workstation, `sapia` works as usual and `run` defaults to `--executor modal`. Relative paths resolve against `/runs`, so run `sapia` from there (see [Where to run `sapia` from](running-a-tool.md#where-to-run-sapia-from)).
 - **`--cmd`.** It takes any shell command, quotes included, and exits with that command's exit code, so an agent can drive prosapia one command at a time.
-- **Browsing results.** Use the Modal dashboard or `modal volume ls|get`.
+- **Browsing results.** Use the Modal dashboard or `modal volume ls|get`; a run pulled with `modal volume get` opens locally with `sapia serve` (see [Browsing a run](browsing-a-run.md#paths) for its `/runs/...` paths).
 - **Size and lifetime.** The workstation is sized at 0.25 CPU / 1 GiB (`SAPIA_MODAL_SHELL_CPU`, `SAPIA_MODAL_SHELL_MEMORY`) and exits with the shell.
 - **Contents.** Its image holds prosapia's dependencies, your prosapia source and your `$PROSAPIA_TOOLS_DIR`. It receives your local `.env`, which it forwards to every task.
 - **Credentials.** The workstation launches task containers with its own credentials; no Modal token is needed.
