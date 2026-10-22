@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body { @apply overflow-hidden bg-zinc-50 text-[13px] text-zinc-800 antialiased; }
+}
+
+@layer components {
+  /* The workflow tree is SVG, so its look lives here rather than in class props. */
+  .tree .node rect { @apply cursor-pointer fill-white stroke-zinc-200; }
+  .tree .node:hover rect { @apply stroke-indigo-400; }
+  .tree .node.selected rect { @apply stroke-indigo-500 [stroke-width:2]; }
+  .tree .node.pending rect { @apply fill-zinc-50 [stroke-dasharray:4_3]; }
+  .tree .node.merge rect { @apply fill-violet-50; }
+  .tree .node-name { @apply pointer-events-none fill-zinc-900 text-[12.5px] font-semibold; }
+  .tree .node-meta { @apply pointer-events-none fill-zinc-500 text-[11px]; }
+  .tree .edge { @apply fill-none stroke-zinc-300 [stroke-width:1.5]; }
+  .tree .edge.merge { @apply stroke-indigo-400 [stroke-dasharray:5_4]; }
+  .tree .leaf rect { @apply cursor-pointer fill-zinc-100 stroke-none; }
+  .tree .leaf:hover rect { @apply fill-indigo-50; }
+  .tree .leaf.selected rect { @apply fill-indigo-100 stroke-indigo-400; }
+  .tree .leaf-name { @apply pointer-events-none fill-zinc-700 text-[11px]; }
+  .tree .leaf-meta { @apply pointer-events-none fill-zinc-500 text-[10px]; }
+  .tree .leaf.reserved .dot { @apply fill-zinc-400; }
+  .tree .leaf.submitted .dot { @apply fill-amber-400; }
+  .tree .leaf.collected .dot { @apply fill-emerald-500; }
+
+  .kv { @apply grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 text-xs; }
+  .kv .k { @apply whitespace-nowrap text-zinc-500; }
+  .kv .v { @apply truncate tabular-nums; }
+}

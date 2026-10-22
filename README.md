@@ -107,6 +107,9 @@ sapia collect proteinmpnn   "$RUN_DIR" -t table1
 # predict structures and score them *in place* on the sequence table
 sapia run     alphafold3  "$RUN_DIR" -t table1 ...
 sapia collect alphafold3  "$RUN_DIR" -t table1
+
+# browse the tree, tables and structures (needs `uv sync --group ui`)
+sapia serve "$RUN_DIR"
 ```
 
 `run_dir` is a positional argument to every tool; `-t/--table` names the
@@ -115,6 +118,8 @@ Only `sapia new_run` mints a `run_dir`; tools always operate inside an existing
 one.
 
 Every tool shares base `sapia run` flags — concurrency, GPUs, filtering, resume — and runs on SLURM, on Modal, or locally. See **[docs/running-a-tool.md](docs/running-a-tool.md)** for the full reference, and [running on SLURM](docs/running-on-slurm.md) / [running on Modal](docs/running-on-modal.md) / [running locally](docs/running-locally.md) for each executor.
+
+`sapia serve` opens the run_dir in the browser: the lineage tree, every table joined with its ancestors, plots, and a Mol* viewer. See **[docs/browsing-a-run.md](docs/browsing-a-run.md)**.
 
 ## Two kinds of tools: `create` vs. `update`
 
