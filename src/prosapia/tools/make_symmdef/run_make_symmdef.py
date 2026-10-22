@@ -12,6 +12,7 @@ Usage:
         --input-column assembled_path
 """
 
+from argparse import ArgumentParser
 from pathlib import Path
 from typing import cast
 
@@ -20,6 +21,18 @@ from prosapia.core import (
     ManifestCtx,
 )
 from prosapia.utils import ensure_pdb
+
+def add_make_symmdef_args(parser: ArgumentParser) -> None:
+    parser.add_argument(
+        "--anchor",
+        default="A",
+        help="Anchor chain",
+    )
+    parser.add_argument(
+        "--interface",
+        default="B",
+        help="Interface chain"
+    )
 
 
 def build_make_symmdef_manifest(
@@ -36,6 +49,6 @@ def build_make_symmdef_manifest(
         # Convert CIF->PDB up front (cached under run_dir/.cif_to_pdb). A missing
         # input is passed through raw so the task script records it as an error.
         input_pdb = ensure_pdb(src, ctx.args.run_dir) if src.exists() else src
-        manifest_rows.append((name, str(input_pdb)))
+        manifest_rows.append((name, str(input_pdb), ctx.args.anchor, ctx.args.interface))
 
     return manifest_rows

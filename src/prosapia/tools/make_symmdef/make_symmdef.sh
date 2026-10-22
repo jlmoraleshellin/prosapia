@@ -18,6 +18,8 @@ sapia_activate SAPIA_ACTIVATE_SYMMDEF
 
 NAME=$(echo "$SAPIA_LINE" | cut -f1)
 SRC=$(echo "$SAPIA_LINE" | cut -f2)
+ANCHOR=$(echo "$SAPIA_LINE" | cut -f3)
+INTERFACE=$(echo "$SAPIA_LINE" | cut -f4)
 
 RESULT_TSV="$OUT_DIR/${NAME}.tsv"
 
@@ -45,7 +47,7 @@ SRC_DIR=$(dirname "$SRC")
 
 echo "[$(date +%T)] task $SAPIA_TASK_ID: make_symmdef for $NAME"
 
-if perl "$MAKESYMM" -m NCS -a A -i B -p "$SRC" \
+if perl "$MAKESYMM" -m NCS -a "$ANCHOR" -i "$INTERFACE" -p "$SRC" \
     >"$OUT_DIR/${STEM}.symm" 2>"$OUT_DIR/${STEM}.log"; then
     # The perl script writes extra files next to the input PDB. Move them.
     for suffix in _symm.pdb _INPUT.pdb; do
@@ -55,7 +57,7 @@ if perl "$MAKESYMM" -m NCS -a A -i B -p "$SRC" \
         fi
     done
     # _model_AB.pdb is garbage; delete it if present.
-    rm -f "$SRC_DIR/${STEM}_model_AB.pdb"
+    rm -f "$SRC_DIR/${STEM}_model_${ANCHOR}${INTERFACE}.pdb"
     write_result "OK" "$OUT_DIR/${STEM}_symm.pdb"
 else
     echo "make_symmdef_file.pl failed for $NAME" >&2
