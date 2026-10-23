@@ -78,7 +78,10 @@ export default function LeafPanel({ table, leaf }: { table: string; leaf: string
         <div className="kv">
           {files.map((f) => (
             <Fragment key={f.path}>
-              <span className="k font-mono">{f.name}{f.is_dir ? '/' : ''}</span>
+              <span className="k font-mono">
+                {f.submission != null && <span className="text-zinc-400">{f.submission}/</span>}
+                {f.name}{f.is_dir ? '/' : ''}
+              </span>
               <span className="v text-zinc-400">{f.size != null ? `${f.size} B` : ''}</span>
             </Fragment>
           ))}
