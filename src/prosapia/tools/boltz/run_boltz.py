@@ -208,7 +208,7 @@ def add_run_boltz_args(parser: ArgumentParser) -> None:
 def build_boltz_manifest(ctx: ManifestCtx[BoltzArgs]):
     maybe_set_gpus_per_task(ctx.args)
 
-    yaml_dir = ctx.out_dir / "boltz_inputs"
+    yaml_dir = ctx.submission_dir / "boltz_inputs"
     yaml_dir.mkdir(parents=True, exist_ok=True)
 
     yaml_paths: list[Path] = []
@@ -227,7 +227,7 @@ def build_boltz_manifest(ctx: ManifestCtx[BoltzArgs]):
         msa_empty_chains=ctx.args.msa_empty_chains,
     )
 
-    shards_dir = ctx.out_dir / "boltz_shards"
+    shards_dir = ctx.submission_dir / "boltz_shards"
     shards_dir.mkdir(parents=True, exist_ok=True)
 
     extra = _boltz_predict_global_args(ctx.args)

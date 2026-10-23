@@ -25,9 +25,11 @@ from pandas import DataFrame
 
 from .base_parser import base_parser
 from .executors import EXECUTORS, SubmitCtx, get_executor
-from .data_manager import Table, DataManager, LookupFn, RegistryManager, filter_ready
+from .data_manager import DataManager, LookupFn, clean_ready
 from .naming import (
+    PARENT_NAME,
     RUN_META_FILENAME,
+    SUBMISSIONS_DIRNAME,
     build_tool_leaf,
     resolve_dir_name,
     status_column,
@@ -228,27 +230,6 @@ def build_run_parser(
     return parser
 
 
-## OUTPUT TABLE RESOLUTION
-def resolve_output_table(
-    registry: RegistryManager,
-    tool: ToolMetadata,
-    src_table: str | None,
-    table_label: str = "",
-) -> Table:
-    """Resolve the table a run writes to: reserve a child/root for create, else return ``src_table``."""
-    if not tool.creates_table:
-        if src_table is None:
-            raise ValueError(
-                f"Update tool {tool.name!r} annotates an existing table in place and "
-                f"requires --table; none was given."
-            )
-        return registry.get_table(src_table)
-    output_table = registry.derive_new_table(src_table, table_label)
-    output_table.tool_name = tool.name  # provenance: the tool that creates this table
-    registry.register_table(output_table)
-    return output_table
-
-
 ## FILTERING
 FilterFn = Callable[[DataFrame], DataFrame]
 
@@ -289,29 +270,43 @@ ArgsT = TypeVar("ArgsT", bound=CommonArgs)
 
 @dataclass
 class ManifestCtx(Generic[ArgsT]):
-    """Inputs a manifest builder may read (frame, args, out_dir, lookup)."""
+    """Inputs a manifest builder may read (frames, args, submission_dir, lookup).
 
-    df: pd.DataFrame
+    ``source_df`` is the table the run iterates, after ``--filter`` / ``--where``.
+    ``target_df`` is the table the run writes to, unfiltered: the same table for an
+    ``update`` tool, the (possibly still empty) child table for a ``create`` tool.
+    The target is kept whole on purpose, so the resume skip in ``ready`` sees every
+    row's status regardless of which rows this submission selects.
+    """
+
+    source_df: pd.DataFrame
+    target_df: pd.DataFrame
     args: ArgsT
-    out_dir: Path
+    submission_dir: Path
+    leaf: str
     lookup: LookupFn
     write_meta: Callable[..., None]
 
     @property
     def ready(self) -> pd.DataFrame:
         """The designs this run should submit: rows with a present ``--input-column``,
-        minus those this tool already finished (``<leaf>_status == "OK"``) unless
-        ``--force``.
+        minus those this tool already finished unless ``--force``.
 
-        The already-OK skip is the framework's resume-on-rerun: it fires only when
-        the output status column is present in the source frame, i.e. for ``update``
-        tools (which annotate the same table). For ``create`` tools the column lives in
-        the child table, so the skip is a no-op and every ready design is submitted. #TODO maybe check child table too?
+        The already-OK skip is the framework's resume-on-rerun. An ``update`` tool
+        annotates the source table, so a row is done when its own ``<leaf>_status``
+        is ``"OK"``. A ``create`` tool writes children into ``target_df``, so a source
+        row is done once any child row naming it as ``parent_name`` is ``"OK"``.
         """
-        ready = filter_ready(self.df, self.args.input_column)
-        out_status = status_column(self.out_dir.name)
-        if not self.args.force and out_status in ready.columns:
-            ready = ready[ready[out_status] != "OK"]
+        ready = clean_ready(self.source_df, self.args.input_column)
+        if self.args.force:
+            return ready
+        out_status = status_column(self.leaf)
+        if out_status in ready.columns:
+            return ready[ready[out_status] != "OK"]
+        target = self.target_df
+        if out_status in target.columns and PARENT_NAME in target.columns:
+            done = target.loc[target[out_status] == "OK", PARENT_NAME].dropna()
+            return ready[~ready.index.astype(str).isin(done.astype(str))]
         return ready
 
 
@@ -336,8 +331,39 @@ def write_run_meta(out_dir: Path, **fields) -> None:
     path.write_text(json.dumps(meta, indent=2))
 
 
+def check_input_column(out_dir: Path, input_column: str) -> None:
+    """Refuse a resubmit on a leaf whose sidecar records a different ``--input-column``."""
+    path = out_dir / RUN_META_FILENAME
+    if not path.is_file():
+        return
+    try:
+        recorded = json.loads(path.read_text()).get("input_column")
+    except (OSError, json.JSONDecodeError):
+        return
+    if recorded is not None and recorded != input_column:
+        raise SystemExit(
+            f"{out_dir.name!r} was run with --input-column {recorded!r}; this run "
+            f"uses {input_column!r}. One leaf takes one input column: pass "
+            f"--dir-label to run this tool with a different input."
+        )
+
+
+def new_submission_dir(out_dir: Path) -> tuple[Path, str]:
+    """Allocate the next ``<leaf>/.submissions/<index>`` dir; mkdir is the lock."""
+    runs = out_dir / SUBMISSIONS_DIRNAME
+    runs.mkdir(parents=True, exist_ok=True)
+    n = max((int(p.name) for p in runs.iterdir() if p.name.isdigit()), default=-1) + 1
+    while True:
+        d = runs / f"{n:02d}"
+        try:
+            d.mkdir()
+            return d, f"{n:02d}"
+        except FileExistsError:
+            n += 1
+
+
 def run_from_args(
-    metadata: ToolMetadata,
+    tool: ToolMetadata,
     build_manifest_fn: BuildManifestFn[ArgsT],
     args: ArgsT,
 ) -> None:
@@ -356,20 +382,24 @@ def run_from_args(
     with DataManager(args.run_dir) as (dm, (read_frame, save_frame), registry):
         # CREATE reserves a new table in the registry that gets created when collect is called;
         # UPDATE writes back to src_table.
-        output_table = resolve_output_table(
-            registry, metadata, src_table, getattr(args, "table_label", "")
+        output_table = registry.resolve_output_table(
+            src_table,
+            tool.creates_table,
+            tool.name,
+            getattr(args, "table_label", ""),
         )
 
         # Dirs (created below, so resolve without the existence guard).
-        out_dir = resolve_dir_name(args, output_table, metadata, must_exist=False)
+        out_dir = resolve_dir_name(args, output_table, tool, must_exist=False)
         log_dir = out_dir / f"{args.script.stem}_logs"
         out_dir.mkdir(parents=True, exist_ok=True)
         log_dir.mkdir(parents=True, exist_ok=True)
 
         # Write run's base metadata to the sidecar
+        check_input_column(out_dir, args.input_column)
         write_run_meta(
             out_dir,
-            tool=metadata.name,
+            tool=tool.name,
             input_column=args.input_column,
             dir_label=args.dir_label,
             filter=str(args.filter) if args.filter else None,
@@ -378,14 +408,18 @@ def run_from_args(
         )
 
         # A root tool has no source table: give an empty frame (for type security).
-        df = read_frame(src_table) if src_table else pd.DataFrame()
+        source_df = read_frame(src_table) if src_table else pd.DataFrame()
+        # The target frame is the table this run writes to. Needed for create's resume-on-rerun.
+        target_df = (
+            read_frame(output_table.table_name) if tool.creates_table else source_df
+        )
 
         # Filter
         if args.filter:
             apply_filter = _get_filter_fn_from_module(args.filter)
-            df = apply_filter(df)
+            source_df = apply_filter(source_df)
         if args.where:
-            df = apply_where(df, args.where)
+            source_df = apply_where(source_df, args.where)
 
         # Manifest
         manifest_dir = args.run_dir / ".manifests"
@@ -393,16 +427,21 @@ def run_from_args(
 
         # Stamped per submission: a resubmit on the same table/leaf must not
         # overwrite a manifest that still-pending tasks of an earlier array read.
-        leaf = build_tool_leaf(args.script.stem, args.dir_label)
+        leaf = build_tool_leaf(tool.name, args.dir_label)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+
+        submission_dir, stamp = new_submission_dir(out_dir)
         manifest_base = (
             manifest_dir / f"{output_table.table_name}_{leaf}_{stamp}_manifest.txt"
         )
+
         ctx = ManifestCtx(
-            df=df,
+            source_df=source_df,
+            target_df=target_df,
             args=args,
-            out_dir=out_dir,
-            lookup=partial(dm.lookup, df),
+            leaf=leaf,
+            submission_dir=submission_dir,
+            lookup=partial(dm.lookup, source_df),
             write_meta=partial(write_run_meta, out_dir),
         )
         manifest_rows = build_manifest_fn(ctx)
@@ -411,19 +450,20 @@ def run_from_args(
         print("No designs to submit.")
         return
 
+    # TODO improve logging
     n = len(manifest_rows)
     print(f"Submitting {n} designs")
-    print(f"Output:  {out_dir}")
+    print(f"Output:  {submission_dir}")
     print(f"Logs:    {log_dir}")
 
     submit = get_executor(args.executor)
     submit(
         SubmitCtx(
             args=args,
-            tool_name=metadata.name,
+            tool_name=tool.name,
             rows=manifest_rows,
             manifest_base=manifest_base,
-            out_dir=out_dir,
+            out_dir=submission_dir,
             log_dir=log_dir,
         )
     )

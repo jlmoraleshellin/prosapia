@@ -9,18 +9,19 @@ This project is a single Python package (`prosapia`), managed with `uv` (run tas
 - The `prosapia.core` package (`src/prosapia/core/`) provides the two drivers, the tool definition types, and the data layer. Tools are thin: they supply metadata + two hooks + scripts, and plug into the drivers:
     - `tool.py`
         - `Tool` is the dataclass that binds a tool together: its `ToolMetadata` and its two hooks (`BuildManifestFn`, `CollectFn`)
+        - `run_tool(tool, args)` / `collect_tool(tool, args)` are the two verbs the CLI dispatches to. `run_tool` auto-collects on a resubmit (the leaf already has submission dirs; never for a root run) before calling `run_from_args`, so the resume skip sees the latest statuses; a collect failure aborts the submit.
         - `ToolMetadata` is declarative identity: `name`, `action`, `description`, and `default_input_column`. The `action` selects how the drivers resolve the destination table.
-    - `base_sbatch.py`
+    - `base_run.py`
         - `run_from_args(metadata, build_manifest_fn, args)` is the submit-phase driver, shared by all tools. A tool customizes it by passing its `ToolMetadata` and its `BuildManifestFn` hook. On each invocation it:
             1. opens a `DataManager` to load the input table;
-            2. calls `resolve_output_table` to reserve the destination table (a new child/root for `create`, or the source table for `update`);
+            2. calls `registry.resolve_output_table` to reserve the destination table (a new child/root for `create`, or the source table for `update`);
             3. invokes the tool's `build_manifest` hook to write the manifest `.txt`;
-            4. hands the manifest to the executor chosen by `--executor` (`core/executors/`: `slurm` array job or `modal` containers), which runs the tool's `.sh` once per manifest line.
+            4. hands the manifest to the executor chosen by `--executor` (`core/executors/`: `slurm` array job or `modal` containers), which runs the tool's `.sh` once per manifest line. Every submission gets a fresh `run_dir/<table>/<leaf>/.submissions/<NN>/` as the tool's out_dir in both phases, so resubmits never share scratch or outputs.
         - Defines the `BuildManifestFn` hook contract that tools implement.
     - `base_collect.py`
         - `collect_from_args(metadata, collect_fn, args)` is the collect-phase driver, shared by all tools. Customized by passing `ToolMetadata` and the `CollectFn` hook. On each invocation it:
             1. opens a `DataManager`;
-            2. invokes the tool's `collect` hook to turn on-disk output into `CollectResult` rows;
+            2. invokes the tool's `collect` hook once per submission dir, newest first, keeping the first result per design (a design found in no submission is `missing` for `update`, skipped for `create`); collectors emit only what exists, the driver owns `missing`;
             3. writes those rows into the destination table (creating it for `create`, annotating it in place for `update`) and updates the registry.
         - Defines the `CollectorFactory` hook contract that tools implement.
     - `data_manager.py`

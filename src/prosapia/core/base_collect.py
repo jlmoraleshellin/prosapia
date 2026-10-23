@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 from argparse import ArgumentParser, Namespace
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Generic, Iterable, Mapping, TypeVar
@@ -21,7 +21,7 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from .base_parser import base_parser
-from .data_manager import Table, DataManager, LookupFn, filter_ready
+from .data_manager import Table, DataManager, LookupFn, clean_ready
 from .naming import (
     GEN,
     PARENT_TABLE,
@@ -31,6 +31,7 @@ from .naming import (
     path_column,
     resolve_dir_name,
     status_column,
+    submission_dirs,
 )
 
 if TYPE_CHECKING:
@@ -57,11 +58,19 @@ ArgsT = TypeVar("ArgsT", bound=CollectArgs)
 
 @dataclass
 class CollectCtx(Generic[ArgsT]):
-    """Inputs a collect function may read (frame, args, dirs, cols, parent, lookup)."""
+    """Inputs a collect function may read (frame, args, dirs, cols, parent, lookup).
+
+    ``leaf_dir`` is ``run_dir/<table>/<leaf>``: it holds the run sidecar and the
+    per-submission dirs. ``out_dir`` is the submission dir being collected; the
+    driver rebinds it for every submission, so a collector only ever locates
+    outputs relative to the dir it is given.
+    """
 
     df: pd.DataFrame
     args: ArgsT
     table_name: str
+    leaf: str
+    leaf_dir: Path
     out_dir: Path
     status_col: str
     path_col: str
@@ -72,9 +81,9 @@ class CollectCtx(Generic[ArgsT]):
     default_input_column: str
 
     def _meta(self) -> dict | None:
-        """The run's sidecar (``.meta.json``) for this out_dir, or None when
-        absent (older run_dirs)."""
-        p = self.out_dir / RUN_META_FILENAME
+        """The run's sidecar (``.meta.json``) at the leaf, or None when absent
+        (older run_dirs)."""
+        p = self.leaf_dir / RUN_META_FILENAME
         if not p.is_file():
             return None
         try:
@@ -98,7 +107,7 @@ class CollectCtx(Generic[ArgsT]):
             else self.default_input_column
         )
         frame = self.parent_df if self.creates_table else self.df
-        ready = filter_ready(frame, col)
+        ready = clean_ready(frame, col)
         # Standard create: can't filter out already-collected rows (status_col) because the parent table has no status_col for this tool yet.
         if self.creates_table:
             return ready
@@ -161,37 +170,42 @@ def by_design(make: CollectorFactory) -> CollectFn:
     ``parent_name`` here so no tool has to. This is the *only* place that knows those
     column names.
 
-    Empty emission means "nothing on disk for this design": an update tool marks the
-    existing row ``missing``; a create tool has no row to mark, so it is skipped.
+    The leaf's submission dirs are scanned newest first, each with the collector's
+    per-run setup redone against that dir. The first submission in which a design
+    emits anything answers for it; older ones are not consulted. Empty emission
+    means "not in this dir". A design that emits in no submission is marked
+    ``missing`` for an update tool; a create tool has no row to mark, so it is
+    skipped.
     """
 
     def _fn(ctx: "CollectCtx[ArgsT]") -> CollectResult:
-        one = make(ctx)  # per-run setup happens once (build indices, capture args)
+        names = [str(n) for n in ctx.ready.index]
         updates: CollectResult = {}
-        for name in map(str, ctx.ready.index):
-            emitted = list(
-                one(
-                    DesignCtx(
-                        name,
-                        ctx.out_dir,
-                        ctx.lookup,
-                    )
-                )
-            )
-            if not emitted:
-                if not ctx.creates_table:  # update: flag the existing row
+        done: set[str] = set()
+        for sub in submission_dirs(ctx.leaf_dir):
+            one = make(replace(ctx, out_dir=sub))
+            for name in names:
+                if name in done:
+                    continue
+                emitted = list(one(DesignCtx(name, sub, ctx.lookup)))
+                if not emitted:
+                    continue
+                done.add(name)
+                for c in emitted:
+                    row = {f"{ctx.leaf}_{k}": v for k, v in c.data.items()}
+                    if c.status is not None:
+                        row[ctx.status_col] = c.status
+                    if c.path is not None:
+                        row[ctx.path_col] = str(c.path)
+                    if c.parent is not None:
+                        row[PARENT_NAME] = c.parent
+                    updates[c.name or name] = row
+            if len(done) == len(names):
+                break
+        if not ctx.creates_table:
+            for name in names:
+                if name not in done:
                     updates[name] = {ctx.status_col: "missing"}
-                continue  # create: nothing to mark
-            leaf = ctx.out_dir.name
-            for c in emitted:
-                row = {f"{leaf}_{k}": v for k, v in c.data.items()}
-                if c.status is not None:
-                    row[ctx.status_col] = c.status
-                if c.path is not None:
-                    row[ctx.path_col] = str(c.path)
-                if c.parent is not None:
-                    row[PARENT_NAME] = c.parent
-                updates[c.name or name] = row
         return updates
 
     return _fn
@@ -320,6 +334,8 @@ def collect_from_args(
             df=df,
             args=args,
             table_name=table_name,
+            leaf=leaf,
+            leaf_dir=out_dir,
             out_dir=out_dir,
             status_col=status_column(leaf),
             path_col=path_column(leaf),

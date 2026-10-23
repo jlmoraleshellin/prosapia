@@ -305,10 +305,10 @@ def add_run_af3_args(parser: ArgumentParser) -> None:
 
 def build_af3_manifest(ctx: ManifestCtx[AlphaFold3Args]):
     args = ctx.args
-    json_dir = ctx.out_dir / "af3_inputs"
+    json_dir = ctx.submission_dir / "af3_inputs"
     json_dir.mkdir(parents=True, exist_ok=True)
 
-    policies = resolve_chain_policies(args, ctx.out_dir)
+    policies = resolve_chain_policies(args, ctx.submission_dir)
     version = 2 if args.msa_file or args.paired_msa_file or args.templates_json else 1
 
     json_paths: list[Path] = []
@@ -339,7 +339,7 @@ def build_af3_manifest(ctx: ManifestCtx[AlphaFold3Args]):
         templates_json=args.templates_json,
     )
 
-    shards_dir = ctx.out_dir / "af3_shards"
+    shards_dir = ctx.submission_dir / "af3_shards"
     rmtree(shards_dir, ignore_errors=True)
     shards_dir.mkdir(parents=True, exist_ok=True)
 

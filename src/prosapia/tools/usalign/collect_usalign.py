@@ -87,7 +87,7 @@ def collect_usalign(ctx: CollectCtx) -> CollectEach:
     prefix = _resolve_prefix(ctx.args)
     results_dir = ctx.out_dir / prefix
     if not results_dir.is_dir():
-        raise FileNotFoundError(f"Results dir not found: {results_dir}")
+        return lambda d: ()
 
     status_col = f"{prefix}_status"
     sup_path_col = f"{prefix}_sup_path"
@@ -96,7 +96,6 @@ def collect_usalign(ctx: CollectCtx) -> CollectEach:
         tsv_path = results_dir / f"{d.name}.tsv"
 
         if not tsv_path.is_file():
-            yield Collected(status=None, data={status_col: "missing"})
             return
 
         result_df = pd.read_csv(tsv_path, sep="\t")

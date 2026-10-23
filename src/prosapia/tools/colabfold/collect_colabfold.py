@@ -96,7 +96,6 @@ def collect_colabfold(ctx: CollectCtx) -> CollectEach:
     def one(d: DesignCtx) -> Iterable[Collected]:
         files = design_files.get(d.name)
         if files is None:
-            yield Collected(status="missing", data=na_metrics)
             return
 
         scores_path, model_path = files

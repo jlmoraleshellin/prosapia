@@ -31,12 +31,17 @@ run_dir/
 ├── table1.tsv            # a child table (another generation)
 ├── .manifests/           # transient per-run manifests
 └── table0/               # per-table, per-tool outputs on disk
-    └── rfdiffusion/
-        ├── <design>.pdb
-        └── ...
+    └── rfdiffusion/      # the "leaf": one per tool (+ dir-label) on this table
+        ├── .meta.json    # the last run's parameters
+        ├── rfdiffusion_logs/
+        └── .submissions/ # one dir per `run`, never reused
+            ├── 00/
+            │   └── <design>/...
+            └── 01/
+                └── <design>/...
 ```
 
-The `*.tsv` tables are the shared data format; the nested directories are where tools drop their raw artifacts and where `collect_fn` reads them from.
+The `*.tsv` tables are the shared data format; the nested directories are where tools drop their raw artifacts. Each `run` writes into a fresh submission dir, and `collect` reads the submissions newest first, keeping the first result per design.
 
 ## The two-phase execution model
 

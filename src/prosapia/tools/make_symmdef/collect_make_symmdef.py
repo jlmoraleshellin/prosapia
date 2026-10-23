@@ -27,7 +27,6 @@ def collect_make_symmdef(ctx: CollectCtx) -> CollectEach:
         tsv_path = ctx.out_dir / f"{d.name}.tsv"
 
         if not tsv_path.is_file():
-            yield Collected(status="missing", path="")
             return
 
         result_df = pd.read_csv(tsv_path, sep="\t")

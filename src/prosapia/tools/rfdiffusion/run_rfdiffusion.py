@@ -331,14 +331,14 @@ def _build_create_designs(
         # Activation (deterministic, input-derived): renumber the input per-chain into a
         # staged PDB so the task script only launches the binary.
         staged_input = (
-            ctx.out_dir / name / "_diffusion_input" / f"{name}_renumbered.pdb"
+            ctx.submission_dir / name / "_diffusion_input" / f"{name}_renumbered.pdb"
         )
         renumber_chains_independently(input_path, staged_input)
 
         try:
             designs.append(
                 _assemble_design(
-                    name, staged_input, ctx.args, ctx.out_dir, ctx.lookup, global_extra
+                    name, staged_input, ctx.args, ctx.submission_dir, ctx.lookup, global_extra
                 )
             )
         except ValueError as e:
@@ -371,7 +371,7 @@ def _build_root_designs(
             raise FileNotFoundError(f"--input-pdb {input_path} does not exist.")
         name = f"{input_path.stem}_diff"
         staged_input: Path | None = (
-            ctx.out_dir / name / "_diffusion_input" / f"{name}_renumbered.pdb"
+            ctx.submission_dir / name / "_diffusion_input" / f"{name}_renumbered.pdb"
         )
         renumber_chains_independently(input_path, staged_input)
     else:
@@ -380,7 +380,7 @@ def _build_root_designs(
 
     return name, [
         _assemble_design(
-            name, staged_input, ctx.args, ctx.out_dir, ctx.lookup, global_extra
+            name, staged_input, ctx.args, ctx.submission_dir, ctx.lookup, global_extra
         )
     ]
 
@@ -403,7 +403,7 @@ def build_rfdiff_manifest(ctx: ManifestCtx[RFDiffArgs]) -> list[tuple[str, ...]]
 
     # One sub-manifest per task. Each row is prefixed with its lane: the task script
     # runs lanes concurrently on the task's single GPU, and each lane's rows in series.
-    task_dir = ctx.out_dir / "diffusion_tasks"
+    task_dir = ctx.submission_dir / "diffusion_tasks"
     task_dir.mkdir(parents=True, exist_ok=True)
 
     per_card = ctx.args.per_card

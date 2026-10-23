@@ -16,7 +16,6 @@ from .base_run import (  # noqa: F401
     CommonArgs,
     ManifestCtx,
     build_run_parser,
-    resolve_output_table,
     run_from_args,
     write_run_meta,
 )
@@ -25,7 +24,7 @@ from .data_manager import (  # noqa: F401
     DataManager,
     LookupFn,
     RegistryManager,
-    filter_ready,
+    clean_ready,
 )
 from .naming import (  # noqa: F401
     GEN,

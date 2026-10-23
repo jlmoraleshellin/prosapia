@@ -74,7 +74,7 @@ def add_colabfold_args(parser: ArgumentParser) -> None:
 def build_colabfold_manifest(ctx: ManifestCtx[ColabFoldArgs]):
     maybe_set_gpus_per_task(ctx.args)
 
-    fasta_dir = ctx.out_dir / "colabfold_queries"
+    fasta_dir = ctx.submission_dir / "colabfold_queries"
     fasta_dir.mkdir(parents=True, exist_ok=True)
 
     queries: list[tuple[str, str]] = []

@@ -39,7 +39,7 @@ These flags decide *which* designs are submitted and where their output lands. T
 | `run_dir` (positional) | — | The workflow directory, minted by `sapia new_run`. |
 | `-t`, `--table` | — | Source table in `run_dir` (name, no extension). **Required** for `update` tools; optional for `create`, where omitting it starts a fresh root lineage. |
 | `-i`, `--input-column` | tool's `default_input_column` | Which table column feeds the tool (e.g. `pdb_path`). |
-| `-l`, `--dir-label` | `""` | Suffix for the output dir, to run same-tool variants side by side (e.g. different seeds). Produces the leaf `<tool>_<dir_label>` and the dir `run_dir/<table>/<leaf>/`. See [Using labels](using-labels.md). |
+| `-l`, `--dir-label` | `""` | Suffix for the output dir, to run same-tool variants side by side (e.g. different seeds). Produces the leaf `<tool>_<dir_label>` and the dir `run_dir/<table>/<leaf>/`; each submission writes into its own `<leaf>/.submissions/<NN>/`. See [Using labels](using-labels.md). |
 | `--table-label` | `""` | **`create` tools only.** Labels the child table this run reserves (append rule: `table<gen>_<parent_label>_<table_label>`). Use it to disambiguate a fork. See [Using labels](using-labels.md). |
 | `-f`, `--filter` | none | Path to a Python module exposing `apply_filter(df) -> df`, applied to the source frame *before* the manifest is built. See [Writing a filter function](writing-a-filter-function.md). |
 | `-w`, `--where` | none | `COL=VALUE`: keep only rows whose column equals the value (string compare). Repeatable, applied after `--filter`. Typical use: `-w merge_source=table1_a` to run a tool with fork-specific arguments on a merged table (see [Using labels](using-labels.md#merging-sibling-tables-sapia-merge)). |
@@ -49,7 +49,7 @@ These flags decide *which* designs are submitted and where their output lands. T
 
 You never filter or resume by hand. The driver submits the **ready** designs: rows with a present `--input-column`, minus those this tool already completed (`<leaf>_status == "OK"`), unless you pass `--force`.
 
-The already-OK skip is the framework's resume-on-rerun: rerun the same command after a partial failure and only the unfinished designs go back out. The skip only fires for `update` tools, whose status column lives in the same table. For `create` tools the status column lives in the child table, so every ready design is submitted.
+The already-OK skip is the framework's resume-on-rerun: rerun the same command after a partial failure and only the unfinished designs go back out. For an `update` tool a row is done when its own `<leaf>_status` is `OK`. For a `create` tool the status lives on the child table, so a source row is done once any child row naming it as `parent_name` is `OK`; a source row whose children all failed, or that never produced one, goes back out. The skip reads the table, not the disk, so `run` collects first: on a resubmit (the leaf already has submission dirs) it runs the tool's collect before building the manifest, and a collect failure aborts the submit. Root runs are never auto-collected.
 
 ## Choosing an executor
 
@@ -106,11 +106,11 @@ Stored paths are relative to where `sapia` ran, and tasks start in that same dir
 
 ## Logs
 
-The driver creates a log folder next to the run's output, at `<out_dir>/<script>_logs/`, and prints both locations on submit:
+Every submission gets its own output dir, `<leaf>/.submissions/<NN>/`, so a resubmit never overwrites or mixes with a previous run's scratch and outputs; collect reads them newest first. The log folder stays at the leaf, `<leaf>/<script>_logs/`, shared by all submissions. Both locations are printed on submit:
 
 ```
 Submitting 128 designs
-Output:  run_dir/table1_seqs/proteinmpnn
+Output:  run_dir/table1_seqs/proteinmpnn/.submissions/01
 Logs:    run_dir/table1_seqs/proteinmpnn/proteinmpnn_logs
 ```
 

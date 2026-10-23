@@ -5,7 +5,7 @@ Builds ONE argparse tree spanning every discovered tool
 (``sapia {run,collect} <tool> [tool args...]``) so a single ``argcomplete`` call
 completes verbs, tool names, and each tool's own flags. No ``sys.argv`` rewriting:
 each tool subparser reuses the tool's ``build_run_parser`` / ``build_collect_parser``
-as a parent and dispatches to ``run_from_args`` / ``collect_from_args``.
+as a parent and dispatches to ``run_tool`` / ``collect_tool``.
 
 Enable shell completion once with:  ``sapia init``
 """
@@ -17,9 +17,9 @@ from pathlib import Path
 import argcomplete
 
 from .completion import build_init_parser, init_from_args
-from ..core.base_collect import build_collect_parser, collect_from_args
-from ..core.base_run import build_run_parser, run_from_args
-from ..core.tool import Tool
+from ..core.base_collect import build_collect_parser
+from ..core.base_run import build_run_parser
+from ..core.tool import Tool, collect_tool, run_tool
 from ..core.tool_registry import discover, BUILTIN_TOOLS_DIR
 from .fork_tool import build_fork_parser, fork_from_args
 from .merge import build_merge_parser, merge_from_args
@@ -96,11 +96,7 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
                 )
             ],
         )
-        run_p.set_defaults(
-            _dispatch=lambda args, t=tool: run_from_args(
-                t.metadata, t.build_manifest_fn, args
-            )
-        )
+        run_p.set_defaults(_dispatch=lambda args, t=tool: run_tool(t, args))
 
         collect_p = collect_tools.add_parser(
             name,
@@ -112,11 +108,7 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
                 )
             ],
         )
-        collect_p.set_defaults(
-            _dispatch=lambda args, t=tool: collect_from_args(
-                t.metadata, t.collect_fn, args
-            )
-        )
+        collect_p.set_defaults(_dispatch=lambda args, t=tool: collect_tool(t, args))
 
     return top
 

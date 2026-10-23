@@ -50,6 +50,26 @@ def path_column(leaf: str) -> str:
     return f"{leaf}_path"
 
 
+# Per-submission dirs under a leaf: ``run_dir/<table>/<leaf>/.submissions/<NN>``.
+# Every ``submit`` gets a fresh one, so resubmits never share scratch or outputs.
+SUBMISSIONS_DIRNAME = ".submissions"
+
+
+def submission_dirs(leaf_dir: Path) -> list[Path]:
+    """A leaf's submission dirs, newest first.
+
+    A leaf with none (a run_dir from before submission dirs existed) is returned as
+    its own single "submission", so collect still reads it.
+    """
+    subs = leaf_dir / SUBMISSIONS_DIRNAME
+    dirs = (
+        [p for p in subs.iterdir() if p.is_dir() and p.name.isdigit()]
+        if subs.is_dir()
+        else []
+    )
+    return sorted(dirs, key=lambda p: int(p.name), reverse=True) or [leaf_dir]
+
+
 def resolve_dir_name(
     args: Namespace,
     table: "Table",
