@@ -27,6 +27,7 @@ from .base_parser import base_parser
 from .executors import EXECUTORS, SubmitCtx, get_executor
 from .data_manager import DataManager, LookupFn, clean_ready
 from .naming import (
+    PARENT_NAME,
     RUN_META_FILENAME,
     build_tool_leaf,
     resolve_dir_name,
@@ -268,9 +269,17 @@ ArgsT = TypeVar("ArgsT", bound=CommonArgs)
 
 @dataclass
 class ManifestCtx(Generic[ArgsT]):
-    """Inputs a manifest builder may read (frame, args, out_dir, lookup)."""
+    """Inputs a manifest builder may read (frames, args, out_dir, lookup).
+
+    ``source_df`` is the table the run iterates, after ``--filter`` / ``--where``.
+    ``target_df`` is the table the run writes to, unfiltered: the same table for an
+    ``update`` tool, the (possibly still empty) child table for a ``create`` tool.
+    The target is kept whole on purpose, so the resume skip in ``ready`` sees every
+    row's status regardless of which rows this submission selects.
+    """
 
     source_df: pd.DataFrame
+    target_df: pd.DataFrame
     args: ArgsT
     out_dir: Path
     lookup: LookupFn
@@ -279,18 +288,23 @@ class ManifestCtx(Generic[ArgsT]):
     @property
     def ready(self) -> pd.DataFrame:
         """The designs this run should submit: rows with a present ``--input-column``,
-        minus those this tool already finished (``<leaf>_status == "OK"``) unless
-        ``--force``.
+        minus those this tool already finished unless ``--force``.
 
-        The already-OK skip is the framework's resume-on-rerun: it fires only when
-        the output status column is present in the source frame, i.e. for ``update``
-        tools (which annotate the same table). For ``create`` tools the column lives in
-        the child table, so the skip is a no-op and every ready design is submitted. #TODO maybe check child table too?
+        The already-OK skip is the framework's resume-on-rerun. An ``update`` tool
+        annotates the source table, so a row is done when its own ``<leaf>_status``
+        is ``"OK"``. A ``create`` tool writes children into ``target_df``, so a source
+        row is done once any child row naming it as ``parent_name`` is ``"OK"``.
         """
         ready = clean_ready(self.source_df, self.args.input_column)
+        if self.args.force:
+            return ready
         out_status = status_column(self.out_dir.name)
-        if not self.args.force and out_status in ready.columns:
-            ready = ready[ready[out_status] != "OK"]
+        if out_status in ready.columns:
+            return ready[ready[out_status] != "OK"]
+        target = self.target_df
+        if out_status in target.columns and PARENT_NAME in target.columns:
+            done = target.loc[target[out_status] == "OK", PARENT_NAME].dropna()
+            return ready[~ready.index.astype(str).isin(done.astype(str))]
         return ready
 
 
@@ -361,6 +375,10 @@ def run_from_args(
 
         # A root tool has no source table: give an empty frame (for type security).
         source_df = read_frame(src_table) if src_table else pd.DataFrame()
+        # The target frame is the table this run writes to. Needed for create's resume-on-rerun.
+        target_df = (
+            read_frame(output_table.table_name) if tool.creates_table else source_df
+        )
 
         # Filter
         if args.filter:
@@ -382,6 +400,7 @@ def run_from_args(
         )
         ctx = ManifestCtx(
             source_df=source_df,
+            target_df=target_df,
             args=args,
             out_dir=out_dir,
             lookup=partial(dm.lookup, source_df),
