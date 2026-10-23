@@ -9,6 +9,7 @@ This project is a single Python package (`prosapia`), managed with `uv` (run tas
 - The `prosapia.core` package (`src/prosapia/core/`) provides the two drivers, the tool definition types, and the data layer. Tools are thin: they supply metadata + two hooks + scripts, and plug into the drivers:
     - `tool.py`
         - `Tool` is the dataclass that binds a tool together: its `ToolMetadata` and its two hooks (`BuildManifestFn`, `CollectFn`)
+        - `run_tool(tool, args)` / `collect_tool(tool, args)` are the two verbs the CLI dispatches to. `run_tool` auto-collects on a resubmit (the leaf already has submission dirs; never for a root run) before calling `run_from_args`, so the resume skip sees the latest statuses; a collect failure aborts the submit.
         - `ToolMetadata` is declarative identity: `name`, `action`, `description`, and `default_input_column`. The `action` selects how the drivers resolve the destination table.
     - `base_run.py`
         - `run_from_args(metadata, build_manifest_fn, args)` is the submit-phase driver, shared by all tools. A tool customizes it by passing its `ToolMetadata` and its `BuildManifestFn` hook. On each invocation it:

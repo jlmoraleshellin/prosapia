@@ -49,7 +49,7 @@ These flags decide *which* designs are submitted and where their output lands. T
 
 You never filter or resume by hand. The driver submits the **ready** designs: rows with a present `--input-column`, minus those this tool already completed (`<leaf>_status == "OK"`), unless you pass `--force`.
 
-The already-OK skip is the framework's resume-on-rerun: rerun the same command after a partial failure and only the unfinished designs go back out. For an `update` tool a row is done when its own `<leaf>_status` is `OK`. For a `create` tool the status lives on the child table, so a source row is done once any child row naming it as `parent_name` is `OK`; a source row whose children all failed, or that never produced one, goes back out. Collect first, then rerun: the skip reads the table, not the disk.
+The already-OK skip is the framework's resume-on-rerun: rerun the same command after a partial failure and only the unfinished designs go back out. For an `update` tool a row is done when its own `<leaf>_status` is `OK`. For a `create` tool the status lives on the child table, so a source row is done once any child row naming it as `parent_name` is `OK`; a source row whose children all failed, or that never produced one, goes back out. The skip reads the table, not the disk, so `run` collects first: on a resubmit (the leaf already has submission dirs) it runs the tool's collect before building the manifest, and a collect failure aborts the submit. Root runs are never auto-collected.
 
 ## Choosing an executor
 
