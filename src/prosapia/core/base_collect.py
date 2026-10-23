@@ -353,8 +353,7 @@ def collect_from_args(
             _finalize_update(updates, output_table, df)
 
         # Write updates
-        for name, row in updates.items():
-            df = dm.update(df, name, row)
+        df = dm.apply_updates(df, updates)
         save_frame(table_name, df)
 
     print(f"Collected {len(updates)} row(s) into {table_name}.")

@@ -38,17 +38,6 @@ def test_update_adds_columns_and_rows(tmp_path):
     assert df.at["r1", "b"] == "x"
 
 
-def test_sequence_collision_guard(tmp_path):
-    dm = DataManager(tmp_path)
-    df = dm.read_frame("table")
-    df = dm.update(df, "r1", {"sequence": "AAA"})
-    with pytest.raises(ValueError):
-        dm.update(df, "r1", {"sequence": "BBB"})  # different sequence, same name
-    # Re-stating the same sequence (or non-sequence updates) is allowed.
-    df = dm.update(df, "r1", {"sequence": "AAA", "score": 1.0})
-    assert df.at["r1", "score"] == 1.0
-
-
 # --- lineage resolution -------------------------------------------------------
 
 
@@ -220,7 +209,92 @@ def test_context_manager_reads_updates_and_persists(tmp_path):
 
 def test_context_manager_does_not_suppress_exceptions(tmp_path):
     # __exit__ returns False, so an error inside the block propagates.
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="boom"):
         with DataManager(tmp_path) as (manager, (read_frame, _write), _rm):
-            df = manager.update(read_frame("table"), "r1", {"sequence": "AAA"})
-            manager.update(df, "r1", {"sequence": "BBB"})  # collision -> raises
+            manager.update(read_frame("table"), "r1", {"sequence": "AAA"})
+            raise ValueError("boom")
+
+
+# --- apply_updates: one-pass write-back of a CollectResult --------------------
+
+
+def _empty():
+    df = pd.DataFrame()
+    df.index.name = "name"
+    return df
+
+
+def test_apply_updates_creates_rows_in_dict_order(tmp_path):
+    dm = DataManager(tmp_path)
+    df = dm.apply_updates(
+        _empty(),
+        {
+            "S1": {"gen": 0, "sequence": "MK", "x": 1.0},
+            "S0": {"gen": 0, "sequence": "MKV", "x": 0.0},
+        },
+    )
+    assert list(df.index) == ["S1", "S0"]
+    assert list(df.columns) == ["gen", "sequence", "x"]
+
+
+def test_apply_updates_overwrites_existing_rows_na_included(tmp_path):
+    dm = DataManager(tmp_path)
+    df = dm.apply_updates(_empty(), {"S0": {"x": 1.0}, "S1": {"x": 2.0}})
+    df["boltz_path"] = [float("nan")] * 2  # all-NaN float column, as read from TSV
+    df = dm.apply_updates(
+        df,
+        {
+            "S0": {"boltz_path": "/r/0.cif", "boltz_status": "OK"},
+            "S1": {"boltz_path": pd.NA, "boltz_status": "failed"},
+        },
+    )
+    assert df.at["S0", "boltz_path"] == "/r/0.cif"  # str into a float column widens
+    assert pd.isna(df.at["S1", "boltz_path"])
+    assert df.at["S1", "x"] == 2.0  # untouched column preserved
+    # A re-collect that reports no path must overwrite the old one (disk wins).
+    df = dm.apply_updates(df, {"S0": {"boltz_path": pd.NA, "boltz_status": "failed"}})
+    assert pd.isna(df.at["S0", "boltz_path"])
+
+
+def test_apply_updates_mixes_existing_and_new_rows(tmp_path):
+    dm = DataManager(tmp_path)
+    df = dm.apply_updates(_empty(), {"S0": {"x": 1.0}})
+    df = dm.apply_updates(df, {"S0": {"x": 9.0}, "S9": {"x": 1.0, "gen": 0}})
+    assert df.at["S0", "x"] == 9.0
+    assert list(df.index) == ["S0", "S9"]
+    assert pd.isna(df.at["S0", "gen"])
+
+
+def test_apply_updates_partial_row_touches_only_its_columns(tmp_path):
+    dm = DataManager(tmp_path)
+    df = dm.apply_updates(_empty(), {"S0": {"x": 1.0, "boltz_status": "OK"}})
+    df = dm.apply_updates(df, {"S0": {"boltz_status": "missing"}})
+    assert df.at["S0", "boltz_status"] == "missing"
+    assert df.at["S0", "x"] == 1.0
+
+
+def test_apply_updates_overwrites_a_sequence_like_any_column(tmp_path):
+    # The data layer knows nothing about tools: a rewritten sequence is just a
+    # rewritten cell. Re-creating a design is a delete + run, never a --force.
+    dm = DataManager(tmp_path)
+    df = dm.apply_updates(_empty(), {"S0": {"sequence": "MKV"}})
+    df = dm.apply_updates(df, {"S0": {"sequence": "DIFFERENT"}})
+    assert df.at["S0", "sequence"] == "DIFFERENT"
+
+
+def test_apply_updates_empty_is_noop(tmp_path):
+    dm = DataManager(tmp_path)
+    df = dm.apply_updates(_empty(), {"S0": {"x": 1.0}})
+    assert dm.apply_updates(df, {}) is df
+
+
+def test_apply_updates_does_not_fragment(tmp_path):
+    import warnings
+
+    dm = DataManager(tmp_path)
+    rows = {f"D{i}": {"a": i, "b": "ok", "c": f"/r/{i}", "d": 1.5} for i in range(5000)}
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", pd.errors.PerformanceWarning)
+        df = dm.apply_updates(_empty(), rows)
+        df = dm.apply_updates(df, {k: {"b": "failed"} for k in rows})
+    assert len(df) == 5000 and (df["b"] == "failed").all()
