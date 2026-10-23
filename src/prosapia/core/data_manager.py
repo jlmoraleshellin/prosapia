@@ -208,17 +208,7 @@ class DataManager:
         return False
 
     def update(self, df: pd.DataFrame, iname: str, data: dict) -> pd.DataFrame:
-        """Set ``data`` on row ``iname`` (adding columns as needed); guards name reuse for a different sequence."""
-        if "sequence" in data and iname in df.index and "sequence" in df.columns:
-            old = df.at[iname, "sequence"]
-            new = data["sequence"]
-            if pd.notna(old) and pd.notna(new) and old != new:
-                raise ValueError(
-                    f"Sequence collision for {iname!r} in dataframe: the existing "
-                    f"sequence differs from the new one. Names must be unique per "
-                    f"sequence."
-                )
-
+        """Set ``data`` on row ``iname``, adding columns as needed."""
         for k, v in data.items():
             if k not in df.columns:
                 df[k] = pd.NA
@@ -229,6 +219,33 @@ class DataManager:
                 # all-NaN float64 column read back from TSV); widen to object.
                 df[k] = df[k].astype(object)
                 df.loc[iname, k] = v
+        return df
+
+    def apply_updates(
+        self, df: pd.DataFrame, updates: dict[str, dict[str, Any]]
+    ) -> pd.DataFrame:
+        """Write every row of ``updates`` into ``df`` in one pass.
+
+        Existing rows are overwritten column-wise, NA included (disk wins); new
+        rows are appended in dict order; new columns are added. One pass instead
+        of a per-row ``update`` loop, which enlarges the frame row by row and is
+        quadratic.
+        """
+        if not updates:
+            return df
+        new = pd.DataFrame.from_dict(updates, orient="index")
+        new.index.name = df.index.name
+        existing = new.index.intersection(df.index)
+
+        df = df.reindex(columns=df.columns.union(new.columns, sort=False))
+        if len(existing):
+            # Object dtype can hold anything; the TSV backend re-infers on read.
+            cols = [c for c in new.columns if df[c].dtype != new[c].dtype]
+            df[cols] = df[cols].astype(object)
+            df.loc[existing, new.columns] = new.loc[existing].to_numpy()
+        added = new.index.difference(df.index, sort=False)
+        if len(added):
+            df = pd.concat([df, new.loc[added]])
         return df
 
     def trace_lineage(

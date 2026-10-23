@@ -26,7 +26,7 @@ This project is a single Python package (`prosapia`), managed with `uv` (run tas
         - Defines the `CollectorFactory` hook contract that tools implement.
     - `data_manager.py`
         - `DataManager` is a context manager that owns the run's tables and registry, both handled uniformly as DataFrames through a pluggable I/O backend (TSV default). It:
-            - creates and modifies tables and the registry;
+            - creates and modifies tables and the registry (`apply_updates` writes a whole `CollectResult` in one pass; `update` is the per-row variant the registry uses);
             - resolves cross-table lineage (linking child rows to a parent via `parent_name`/`parent_table`/`gen`);
             - exposes a read-only `lookup` that walks the lineage chain to fetch ancestor values.
     - `cli.py` (`src/prosapia/cli/`): the `sapia` CLI entrypoint. Discovers tools (built-ins first, then `$PROSAPIA_TOOLS_DIR`) and builds a `run`/`collect` subcommand pair per tool.
