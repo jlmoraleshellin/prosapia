@@ -4,7 +4,7 @@ import gzip
 from pathlib import Path
 from typing import Sequence
 
-from ..core.naming import PARENT_NAME, PARENT_TABLE
+from ..core.naming import PARENT_NAME, PARENT_TABLE, submission_dirs
 from .paths import is_structure, is_text, resolve_safe_path, structure_media_type
 from .tables import load_raw, load_table, open_run, row_dict, table_names
 from .tree import build_tree, list_tasks, read_meta
@@ -102,16 +102,19 @@ def build_app(run_dir: Path, roots: Sequence[Path] = ()):
         if not leaf_dir.is_dir() or leaf_dir.parent != run_dir / table:
             raise HTTPException(404, f"unknown tool run: {table}/{leaf}")
         files = []
-        for entry in sorted(leaf_dir.iterdir(), key=lambda p: p.name)[:500]:
-            files.append(
-                {
-                    "name": entry.name,
-                    "is_dir": entry.is_dir(),
-                    "size": entry.stat().st_size if entry.is_file() else None,
-                    "path": str(entry.relative_to(run_dir)),
-                }
-            )
-        return {"meta": read_meta(leaf_dir), "tasks": list_tasks(run_dir, leaf_dir), "files": files}
+        for sub in submission_dirs(leaf_dir):
+            submission = sub.name if sub != leaf_dir else None
+            for entry in sorted(sub.iterdir(), key=lambda p: p.name):
+                files.append(
+                    {
+                        "name": entry.name,
+                        "is_dir": entry.is_dir(),
+                        "size": entry.stat().st_size if entry.is_file() else None,
+                        "path": str(entry.relative_to(run_dir)),
+                        "submission": submission,
+                    }
+                )
+        return {"meta": read_meta(leaf_dir), "tasks": list_tasks(run_dir, leaf_dir), "files": files[:500]}
 
     @app.get("/api/structure")
     def api_structure(path: str = Query(...)):

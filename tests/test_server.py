@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from prosapia.cli.merge import MergeArgs, merge_from_args  # noqa: E402
 from prosapia.cli.serve import build_serve_parser  # noqa: E402
 from prosapia.core import GEN, PARENT_NAME, PARENT_TABLE, DataManager, Table  # noqa: E402
-from prosapia.core.naming import RUN_META_FILENAME  # noqa: E402
+from prosapia.core.naming import RUN_META_FILENAME, SUBMISSIONS_DIRNAME  # noqa: E402
 from prosapia.server.app import build_app  # noqa: E402
 
 PDB = "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00           N\nEND\n"
@@ -55,13 +55,15 @@ def build_run_dir(base: Path, run: str = "run") -> Path:
     rfd = rd / "table0" / "rfdiffusion"
     _meta(rfd, tool="rfdiffusion", dir_label="", input_column="", timestamp="t0")
     _logs(rfd, "rfdiffusion", [0, 1, None])
-    (rfd / "D0.pdb").write_text(PDB)
+    sub = rfd / SUBMISSIONS_DIRNAME / "00"
+    sub.mkdir(parents=True)
+    (sub / "D0.pdb").write_text(PDB)
     _write(
         dm,
         Table("table0", 0, "", None, "rfdiffusion"),
         {
-            "D0": {"rfdiffusion_status": "OK", "rfdiffusion_path": f"outputs/{run}/table0/rfdiffusion/D0.pdb", "score": 1.5},
-            "D1": {"rfdiffusion_status": "OK", "rfdiffusion_path": f"outputs/{run}/table0/rfdiffusion/D1.pdb", "score": float("nan")},
+            "D0": {"rfdiffusion_status": "OK", "rfdiffusion_path": f"outputs/{run}/table0/rfdiffusion/.submissions/00/D0.pdb", "score": 1.5},
+            "D1": {"rfdiffusion_status": "OK", "rfdiffusion_path": f"outputs/{run}/table0/rfdiffusion/.submissions/00/D1.pdb", "score": float("nan")},
         },
     )
     (rd / "table0" / "notes").mkdir()
@@ -194,7 +196,7 @@ def test_leaf_detail(client):
     assert out["meta"]["tool"] == "rfdiffusion"
     assert [t["exit"] for t in out["tasks"]] == [0, 1, None]
     assert out["tasks"][0]["out"] == "table0/rfdiffusion/rfdiffusion_logs/rfdiffusion_1.out"
-    assert "D0.pdb" in [f["name"] for f in out["files"]]
+    assert [(f["submission"], f["name"]) for f in out["files"] if f["name"] == "D0.pdb"] == [("00", "D0.pdb")]
     log = client.get("/api/file", params={"path": out["tasks"][0]["out"]}).json()
     assert log["text"] == "task 1\n" and not log["truncated"]
     assert client.get("/api/leaves/table0/nope").status_code == 404
@@ -203,7 +205,7 @@ def test_leaf_detail(client):
 
 def test_structure_and_sandbox(run_dir, tmp_path):
     client = TestClient(build_app(run_dir))
-    ok = client.get("/api/structure", params={"path": "outputs/run/table0/rfdiffusion/D0.pdb"})
+    ok = client.get("/api/structure", params={"path": "outputs/run/table0/rfdiffusion/.submissions/00/D0.pdb"})
     assert ok.status_code == 200 and ok.headers["content-type"].startswith("chemical/x-pdb")
     assert ok.text == PDB
     assert client.get("/api/structure", params={"path": "outputs/run/table0/rfdiffusion/D1.pdb"}).status_code == 404
@@ -213,7 +215,7 @@ def test_structure_and_sandbox(run_dir, tmp_path):
     outside.write_text(PDB)
     assert client.get("/api/structure", params={"path": str(outside)}).status_code == 403
     assert client.get("/api/structure", params={"path": "../../elsewhere/x.pdb"}).status_code == 403
-    assert client.get("/api/file", params={"path": "outputs/run/table0/rfdiffusion/D0.pdb"}).status_code == 400
+    assert client.get("/api/file", params={"path": "outputs/run/table0/rfdiffusion/.submissions/00/D0.pdb"}).status_code == 400
 
     rooted = TestClient(build_app(run_dir, roots=[outside.parent]))
     assert rooted.get("/api/structure", params={"path": str(outside)}).status_code == 200
