@@ -329,6 +329,23 @@ def write_run_meta(out_dir: Path, **fields) -> None:
     path.write_text(json.dumps(meta, indent=2))
 
 
+def check_input_column(out_dir: Path, input_column: str) -> None:
+    """Refuse a resubmit on a leaf whose sidecar records a different ``--input-column``."""
+    path = out_dir / RUN_META_FILENAME
+    if not path.is_file():
+        return
+    try:
+        recorded = json.loads(path.read_text()).get("input_column")
+    except (OSError, json.JSONDecodeError):
+        return
+    if recorded is not None and recorded != input_column:
+        raise SystemExit(
+            f"{out_dir.name!r} was run with --input-column {recorded!r}; this run "
+            f"uses {input_column!r}. One leaf takes one input column: pass "
+            f"--dir-label to run this tool with a different input."
+        )
+
+
 def run_from_args(
     tool: ToolMetadata,
     build_manifest_fn: BuildManifestFn[ArgsT],
@@ -363,6 +380,7 @@ def run_from_args(
         log_dir.mkdir(parents=True, exist_ok=True)
 
         # Write run's base metadata to the sidecar
+        check_input_column(out_dir, args.input_column)
         write_run_meta(
             out_dir,
             tool=tool.name,
