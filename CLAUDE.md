@@ -13,7 +13,7 @@ This project is a single Python package (`prosapia`), managed with `uv` (run tas
     - `base_sbatch.py`
         - `run_from_args(metadata, build_manifest_fn, args)` is the submit-phase driver, shared by all tools. A tool customizes it by passing its `ToolMetadata` and its `BuildManifestFn` hook. On each invocation it:
             1. opens a `DataManager` to load the input table;
-            2. calls `resolve_output_table` to reserve the destination table (a new child/root for `create`, or the source table for `update`);
+            2. calls `registry.resolve_output_table` to reserve the destination table (a new child/root for `create`, or the source table for `update`);
             3. invokes the tool's `build_manifest` hook to write the manifest `.txt`;
             4. hands the manifest to the executor chosen by `--executor` (`core/executors/`: `slurm` array job or `modal` containers), which runs the tool's `.sh` once per manifest line.
         - Defines the `BuildManifestFn` hook contract that tools implement.

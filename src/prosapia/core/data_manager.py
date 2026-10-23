@@ -57,7 +57,6 @@ def build_tsv_backend(run_dir: Path) -> tuple[BackendRead, BackendWrite]:
                 frame = pd.read_csv(table_path, sep="\t", index_col="name")
                 return frame
         else:
-            print(f"Table {table_name} is new. Initializing new table.")
             frame = pd.DataFrame()
             frame.index.name = "name"
             return frame
@@ -159,6 +158,27 @@ class RegistryManager:
             parent_table_name=None if parent == ROOT_PARENT else str(parent),  # type: ignore
             tool_name=str(raw_tool) if pd.notna(raw_tool) else None,  # type: ignore
         )
+
+    def resolve_output_table(
+        self,
+        src_table: str | None,
+        tool_creates_table: bool,
+        tool_name: str,
+        table_label: str = "",
+    ) -> Table:
+        """Resolve the table a run writes to: reserve a child/root for create, else return ``src_table``."""
+        if not tool_creates_table:
+            if src_table is None:
+                raise ValueError(
+                    f"Update tool {tool_name!r} annotates an existing table in place and "
+                    f"requires --table; none was given."
+                )
+            return self.get_table(src_table)
+        output_table = self.derive_new_table(src_table, table_label)
+        # Provenance: the tool that creates this table.
+        output_table.tool_name = tool_name
+        self.register_table(output_table)
+        return output_table
 
     def get_registry(self) -> pd.DataFrame:
         """The table registry as a DataFrame (index = table name)."""
@@ -329,7 +349,7 @@ LookupFn = Callable[[str, str], Any]
 
 
 # FILTERING FUNCTIONS
-def filter_ready(df: pd.DataFrame, input_column: str) -> pd.DataFrame:
+def clean_ready(df: pd.DataFrame, input_column: str) -> pd.DataFrame:
     """Rows whose ``input_column`` is present (non-null, non-empty) -- the inputs a
     run/collect should act on.
 

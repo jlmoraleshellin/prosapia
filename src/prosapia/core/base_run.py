@@ -25,7 +25,7 @@ from pandas import DataFrame
 
 from .base_parser import base_parser
 from .executors import EXECUTORS, SubmitCtx, get_executor
-from .data_manager import Table, DataManager, LookupFn, RegistryManager, filter_ready
+from .data_manager import DataManager, LookupFn, clean_ready
 from .naming import (
     RUN_META_FILENAME,
     build_tool_leaf,
@@ -228,27 +228,6 @@ def build_run_parser(
     return parser
 
 
-## OUTPUT TABLE RESOLUTION
-def resolve_output_table(
-    registry: RegistryManager,
-    tool: ToolMetadata,
-    src_table: str | None,
-    table_label: str = "",
-) -> Table:
-    """Resolve the table a run writes to: reserve a child/root for create, else return ``src_table``."""
-    if not tool.creates_table:
-        if src_table is None:
-            raise ValueError(
-                f"Update tool {tool.name!r} annotates an existing table in place and "
-                f"requires --table; none was given."
-            )
-        return registry.get_table(src_table)
-    output_table = registry.derive_new_table(src_table, table_label)
-    output_table.tool_name = tool.name  # provenance: the tool that creates this table
-    registry.register_table(output_table)
-    return output_table
-
-
 ## FILTERING
 FilterFn = Callable[[DataFrame], DataFrame]
 
@@ -291,7 +270,7 @@ ArgsT = TypeVar("ArgsT", bound=CommonArgs)
 class ManifestCtx(Generic[ArgsT]):
     """Inputs a manifest builder may read (frame, args, out_dir, lookup)."""
 
-    df: pd.DataFrame
+    source_df: pd.DataFrame
     args: ArgsT
     out_dir: Path
     lookup: LookupFn
@@ -308,7 +287,7 @@ class ManifestCtx(Generic[ArgsT]):
         tools (which annotate the same table). For ``create`` tools the column lives in
         the child table, so the skip is a no-op and every ready design is submitted. #TODO maybe check child table too?
         """
-        ready = filter_ready(self.df, self.args.input_column)
+        ready = clean_ready(self.source_df, self.args.input_column)
         out_status = status_column(self.out_dir.name)
         if not self.args.force and out_status in ready.columns:
             ready = ready[ready[out_status] != "OK"]
@@ -337,7 +316,7 @@ def write_run_meta(out_dir: Path, **fields) -> None:
 
 
 def run_from_args(
-    metadata: ToolMetadata,
+    tool: ToolMetadata,
     build_manifest_fn: BuildManifestFn[ArgsT],
     args: ArgsT,
 ) -> None:
@@ -356,12 +335,15 @@ def run_from_args(
     with DataManager(args.run_dir) as (dm, (read_frame, save_frame), registry):
         # CREATE reserves a new table in the registry that gets created when collect is called;
         # UPDATE writes back to src_table.
-        output_table = resolve_output_table(
-            registry, metadata, src_table, getattr(args, "table_label", "")
+        output_table = registry.resolve_output_table(
+            src_table,
+            tool.creates_table,
+            tool.name,
+            getattr(args, "table_label", ""),
         )
 
         # Dirs (created below, so resolve without the existence guard).
-        out_dir = resolve_dir_name(args, output_table, metadata, must_exist=False)
+        out_dir = resolve_dir_name(args, output_table, tool, must_exist=False)
         log_dir = out_dir / f"{args.script.stem}_logs"
         out_dir.mkdir(parents=True, exist_ok=True)
         log_dir.mkdir(parents=True, exist_ok=True)
@@ -369,7 +351,7 @@ def run_from_args(
         # Write run's base metadata to the sidecar
         write_run_meta(
             out_dir,
-            tool=metadata.name,
+            tool=tool.name,
             input_column=args.input_column,
             dir_label=args.dir_label,
             filter=str(args.filter) if args.filter else None,
@@ -378,14 +360,14 @@ def run_from_args(
         )
 
         # A root tool has no source table: give an empty frame (for type security).
-        df = read_frame(src_table) if src_table else pd.DataFrame()
+        source_df = read_frame(src_table) if src_table else pd.DataFrame()
 
         # Filter
         if args.filter:
             apply_filter = _get_filter_fn_from_module(args.filter)
-            df = apply_filter(df)
+            source_df = apply_filter(source_df)
         if args.where:
-            df = apply_where(df, args.where)
+            source_df = apply_where(source_df, args.where)
 
         # Manifest
         manifest_dir = args.run_dir / ".manifests"
@@ -399,10 +381,10 @@ def run_from_args(
             manifest_dir / f"{output_table.table_name}_{leaf}_{stamp}_manifest.txt"
         )
         ctx = ManifestCtx(
-            df=df,
+            source_df=source_df,
             args=args,
             out_dir=out_dir,
-            lookup=partial(dm.lookup, df),
+            lookup=partial(dm.lookup, source_df),
             write_meta=partial(write_run_meta, out_dir),
         )
         manifest_rows = build_manifest_fn(ctx)
@@ -420,7 +402,7 @@ def run_from_args(
     submit(
         SubmitCtx(
             args=args,
-            tool_name=metadata.name,
+            tool_name=tool.name,
             rows=manifest_rows,
             manifest_base=manifest_base,
             out_dir=out_dir,

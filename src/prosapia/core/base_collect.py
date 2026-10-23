@@ -21,7 +21,7 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from .base_parser import base_parser
-from .data_manager import Table, DataManager, LookupFn, filter_ready
+from .data_manager import Table, DataManager, LookupFn, clean_ready
 from .naming import (
     GEN,
     PARENT_TABLE,
@@ -98,7 +98,7 @@ class CollectCtx(Generic[ArgsT]):
             else self.default_input_column
         )
         frame = self.parent_df if self.creates_table else self.df
-        ready = filter_ready(frame, col)
+        ready = clean_ready(frame, col)
         # Standard create: can't filter out already-collected rows (status_col) because the parent table has no status_col for this tool yet.
         if self.creates_table:
             return ready

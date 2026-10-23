@@ -76,7 +76,7 @@ def build_mytool_manifest(ctx: ManifestCtx) -> list[ManifestRow]:
     return rows
 ```
 
-`ctx` exposes the input frame (`ctx.df`), the parsed CLI args (`ctx.args`), the output directory (`ctx.out_dir`), a lineage `ctx.lookup`, and — most importantly — `ctx.ready`: the designs this run should submit (rows with a present input column, minus those the tool already finished, unless `--force`). You never filter or resume by hand. See the dedicated [Writing a build-manifest function](writing-a-build-manifest-function.md) guide for the full contract, the context fields, and the common staging / sub-manifest / custom-selection patterns.
+`ctx` exposes the input frame (`ctx.source_df`), the parsed CLI args (`ctx.args`), the output directory (`ctx.out_dir`), a lineage `ctx.lookup`, and — most importantly — `ctx.ready`: the designs this run should submit (rows with a present input column, minus those the tool already finished, unless `--force`). You never filter or resume by hand. See the dedicated [Writing a build-manifest function](writing-a-build-manifest-function.md) guide for the full contract, the context fields, and the common staging / sub-manifest / custom-selection patterns.
 
 ### `collect_fn`
 
