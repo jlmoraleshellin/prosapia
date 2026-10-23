@@ -101,16 +101,10 @@ def collect_openfold3(ctx: CollectCtx) -> CollectEach:
     def one(d: DesignCtx) -> Iterable[Collected]:
         design_dir = design_dirs.get(d.name)
         if design_dir is None:
-            yield Collected(
-                status=f"missing: no task dir for {d.name}", data=na_metrics
-            )
             return
 
         json_path, cif_path = find_best_model(design_dir)
         if json_path is None or cif_path is None:
-            yield Collected(
-                status=f"missing: no models in {design_dir}", data=na_metrics
-            )
             return
 
         try:

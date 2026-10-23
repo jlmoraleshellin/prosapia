@@ -93,7 +93,7 @@ def add_run_openfold3_args(parser: ArgumentParser) -> None:
 def build_openfold3_manifest(ctx: ManifestCtx[OpenFold3Args]) -> list[tuple[str, ...]]:
     maybe_set_gpus_per_task(ctx.args)
 
-    json_dir = ctx.out_dir / "openfold3_queries"
+    json_dir = ctx.submission_dir / "openfold3_queries"
     json_dir.mkdir(parents=True, exist_ok=True)
 
     ready = ctx.ready
@@ -107,7 +107,7 @@ def build_openfold3_manifest(ctx: ManifestCtx[OpenFold3Args]) -> list[tuple[str,
         )
         queries.append((name, chain_map))
 
-    runner_path = ctx.out_dir / "runner.yml"
+    runner_path = ctx.submission_dir / "runner.yml"
     write_runner_yaml(runner_path, ctx.args.devices)
 
     manifest_rows: list[tuple[str, ...]] = []

@@ -95,16 +95,10 @@ def collect_af3(ctx: CollectCtx) -> CollectEach:
             af3_sanitised_name(d.name)
         )
         if design_dir is None:
-            yield Collected(
-                status=f"missing: no output dir for {d.name}", data=na_metrics
-            )
             return
 
         summary_path, cif_path = find_prediction_files(design_dir)
         if summary_path is None or cif_path is None:
-            yield Collected(
-                status=f"missing: no models in {design_dir}", data=na_metrics
-            )
             return
 
         try:

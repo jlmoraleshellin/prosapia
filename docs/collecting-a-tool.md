@@ -25,12 +25,12 @@ A tool may add its own collect flags (via  `add_collect_args_fn`); `sapia collec
 
 ## What collect does
 
-For each ready design it reads the tool's output under `run_dir/<table>/<leaf>/` and writes the resulting columns into `<table>.tsv`. The tool's `action` decides the contract:
+Every `run` writes into its own submission dir, `run_dir/<table>/<leaf>/.submissions/<NN>/`. Collect walks those dirs newest first, runs the tool's collector against each, and keeps the first result per design: a design re-run in a later submission is collected from that submission, a design that only ever ran in an earlier one is collected from there. The `<leaf>_path` column points at the file inside the submission that produced it. The resulting columns go into `<table>.tsv`. The tool's `action` decides the contract:
 
 - **`create`** stamps lineage on every new row (`parent_table`, `gen`) and validates that each row points at a real parent row — a create-collect fails if a child is missing its parent link.
 - **`update`** writes the tool's columns back onto existing rows. It only *warns* (doesn't fail) if it produces a row not already in the table — a sign the tool should probably be `action="create"`.
 
-If a ready design has no output on disk, an `update` marks its row `missing`; a `create` has no row yet, so it is skipped. Rerunning collect skips rows already marked `OK` unless you pass `--force`. When it finishes it prints how many rows it wrote:
+If a ready design has no output in any submission, an `update` marks its row `missing` (only the status column changes; collect reports drift, it never repairs it); a `create` has no row yet, so it is skipped. Rerunning collect skips rows already marked `OK` unless you pass `--force`, in which case the newest submission wins even when it failed where an older one succeeded. When it finishes it prints how many rows it wrote:
 
 ```
 Collected 128 row(s) into table1_seqs.

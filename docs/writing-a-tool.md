@@ -76,11 +76,11 @@ def build_mytool_manifest(ctx: ManifestCtx) -> list[ManifestRow]:
     return rows
 ```
 
-`ctx` exposes the input frame (`ctx.source_df`), the parsed CLI args (`ctx.args`), the output directory (`ctx.out_dir`), a lineage `ctx.lookup`, and — most importantly — `ctx.ready`: the designs this run should submit (rows with a present input column, minus those the tool already finished, unless `--force`). You never filter or resume by hand. See the dedicated [Writing a build-manifest function](writing-a-build-manifest-function.md) guide for the full contract, the context fields, and the common staging / sub-manifest / custom-selection patterns.
+`ctx` exposes the input frame (`ctx.source_df`), the parsed CLI args (`ctx.args`), this submission's output directory (`ctx.submission_dir`), a lineage `ctx.lookup`, and — most importantly — `ctx.ready`: the designs this run should submit (rows with a present input column, minus those the tool already finished, unless `--force`). You never filter or resume by hand. See the dedicated [Writing a build-manifest function](writing-a-build-manifest-function.md) guide for the full contract, the context fields, and the common staging / sub-manifest / custom-selection patterns.
 
 ### `collect_fn`
 
-The collect-phase hook is a **factory**: `collect_mytool(ctx) -> CollectEach` runs once per collect (do any one-time output scan here) and returns a per-design function that `yield`s a `Collected` for each row a design produced. The driver iterates the ready designs and stamps the `<leaf>_status` / `<leaf>_path` / `parent_name` columns for you. See the dedicated [Writing a collect function](writing-a-collect-function.md) guide for the full contract with `create` and `update` examples.
+The collect-phase hook is a **factory**: `collect_mytool(ctx) -> CollectEach` runs once per submission dir (do any one-time output scan of `ctx.out_dir` here) and returns a per-design function that `yield`s a `Collected` for each row a design produced in that dir, and nothing when the design is not there. The driver walks the submissions newest first, keeps the first result per design, marks `missing` what no submission has, and stamps the `<leaf>_status` / `<leaf>_path` / `parent_name` columns for you. See the dedicated [Writing a collect function](writing-a-collect-function.md) guide for the full contract with `create` and `update` examples.
 
 ## Writing a task script
 

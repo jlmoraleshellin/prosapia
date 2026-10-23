@@ -29,6 +29,7 @@ from .data_manager import DataManager, LookupFn, clean_ready
 from .naming import (
     PARENT_NAME,
     RUN_META_FILENAME,
+    SUBMISSIONS_DIRNAME,
     build_tool_leaf,
     resolve_dir_name,
     status_column,
@@ -269,7 +270,7 @@ ArgsT = TypeVar("ArgsT", bound=CommonArgs)
 
 @dataclass
 class ManifestCtx(Generic[ArgsT]):
-    """Inputs a manifest builder may read (frames, args, out_dir, lookup).
+    """Inputs a manifest builder may read (frames, args, submission_dir, lookup).
 
     ``source_df`` is the table the run iterates, after ``--filter`` / ``--where``.
     ``target_df`` is the table the run writes to, unfiltered: the same table for an
@@ -281,7 +282,8 @@ class ManifestCtx(Generic[ArgsT]):
     source_df: pd.DataFrame
     target_df: pd.DataFrame
     args: ArgsT
-    out_dir: Path
+    submission_dir: Path
+    leaf: str
     lookup: LookupFn
     write_meta: Callable[..., None]
 
@@ -298,7 +300,7 @@ class ManifestCtx(Generic[ArgsT]):
         ready = clean_ready(self.source_df, self.args.input_column)
         if self.args.force:
             return ready
-        out_status = status_column(self.out_dir.name)
+        out_status = status_column(self.leaf)
         if out_status in ready.columns:
             return ready[ready[out_status] != "OK"]
         target = self.target_df
@@ -344,6 +346,20 @@ def check_input_column(out_dir: Path, input_column: str) -> None:
             f"uses {input_column!r}. One leaf takes one input column: pass "
             f"--dir-label to run this tool with a different input."
         )
+
+
+def new_submission_dir(out_dir: Path) -> tuple[Path, str]:
+    """Allocate the next ``<leaf>/.submissions/<index>`` dir; mkdir is the lock."""
+    runs = out_dir / SUBMISSIONS_DIRNAME
+    runs.mkdir(parents=True, exist_ok=True)
+    n = max((int(p.name) for p in runs.iterdir() if p.name.isdigit()), default=-1) + 1
+    while True:
+        d = runs / f"{n:02d}"
+        try:
+            d.mkdir()
+            return d, f"{n:02d}"
+        except FileExistsError:
+            n += 1
 
 
 def run_from_args(
@@ -411,16 +427,20 @@ def run_from_args(
 
         # Stamped per submission: a resubmit on the same table/leaf must not
         # overwrite a manifest that still-pending tasks of an earlier array read.
-        leaf = build_tool_leaf(args.script.stem, args.dir_label)
+        leaf = build_tool_leaf(tool.name, args.dir_label)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+
+        submission_dir, stamp = new_submission_dir(out_dir)
         manifest_base = (
             manifest_dir / f"{output_table.table_name}_{leaf}_{stamp}_manifest.txt"
         )
+
         ctx = ManifestCtx(
             source_df=source_df,
             target_df=target_df,
             args=args,
-            out_dir=out_dir,
+            leaf=leaf,
+            submission_dir=submission_dir,
             lookup=partial(dm.lookup, source_df),
             write_meta=partial(write_run_meta, out_dir),
         )
@@ -430,9 +450,10 @@ def run_from_args(
         print("No designs to submit.")
         return
 
+    # TODO improve logging
     n = len(manifest_rows)
     print(f"Submitting {n} designs")
-    print(f"Output:  {out_dir}")
+    print(f"Output:  {submission_dir}")
     print(f"Logs:    {log_dir}")
 
     submit = get_executor(args.executor)
@@ -442,7 +463,7 @@ def run_from_args(
             tool_name=tool.name,
             rows=manifest_rows,
             manifest_base=manifest_base,
-            out_dir=out_dir,
+            out_dir=submission_dir,
             log_dir=log_dir,
         )
     )

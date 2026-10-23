@@ -276,7 +276,7 @@ def build_proteinmpnn_manifest(
     ready = ctx.ready
 
     # Run-wide pieces (all structure-independent): argv tail and the bias jsonl.
-    bias_path = _write_bias_jsonl(ctx.args.bias_aa, ctx.out_dir)
+    bias_path = _write_bias_jsonl(ctx.args.bias_aa, ctx.submission_dir)
     mpnn_extra = _mpnn_extra(ctx.args, bias_path)
 
     # Guardrails: tying is either the homo-oligomer shortcut or explicit, not both;
@@ -340,14 +340,14 @@ def build_proteinmpnn_manifest(
 
     # Materialize: one grp_<g>/ output dir per subgroup (inputs/ holds symlinks), one
     # sub-manifest per task (a row per subgroup), and a 1-field top-level row per task.
-    tasks_dir = ctx.out_dir / "proteinmpnn_tasks"
+    tasks_dir = ctx.submission_dir / "proteinmpnn_tasks"
     tasks_dir.mkdir(parents=True, exist_ok=True)
     manifest_rows: list[tuple[str, ...]] = []
     gid = 0
     for t, subgroups in enumerate(tasks):
         sub_rows: list[tuple[str, ...]] = []
         for (chains_sig, fixed_pl, tie_mode, tied_pl), members in subgroups:
-            grp_dir = ctx.out_dir / f"grp_{gid}"
+            grp_dir = ctx.submission_dir / f"grp_{gid}"
             inputs_dir = grp_dir / "inputs"
             inputs_dir.mkdir(parents=True, exist_ok=True)
             for name, pdb_src in members:

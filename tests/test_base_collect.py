@@ -398,3 +398,191 @@ def test_by_design_create_mints_multiple_children(tmp_path, monkeypatch):
         assert df.at[row, PARENT_TABLE] == "table0_worms"
         assert df.at[row, GEN] == 1
         assert df.at[row, "diffused_iteration"] == i
+
+
+# --- Submission dirs: newest wins, missing only when absent everywhere --------
+
+from prosapia.core.naming import SUBMISSIONS_DIRNAME, submission_dirs  # noqa: E402
+
+
+def _make_submissions(run_dir, table_name, leaf, n):
+    """The leaf plus ``n`` submission dirs ``00..``, as the run driver creates them."""
+    out = run_dir / table_name / leaf
+    out.mkdir(parents=True, exist_ok=True)  # _reserve_* may have made it already
+    subs = [out / SUBMISSIONS_DIRNAME / f"{i:02d}" for i in range(n)]
+    for s in subs:
+        s.mkdir(parents=True)
+    return out, subs
+
+
+def _marker_collector(seen=None):
+    """Emits for a design iff ``<out_dir>/<name>.out`` exists: the file's text is
+    the ``src`` column and the file itself the path. Records each factory call."""
+
+    def make(ctx: CollectCtx):
+        if seen is not None:
+            seen.setdefault("out_dirs", []).append(ctx.out_dir)
+            seen.setdefault("leafs", set()).add((ctx.leaf, ctx.leaf_dir))
+
+        def one(d):
+            p = d.out_dir / f"{d.name}.out"
+            if p.is_file():
+                yield Collected(data={"src": p.read_text()}, path=p)
+
+        return one
+
+    return make
+
+
+def _update_table(tmp_path, names):
+    dm = DataManager(tmp_path)
+    df = dm.read_frame("table0")
+    for n in names:
+        df = dm.update(df, n, {"sequence": "AAA"})
+    dm.write_frame("table0", df)
+
+
+def test_submission_dirs_newest_first_by_int(tmp_path):
+    out, _ = _make_submissions(tmp_path, "table0", UPDATE.name, 3)
+    (out / SUBMISSIONS_DIRNAME / "100").mkdir()
+    assert [p.name for p in submission_dirs(out)] == ["100", "02", "01", "00"]
+
+
+def test_submission_dirs_fallback_to_leaf(tmp_path):
+    out = _make_out_dir(tmp_path, "table0", UPDATE.name)
+    assert submission_dirs(out) == [out]
+
+
+def test_newest_submission_wins(tmp_path, monkeypatch):
+    _update_table(tmp_path, ["r1"])
+    _, (s0, s1) = _make_submissions(tmp_path, "table0", UPDATE.name, 2)
+    (s0 / "r1.out").write_text("old")
+    (s1 / "r1.out").write_text("new")
+
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-t", "table0"])
+    collect(metadata=UPDATE, collect_fn=_marker_collector())
+
+    df = DataManager(tmp_path).read_frame("table0")
+    assert df.at["r1", "alphafold3_src"] == "new"
+    assert df.at["r1", "alphafold3_status"] == "OK"
+    assert df.at["r1", "alphafold3_path"] == str(s1 / "r1.out")
+    assert not [c for c in df.columns if c.startswith("01_")]
+
+
+def test_older_submission_supplies_design_missing_from_newest(tmp_path, monkeypatch):
+    _update_table(tmp_path, ["r1", "r2"])
+    _, (s0, s1) = _make_submissions(tmp_path, "table0", UPDATE.name, 2)
+    (s0 / "r2.out").write_text("from00")
+    (s1 / "r1.out").write_text("from01")
+
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-t", "table0"])
+    collect(metadata=UPDATE, collect_fn=_marker_collector())
+
+    df = DataManager(tmp_path).read_frame("table0")
+    assert df.at["r1", "alphafold3_src"] == "from01"
+    assert df.at["r2", "alphafold3_src"] == "from00"
+
+
+def test_design_absent_everywhere_is_missing_and_keeps_old_path(tmp_path, monkeypatch):
+    dm = DataManager(tmp_path)
+    df = dm.update(dm.read_frame("table0"), "r1", {"sequence": "AAA"})
+    df = dm.update(df, "r1", {"alphafold3_path": "/old/r1.cif"})
+    dm.write_frame("table0", df)
+    _make_submissions(tmp_path, "table0", UPDATE.name, 2)
+
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-t", "table0"])
+    collect(metadata=UPDATE, collect_fn=_marker_collector())
+
+    df = DataManager(tmp_path).read_frame("table0")
+    assert df.at["r1", "alphafold3_status"] == "missing"
+    assert (
+        df.at["r1", "alphafold3_path"] == "/old/r1.cif"
+    )  # collect detects, never repairs
+
+
+def test_create_design_absent_everywhere_is_skipped(tmp_path, monkeypatch):
+    table = _reserve_root(tmp_path, ["denovo"])
+    _make_submissions(tmp_path, table, CREATE.name, 2)
+
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-t", table])
+    collect(metadata=CREATE, collect_fn=_marker_collector())
+
+    assert DataManager(tmp_path).read_frame(table).empty
+
+
+def test_factory_runs_per_submission_newest_first_with_constant_leaf(
+    tmp_path, monkeypatch
+):
+    _update_table(tmp_path, ["r1"])
+    out, (s0, s1) = _make_submissions(tmp_path, "table0", UPDATE.name, 2)
+    seen = {}
+
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-t", "table0"])
+    collect(metadata=UPDATE, collect_fn=_marker_collector(seen))
+
+    assert seen["out_dirs"] == [s1, s0]
+    assert seen["leafs"] == {(UPDATE.name, out)}
+
+
+def test_scan_stops_once_every_design_is_answered(tmp_path, monkeypatch):
+    _update_table(tmp_path, ["r1"])
+    _, (s0, s1) = _make_submissions(tmp_path, "table0", UPDATE.name, 2)
+    (s1 / "r1.out").write_text("new")
+    seen = {}
+
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-t", "table0"])
+    collect(metadata=UPDATE, collect_fn=_marker_collector(seen))
+
+    assert seen["out_dirs"] == [s1]
+
+
+def test_meta_is_read_from_the_leaf_with_submissions_present(tmp_path, monkeypatch):
+    table = _reserve_root(tmp_path, ["denovo"])
+    _, (s0,) = _make_submissions(tmp_path, table, CREATE.name, 1)
+    (s0 / "denovo.out").write_text("x")
+    seen = {}
+
+    def collect_fn(ctx: CollectCtx):
+        seen["ready"] = list(ctx.ready.index)
+        return _marker_collector()(ctx)
+
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-t", table])
+    collect(metadata=CREATE, collect_fn=collect_fn)
+
+    assert seen["ready"] == ["denovo"]
+    assert "denovo" in DataManager(tmp_path).read_frame(table).index
+
+
+def test_collect_without_submissions_reads_the_leaf(tmp_path, monkeypatch):
+    _update_table(tmp_path, ["r1"])
+    out = _make_out_dir(tmp_path, "table0", UPDATE.name)
+    (out / "r1.out").write_text("legacy")
+
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-t", "table0"])
+    collect(metadata=UPDATE, collect_fn=_marker_collector())
+
+    assert (
+        DataManager(tmp_path).read_frame("table0").at["r1", "alphafold3_src"]
+        == "legacy"
+    )
+
+
+def test_force_recollect_takes_newest_submission(tmp_path, monkeypatch):
+    _update_table(tmp_path, ["r1"])
+    out, (s0,) = _make_submissions(tmp_path, "table0", UPDATE.name, 1)
+    (s0 / "r1.out").write_text("first")
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-t", "table0"])
+    collect(metadata=UPDATE, collect_fn=_marker_collector())
+    assert (
+        DataManager(tmp_path).read_frame("table0").at["r1", "alphafold3_src"] == "first"
+    )
+
+    s1 = out / SUBMISSIONS_DIRNAME / "01"
+    s1.mkdir()
+    (s1 / "r1.out").write_text("second")
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-t", "table0", "--force"])
+    collect(metadata=UPDATE, collect_fn=_marker_collector())
+    assert (
+        DataManager(tmp_path).read_frame("table0").at["r1", "alphafold3_src"]
+        == "second"
+    )

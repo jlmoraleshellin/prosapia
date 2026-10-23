@@ -47,7 +47,7 @@ The inner function receives one design at a time:
 | Field | Meaning |
 | --- | --- |
 | `d.name` | the design's row name (an existing row for an `update` tool; the *parent* row for a `create` tool — or, for a **root** `create` run with no `--table`, a group name the run recorded via [`ctx.write_meta(root_designs=…)`](writing-a-build-manifest-function.md#root-runs-no---table)). |
-| `d.out_dir` | this run's output directory (same as `ctx.out_dir`). |
+| `d.out_dir` | the submission dir being collected (`<leaf>/.submissions/<NN>`, same as `ctx.out_dir`). The driver runs your collector once per submission, newest first, so locate outputs relative to this dir and report what is there. |
 | `d.lookup` | read a value from this design or any ancestor: `d.lookup(d.name, "n_subunits")`. |
 
 Anything constant across designs — `ctx.args`, an index you built — you capture in
@@ -67,13 +67,17 @@ Yield one `Collected` per output row. Everything except `data` is optional:
 
 - **Yield one** `Collected` for an `update` tool — it annotates `d.name`.
 - **Yield several** for a `create` tool — each with its own `name` and `parent`.
-- **Yield nothing** when a design has no output on disk: an `update` tool marks the
-  existing row `missing`; a `create` tool simply skips it.
+- **Yield nothing** when a design has no output in the dir you were given. The
+  driver then looks in older submissions; only when no submission has it does an
+  `update` tool get its row marked `missing` (a `create` tool simply skips it).
+  Never yield a `missing` row yourself: that would count as an answer and hide an
+  older submission that does have the output.
 
-To report a failure, yield a `Collected` with a non-`"OK"` status (`"missing"`,
-`"empty"`, `"error: ..."` — any string that isn't `"OK"` counts as *not done*, so
-the design is picked up again on the next collect). The framework treats `"OK"`
-specially; everything else is retriable.
+To report a failure the tool itself produced (it ran and wrote an empty or broken
+result), yield a `Collected` with a non-`"OK"` status (`"empty"`, `"error: ..."` —
+any string that isn't `"OK"` counts as *not done*, so the design is picked up
+again on the next collect). The framework treats `"OK"` specially; everything
+else is retriable.
 
 ## Example — an `update` tool (AlphaFold3)
 
@@ -90,21 +94,13 @@ def collect_af3(ctx: CollectCtx) -> CollectEach:
             if design_dir.is_dir():
                 design_dirs[design_dir.name] = design_dir
 
-    na_metrics = {k: pd.NA for k in AF3_JSON_KEYS}  # bare metric names
-
     def one(d: DesignCtx) -> Iterable[Collected]:
         design_dir = design_dirs.get(d.name)
         if design_dir is None:
-            yield Collected(
-                status=f"missing: no output dir for {d.name}", data=na_metrics
-            )
-            return
+            return  # not in this submission: the driver tries older ones
 
         summary, cif = find_prediction_files(design_dir)
         if summary is None or cif is None:
-            yield Collected(
-                status=f"missing: no models in {design_dir}", data=na_metrics
-            )
             return
 
         metrics = load_metrics(summary)  # {"ptm": ..., "iptm": ..., ...}

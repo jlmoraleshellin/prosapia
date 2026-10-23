@@ -6,7 +6,12 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from prosapia.core.base_run import ManifestCtx, apply_where
+from prosapia.core.base_run import (
+    ManifestCtx,
+    apply_where,
+    check_input_column,
+    write_run_meta,
+)
 from prosapia.core.naming import PARENT_NAME
 
 
@@ -48,7 +53,8 @@ def _ctx(df, target_df, out_dir, force=False):
         source_df=df,
         target_df=target_df,
         args=args,
-        out_dir=out_dir,
+        submission_dir=out_dir,
+        leaf=out_dir.name,
         lookup=lambda *a, **k: None,
         write_meta=lambda **k: None,
     )
@@ -105,3 +111,23 @@ def test_ready_force_reincludes_done_parents(tmp_path):
     )
     ctx = _ctx(_parents(), children, tmp_path / "table1" / "rfdiffusion", force=True)
     assert list(ctx.ready.index) == ["p1", "p2", "p3"]
+
+
+# --- check_input_column: one leaf, one input column ---------------------------
+
+
+def test_check_input_column_passes_without_sidecar(tmp_path):
+    check_input_column(tmp_path, "pdb")
+
+
+def test_check_input_column_passes_on_same_column(tmp_path):
+    write_run_meta(tmp_path, input_column="pdb")
+    check_input_column(tmp_path, "pdb")
+
+
+def test_check_input_column_refuses_a_different_column(tmp_path):
+    leaf = tmp_path / "boltz"
+    leaf.mkdir()
+    write_run_meta(leaf, input_column="pdb")
+    with pytest.raises(SystemExit, match="'boltz'.*'pdb'.*'relaxed_pdb'.*--dir-label"):
+        check_input_column(leaf, "relaxed_pdb")

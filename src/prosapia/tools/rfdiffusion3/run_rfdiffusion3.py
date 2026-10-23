@@ -409,7 +409,7 @@ def build_rfd3_manifest(ctx: ManifestCtx[RFD3Args]) -> list[tuple[str, ...]]:
     if not specs:
         return []
 
-    shards_dir = ctx.out_dir / "rfd3_inputs"
+    shards_dir = ctx.submission_dir / "rfd3_inputs"
     shards_dir.mkdir(parents=True, exist_ok=True)
 
     overrides = _cli_overrides(ctx.args)

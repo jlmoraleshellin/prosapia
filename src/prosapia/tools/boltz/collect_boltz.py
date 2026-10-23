@@ -104,7 +104,6 @@ def collect_boltz(ctx: CollectCtx) -> CollectEach:
         )
 
         if json_path is None or cif_path is None:
-            yield Collected(status=f"missing: boltz_results_{d.name}", data=na_metrics)
             return
 
         try:
