@@ -66,7 +66,7 @@ export type Task = { id: string; exit: number | null; out: string; err: string |
 export type LeafDetail = {
   meta: Record<string, unknown> | null
   tasks: Task[]
-  files: { name: string; is_dir: boolean; size: number | null; path: string }[]
+  files: { name: string; is_dir: boolean; size: number | null; path: string; submission: string | null }[]
 }
 
 export type FileText = { path: string; text: string; truncated: boolean }
