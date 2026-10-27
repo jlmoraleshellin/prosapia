@@ -331,6 +331,16 @@ def write_run_meta(out_dir: Path, **fields) -> None:
     path.write_text(json.dumps(meta, indent=2))
 
 
+def read_run_meta(out_dir: Path) -> dict:
+    """The run's ``.meta.json`` sidecar, or ``{}`` when absent or unparseable."""
+    path = out_dir / RUN_META_FILENAME
+    try:
+        meta = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return meta if isinstance(meta, dict) else {}
+
+
 def check_input_column(out_dir: Path, input_column: str) -> None:
     """Refuse a resubmit on a leaf whose sidecar records a different ``--input-column``."""
     path = out_dir / RUN_META_FILENAME

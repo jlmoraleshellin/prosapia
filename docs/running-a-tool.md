@@ -43,7 +43,7 @@ These flags decide *which* designs are submitted and where their output lands. T
 | `--table-label` | `""` | **`create` tools only.** Labels the child table this run reserves (append rule: `table<gen>_<parent_label>_<table_label>`). Use it to disambiguate a fork. See [Using labels](using-labels.md). |
 | `-f`, `--filter` | none | Path to a Python module exposing `apply_filter(df) -> df`, applied to the source frame *before* the manifest is built. See [Writing a filter function](writing-a-filter-function.md). |
 | `-w`, `--where` | none | `COL=VALUE`: keep only rows whose column equals the value (string compare). Repeatable, applied after `--filter`. Typical use: `-w merge_source=table1_a` to run a tool with fork-specific arguments on a merged table (see [Using labels](using-labels.md#merging-sibling-tables-sapia-merge)). |
-| `--force` | off | Re-submit designs this tool already finished (skips the resume filter). On a `create` tool this re-mints the children under their old names, so anything collected from the old ones downstream is stale; to start clean, delete and recreate the child table instead. |
+| `--force` | off | Re-submit designs this tool already finished (skips the resume filter). On a `create` tool this re-mints the children under their old names, so anything collected from the old ones downstream is stale; to start clean, [`sapia delete`](deleting-a-tool.md) the leaf and rerun. |
 
 ### The ready set
 

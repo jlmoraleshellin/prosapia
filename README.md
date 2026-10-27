@@ -142,6 +142,7 @@ More detailed docs live under [`docs/`](docs/index.md):
 - [Architecture](docs/architecture.md) — the shared table and the two-phase driver.
 - [Running a tool](docs/running-a-tool.md) — the `sapia run` flags and the executors; see [running on SLURM](docs/running-on-slurm.md), [running on Modal](docs/running-on-modal.md) and [running locally](docs/running-locally.md).
 - [Collecting a tool](docs/collecting-a-tool.md) — the `sapia collect` phase and its flags.
+- [Deleting a tool run](docs/deleting-a-tool.md) — `sapia delete`: a leaf's outputs and columns, or a created table, removed as a unit.
 - [Using labels](docs/using-labels.md) — `--dir-label` and `--table-label` for variants and forks.
 - [Using RFdiffusion](docs/tools/rfdiffusion.md), [using RFdiffusion3](docs/tools/rfdiffusion3.md), and [using ProteinMPNN](docs/tools/proteinmpnn.md) — bundled tools with their own expression languages.
 - [Lineage & tables](docs/lineage-and-tables.md) — `create` vs. `update`, roots, and `lookup`.

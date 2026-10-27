@@ -21,6 +21,7 @@ from ..core.base_collect import build_collect_parser
 from ..core.base_run import build_run_parser
 from ..core.tool import Tool, collect_tool, run_tool
 from ..core.tool_registry import discover, BUILTIN_TOOLS_DIR
+from .delete import build_delete_parser, delete_from_args
 from .fork_tool import build_fork_parser, fork_from_args
 from .merge import build_merge_parser, merge_from_args
 from .modal_shell import build_modal_shell_parser, modal_shell_from_args
@@ -67,6 +68,13 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
         help="Pool sibling tables (same parent) into one new child table.",
     )
     merge_p.set_defaults(_dispatch=merge_from_args)
+
+    delete_p = verbs.add_parser(
+        "delete",
+        parents=[build_delete_parser()],
+        help="Remove a tool run: its leaf dir and the columns (or table) it produced.",
+    )
+    delete_p.set_defaults(_dispatch=delete_from_args)
 
     modal_shell_p = verbs.add_parser(
         "modal-shell",
