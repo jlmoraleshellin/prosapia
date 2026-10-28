@@ -99,7 +99,7 @@ export default function PlotPanel({
       }
       const axis = { gridcolor: '#f4f4f5', zerolinecolor: '#e4e4e7', linecolor: '#e4e4e7', tickfont: { size: 11 } }
       const layout: any = {
-        margin: { l: 55, r: 20, t: 10, b: 45 },
+        margin: { l: 55, r: 20, t: 36, b: 45 },
         paper_bgcolor: '#ffffff',
         plot_bgcolor: '#ffffff',
         font: { family: 'Inter, ui-sans-serif, system-ui, sans-serif', size: 12, color: '#3f3f46' },
@@ -107,12 +107,20 @@ export default function PlotPanel({
         xaxis: { ...axis, title: { text: type === 'box' || type === 'violin' ? '' : view.x } },
         yaxis: { ...axis, title: { text: type === 'histogram' ? 'count' : view.y } },
         barmode: 'overlay',
-        dragmode: 'lasso',
+        dragmode: 'zoom',
+        uirevision: `${type}|${view.x}|${view.y}|${view.color}`,
         hovermode: 'closest',
-        legend: { orientation: 'h', y: 1.05 },
+        legend: { orientation: 'h', y: 1.02, x: 0 },
+        modebar: { orientation: 'h', bgcolor: 'transparent', color: '#a1a1aa', activecolor: '#4f46e5' },
         showlegend: traces.length > 1,
       }
-      Plotly.react(div, traces, layout, { responsive: true, displaylogo: false }).then(() => {
+      const config: Partial<import('plotly.js').Config> = {
+        responsive: true,
+        displaylogo: false,
+        displayModeBar: true,
+        modeBarButtonsToRemove: ['select2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'hoverClosestCartesian', 'hoverCompareCartesian', 'toggleSpikelines'],
+      }
+      Plotly.react(div, traces, layout, config).then(() => {
         const el = div as any
         el.removeAllListeners?.('plotly_click')
         el.removeAllListeners?.('plotly_selected')
@@ -141,5 +149,5 @@ export default function PlotPanel({
     }
   }, [])
 
-  return <div className="min-h-[200px] flex-1 bg-white" ref={ref} title="Click a point to open it · lasso to select" />
+  return <div className="min-h-[200px] flex-1 bg-white" ref={ref} title="Drag to zoom · double-click to reset · lasso (toolbar) to select · click a point to open it" />
 }

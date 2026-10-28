@@ -34,3 +34,13 @@
   .kv .k { @apply whitespace-nowrap text-zinc-500; }
   .kv .v { @apply truncate tabular-nums; }
 }
+
+/* Plotly's modebar relies on inline SVGs; keep it on one row under Tailwind's reset. */
+.js-plotly-plot .modebar,
+.js-plotly-plot .modebar-group {
+  display: flex;
+  align-items: center;
+}
+.js-plotly-plot .modebar-btn svg {
+  display: inline-block;
+}
