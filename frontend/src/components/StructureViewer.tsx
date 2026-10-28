@@ -34,7 +34,7 @@ export default function StructureViewer({ items, mode }: { items: Item[]; mode: 
             layoutShowControls: false,
             layoutShowSequence: true,
             layoutShowLog: false,
-            layoutShowLeftPanel: false,
+            layoutShowLeftPanel: true,
             viewportShowExpand: false,
             viewportShowSelectionMode: true,
             viewportShowAnimation: false,

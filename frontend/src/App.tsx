@@ -10,6 +10,7 @@ import FilterPanel from './components/FilterPanel'
 import LeafPanel from './components/LeafPanel'
 import PlotPanel from './components/PlotPanel'
 import RowDetail from './components/RowDetail'
+import PathPicker from './components/PathPicker'
 import StructureViewer, { type Item } from './components/StructureViewer'
 import TableView from './components/TableView'
 import TreeView from './components/TreeView'
@@ -104,6 +105,7 @@ function RunView({ tree, node, route }: { tree: Tree; node: TableNode; route: Ro
 
   const [compare, setCompare] = useState<{ items: Item[]; mode: 'overlay' | 'split' } | null>(null)
   const [override, setOverride] = useState<Item | null>(null)
+  const [expanded, setExpanded] = useState(false)
   useEffect(() => setOverride(null), [route.row])
   useEffect(() => setCompare(null), [node.name])
 
@@ -122,13 +124,12 @@ function RunView({ tree, node, route }: { tree: Tree; node: TableNode; route: Ro
     const its = selection.map((n) => ({ path: pathOf(n), label: n })).filter((i): i is Item => !!i.path)
     if (its.length) setCompare({ items: its, mode })
   }
-  const compareColumns = (mode: 'overlay' | 'split') => {
-    if (!rowQ.data) return
-    const its = rowQ.data.paths.filter((p) => p.kind === 'structure' && p.exists).map((p) => ({ path: p.path, label: p.column }))
+  const structurePaths = rowQ.data?.paths.filter((p) => p.kind === 'structure' && p.exists) ?? []
+  const compareColumns = (cols: string[], mode: 'overlay' | 'split') => {
+    const its = structurePaths.filter((p) => cols.includes(p.column)).map((p) => ({ path: p.path, label: p.column }))
     if (its.length) setCompare({ items: its, mode })
   }
   const showInspector = !!route.leaf || !!route.row || !!compare
-  const structureCols = rowQ.data?.paths.filter((p) => p.kind === 'structure' && p.exists).length ?? 0
   const visibleCols = withData(columns).filter((c) => c.name !== 'name' && (view.allCols || c.source === 'own' || [view.x, view.y, view.color, view.pathCol].includes(c.name)))
   const nums = numericCols(columns)
   const cats = categoricalCols(columns)
@@ -226,7 +227,7 @@ function RunView({ tree, node, route }: { tree: Tree; node: TableNode; route: Ro
         )}
       </div>
       {showInspector && (
-        <aside className="flex min-h-0 w-[40vw] min-w-[380px] max-w-[900px] flex-col border-l border-zinc-200 bg-white">
+        <aside className={'flex min-h-0 flex-col bg-white ' + (expanded ? 'fixed inset-0 z-40' : 'w-[40vw] min-w-[380px] max-w-[900px] border-l border-zinc-200')}>
           <div className={bar + ' h-12'}>
             {route.leaf ? (
               <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Tool run</span>
@@ -246,12 +247,14 @@ function RunView({ tree, node, route }: { tree: Tree; node: TableNode; route: Ro
             {compare ? (
               <button className={btn} onClick={() => setCompare(null)}>Back</button>
             ) : (
-              route.row && structureCols > 1 && (
-                <>
-                  <button className={btn} onClick={() => compareColumns('overlay')} title="Overlay every structure column of this row">Overlay columns</button>
-                  <button className={btn} onClick={() => compareColumns('split')}>Split</button>
-                </>
-              )
+              route.row && structurePaths.length > 1 && <PathPicker key={route.row} paths={structurePaths} shown={items[0]?.path} onCompare={compareColumns} />
+            )}
+            {!route.leaf && (
+              <button className={btnGhost} onClick={() => setExpanded(!expanded)} title={expanded ? 'Show the data again' : 'Fill the window'}>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                  {expanded ? <path d="M6 2v4H2M10 2v4h4M6 14v-4H2M10 14v-4h4" /> : <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" />}
+                </svg>
+              </button>
             )}
             <button className={btnGhost} onClick={() => { setCompare(null); setRoute({ row: undefined, leaf: undefined }) }} title="Close">×</button>
           </div>
