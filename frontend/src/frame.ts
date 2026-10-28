@@ -11,30 +11,33 @@ export function names(frame: Frame): string[] {
   return (col(frame, 'name') ?? []).map(String)
 }
 
-function passes(frame: Frame, f: Filter, i: number): boolean {
-  const v = col(frame, f.col)?.[i]
-  if (v == null) return false
-  if (f.values?.length) return f.values.includes(String(v))
-  if (f.text) return String(v).toLowerCase().includes(f.text.toLowerCase())
-  if (typeof v === 'number') {
-    if (f.min != null && v < f.min) return false
-    if (f.max != null && v > f.max) return false
-  }
-  return true
+export function isActive(f: Filter): boolean {
+  return !!f.col && (f.min != null || f.max != null || !!f.values?.length || !!f.text)
 }
 
-export function filterRows(frame: Frame, filters: Filter[], mode: 'any' | 'all', search: string): number[] {
+// An empty cell never matches a constraint, so `not` lets it through (pandas `!=` semantics).
+function passes(frame: Frame, f: Filter, i: number): boolean {
+  const v = col(frame, f.col)?.[i]
+  let ok: boolean
+  if (v == null) ok = false
+  else if (f.values?.length) ok = f.values.includes(String(v))
+  else if (f.text) ok = String(v).toLowerCase().includes(f.text.toLowerCase())
+  else if (typeof v === 'number') ok = !(f.min != null && v < f.min) && !(f.max != null && v > f.max)
+  else ok = true
+  return f.not ? !ok : ok
+}
+
+export function filterRows(frame: Frame, filters: Filter[], search: string): number[] {
   const n = frame.cols[0]?.length ?? 0
   const nm = col(frame, 'name')
   const q = search.trim().toLowerCase()
-  const active = filters.filter((f) => f.col && (f.min != null || f.max != null || f.values?.length || f.text))
+  const groups = new Map<number, Filter[]>()
+  for (const f of filters.filter(isActive)) groups.set(f.group ?? 0, [...(groups.get(f.group ?? 0) ?? []), f])
+  const gs = [...groups.values()]
   const out: number[] = []
   for (let i = 0; i < n; i++) {
     if (q && !String(nm?.[i] ?? '').toLowerCase().includes(q)) continue
-    if (active.length) {
-      const hits = active.map((f) => passes(frame, f, i))
-      if (mode === 'all' ? !hits.every(Boolean) : !hits.some(Boolean)) continue
-    }
+    if (gs.length && !gs.some((g) => g.every((f) => passes(frame, f, i)))) continue
     out.push(i)
   }
   return out

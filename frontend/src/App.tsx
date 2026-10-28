@@ -92,7 +92,7 @@ function RunView({ tree, node, route }: { tree: Tree; node: TableNode; route: Ro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columns])
 
-  const rows = useMemo(() => (frame ? sortRows(frame, filterRows(frame, view.filters, view.filterMode, view.search), view.sort) : []), [frame, view.filters, view.filterMode, view.search, view.sort])
+  const rows = useMemo(() => (frame ? sortRows(frame, filterRows(frame, view.filters, view.search), view.sort) : []), [frame, view.filters, view.search, view.sort])
   const names = useMemo(() => (frame ? (col(frame, 'name') ?? []).map(String) : []), [frame])
   const selected = useMemo(() => new Set(selection), [selection])
   const toggleSelect = (name: string) => setSelection(key, selected.has(name) ? selection.filter((n) => n !== name) : [...selection, name])
