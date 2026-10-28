@@ -1,6 +1,7 @@
 """Tests for the run driver: row selection (``--where``) and the resume skip
 (``ManifestCtx.ready``)."""
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
@@ -9,10 +10,14 @@ import pytest
 from prosapia.core.base_run import (
     ManifestCtx,
     apply_where,
+    build_run_parser,
     check_input_column,
+    read_run_meta,
+    run_from_args,
     write_run_meta,
 )
 from prosapia.core.naming import PARENT_NAME
+from prosapia.core.tool import ToolMetadata
 
 
 def _df():
@@ -131,3 +136,40 @@ def test_check_input_column_refuses_a_different_column(tmp_path):
     write_run_meta(leaf, input_column="pdb")
     with pytest.raises(SystemExit, match="'boltz'.*'pdb'.*'relaxed_pdb'.*--dir-label"):
         check_input_column(leaf, "relaxed_pdb")
+
+
+# --- the run sidecar records the tool's own flags ----------------------------
+
+
+def _add_tool_flags(parser):
+    parser.add_argument("--alpha", type=int, default=1)
+    parser.add_argument("--pdb-in", type=Path, default=None)
+
+
+def test_run_parser_records_the_tool_flags():
+    parser = build_run_parser(
+        ToolMetadata("t", "update"), "t.sh", "pdb", _add_tool_flags
+    )
+    assert parser.parse_args(["run", "-t", "t0"]).tool_args == ["alpha", "pdb_in"]
+    bare = build_run_parser(ToolMetadata("t", "update"), "t.sh", "pdb")
+    assert bare.parse_args(["run", "-t", "t0"]).tool_args == []
+
+
+def test_run_meta_serializes_paths(tmp_path):
+    write_run_meta(tmp_path, args={"pdb_in": Path("in/x.pdb")})
+    assert read_run_meta(tmp_path)["args"] == {"pdb_in": "in/x.pdb"}
+
+
+def test_run_writes_tool_flags_to_the_sidecar(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "prosapia.core.base_run.get_executor", lambda name: lambda ctx: None
+    )
+    metadata = ToolMetadata("t", "update")
+    parser = build_run_parser(metadata, "t.sh", "pdb", _add_tool_flags)
+    args = parser.parse_args(
+        [str(tmp_path), "-t", "t0", "--alpha", "3", "--pdb-in", "x.pdb"]
+    )
+    run_from_args(metadata, lambda ctx: [("row",)], args)
+    meta = read_run_meta(tmp_path / "t0" / "t")
+    assert meta["args"] == {"alpha": 3, "pdb_in": "x.pdb"}
+    assert meta["input_column"] == "pdb"

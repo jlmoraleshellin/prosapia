@@ -22,7 +22,7 @@ Every field is written as a string, so cast paths and numbers yourself. Return a
 
 ## The context
 
-`ctx` is a `ManifestCtx` that exposes everything the hook may read. The most important field is **`ctx.ready`**: the designs this run should submit — rows with a present `--input-column`, minus those the tool already finished (`<leaf>_status == "OK"`) unless `--force`. Iterate `ctx.ready` and you get resume-on-rerun and input filtering for free; you never filter or resume by hand (see [the ready set](running-a-tool.md#the-ready-set)). The rest: **`ctx.source_df`** is the full source frame (use it only when you deliberately select rows a different way than `--input-column`), **`ctx.target_df`** is the unfiltered frame of the table this run writes to (the same table for an `update` tool, the child table for a `create` tool; `ctx.ready` reads its status column for the resume skip), **`ctx.args`** is the parsed CLI namespace (the base flags plus any your `add_run_args_fn` added), **`ctx.submission_dir`** is this submission's own output dir under the leaf (write any staged inputs under it; the task script receives the same dir as its `out_dir` argument), **`ctx.leaf`** is the leaf name (`<tool>` or `<tool>_<dir-label>`) that prefixes this run's columns, **`ctx.lookup`** walks the lineage to inherit an ancestor's value — `ctx.lookup(name, "n_subunits")` reads that column from the row or its nearest ancestor — and **`ctx.write_meta(**fields)`** records extra run params into this run's sidecar (used by root runs, see below).
+`ctx` is a `ManifestCtx` that exposes everything the hook may read. The most important field is **`ctx.ready`**: the designs this run should submit — rows with a present `--input-column`, minus those the tool already finished (`<leaf>_status == "OK"`) unless `--force`. Iterate `ctx.ready` and you get resume-on-rerun and input filtering for free; you never filter or resume by hand (see [the ready set](running-a-tool.md#the-ready-set)). The rest: **`ctx.source_df`** is the full source frame (use it only when you deliberately select rows a different way than `--input-column`), **`ctx.target_df`** is the unfiltered frame of the table this run writes to (the same table for an `update` tool, the child table for a `create` tool; `ctx.ready` reads its status column for the resume skip), **`ctx.args`** is the parsed CLI namespace (the base flags plus any your `add_run_args_fn` added), **`ctx.submission_dir`** is this submission's own output dir under the leaf (write any staged inputs under it; the task script receives the same dir as its `out_dir` argument), **`ctx.leaf`** is the leaf name (`<tool>` or `<tool>_<dir-label>`) that prefixes this run's columns, **`ctx.lookup`** walks the lineage to inherit an ancestor's value — `ctx.lookup(name, "n_subunits")` reads that column from the row or its nearest ancestor — and **`ctx.write_meta(**fields)`** records extra run params into this run's sidecar (used by root runs, see below). The driver already records every flag your `add_run_args_fn` declares under the sidecar's `args` key, so `write_meta` is for derived values, not for echoing flags.
 
 ## Rows and the `.sh` task script
 
@@ -56,7 +56,8 @@ if ctx.args.table is None:  # root run
     ...
 ```
 
-`ctx.write_meta` merges into the sidecar (it never clobbers the base run params), and
+`ctx.write_meta` merges into the sidecar (it never clobbers the base run params or the
+tool flags the driver records under `args`), and
 the collect phase reads `root_designs` to drive its per-design loop. The key name
 `root_designs` is the contract (it matches `ROOT_DESIGNS_KEY` in `prosapia.core`).
 This keeps the submit→collect flow one-directional: the tool writes straight to the

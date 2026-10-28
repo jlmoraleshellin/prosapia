@@ -32,7 +32,7 @@ run_dir/
 ├── .manifests/           # transient per-run manifests
 └── table0/               # per-table, per-tool outputs on disk
     └── rfdiffusion/      # the "leaf": one per tool (+ dir-label) on this table
-        ├── .meta.json    # the last run's parameters
+        ├── .meta.json    # the last run's parameters, the tool's own flags under "args"
         ├── rfdiffusion_logs/
         └── .submissions/ # one dir per `run`, never reused
             ├── 00/

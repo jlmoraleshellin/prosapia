@@ -62,6 +62,7 @@ class CommonArgs(Namespace):
     time: str | None
     mem: str | None
     force: bool
+    tool_args: list[str]
 
 
 def _add_submit_args(
@@ -225,8 +226,12 @@ def build_run_parser(
             "(append rule: table<gen>_<parent_label>_<table_label>). Omit for an "
             "unlabelled child (table<gen>); pass one to disambiguate a fork.",
         )
+    # Record which flags the tool added, so the driver can write their values
+    # into the run sidecar without knowing the tool.
+    base = {a.dest for a in parser._actions}
     if add_extra_args_fn is not None:
         add_extra_args_fn(parser)
+    parser.set_defaults(tool_args=sorted({a.dest for a in parser._actions} - base))
     return parser
 
 
@@ -328,7 +333,7 @@ def write_run_meta(out_dir: Path, **fields) -> None:
         except (OSError, json.JSONDecodeError):
             meta = {}
     meta.update(fields)
-    path.write_text(json.dumps(meta, indent=2))
+    path.write_text(json.dumps(meta, indent=2, default=str))
 
 
 def read_run_meta(out_dir: Path) -> dict:
@@ -415,6 +420,7 @@ def run_from_args(
             filter=str(args.filter) if args.filter else None,
             where=args.where,
             timestamp=datetime.now(timezone.utc).isoformat(),
+            args={k: getattr(args, k) for k in args.tool_args},
         )
 
         # A root tool has no source table: give an empty frame (for type security).

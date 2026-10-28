@@ -116,6 +116,8 @@ Logs:    run_dir/table1_seqs/proteinmpnn/proteinmpnn_logs
 
 `<script>` is the `.sh` task script stem, so a custom `--script` names its own log folder. The file names inside it depend on the executor. When a task fails, its `.err` file is the first place to look.
 
+The leaf also holds a sidecar, `<leaf>/.meta.json`, describing the last submission: the tool, the input column, the labels, `--filter` / `--where`, a timestamp, and the tool's own flags under `args` (e.g. `contigs`, `num_designs`). Collect reads the input column from it, `sapia serve` shows it per leaf, and a resubmit overwrites it.
+
 ## Tool-specific flags
 
 The flags above are the **base set** shared by every tool. A tool can also declare its own flags for its parameters, such as a diffusion count, a sampling temperature or a number of sequences per backbone. They appear alongside the base ones on that tool's `sapia run` and are authored via the tool's optional `add_run_args_fn` (see [Writing a tool](writing-a-tool.md)). Because the set varies per tool, the authoritative list for any given tool is always:

@@ -331,14 +331,6 @@ def build_af3_manifest(ctx: ManifestCtx[AlphaFold3Args]):
         )
         json_paths.append(json_path)
 
-    ctx.write_meta(
-        no_msa=bool(args.no_msa),
-        msa_empty_chains=args.msa_empty_chains,
-        msa_file=list(args.msa_file or []),
-        paired_msa_file=list(args.paired_msa_file or []),
-        templates_json=args.templates_json,
-    )
-
     shards_dir = ctx.submission_dir / "af3_shards"
     rmtree(shards_dir, ignore_errors=True)
     shards_dir.mkdir(parents=True, exist_ok=True)

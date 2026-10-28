@@ -222,11 +222,6 @@ def build_boltz_manifest(ctx: ManifestCtx[BoltzArgs]):
         write_boltz_yaml(yaml_path, chain_map, ctx.args, name)
         yaml_paths.append(yaml_path)
 
-    ctx.write_meta(
-        use_msa_server=bool(ctx.args.use_msa_server),
-        msa_empty_chains=ctx.args.msa_empty_chains,
-    )
-
     shards_dir = ctx.submission_dir / "boltz_shards"
     shards_dir.mkdir(parents=True, exist_ok=True)
 
