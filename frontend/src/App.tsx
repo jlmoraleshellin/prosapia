@@ -106,6 +106,7 @@ function RunView({ tree, node, route }: { tree: Tree; node: TableNode; route: Ro
   const [compare, setCompare] = useState<{ items: Item[]; mode: 'overlay' | 'split' } | null>(null)
   const [override, setOverride] = useState<Item | null>(null)
   const [expanded, setExpanded] = useState(false)
+  const [showDetail, setShowDetail] = useState(true)
   useEffect(() => setOverride(null), [route.row])
   useEffect(() => setCompare(null), [node.name])
 
@@ -265,7 +266,16 @@ function RunView({ tree, node, route }: { tree: Tree; node: TableNode; route: Ro
               <>
                 {items.length > 0 && <StructureViewer items={items} mode={compare?.mode ?? 'overlay'} />}
                 {!compare && route.row && rowQ.data && (
-                  <RowDetail detail={rowQ.data} columns={columns} onViewStructure={(path, label) => setOverride({ path, label })} />
+                  <>
+                    {items.length > 0 && (
+                      <button className="flex flex-none items-center gap-1 border-b border-zinc-200 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 hover:bg-zinc-50" onClick={() => setShowDetail(!showDetail)}>
+                        <span className={'inline-block transition-transform ' + (showDetail ? 'rotate-90' : '')}>▸</span> Details
+                      </button>
+                    )}
+                    {(showDetail || items.length === 0) && (
+                      <RowDetail detail={rowQ.data} columns={columns} onViewStructure={(path, label) => setOverride({ path, label })} />
+                    )}
+                  </>
                 )}
                 {!compare && route.row && rowQ.error && <div className={empty}>{String(rowQ.error)}</div>}
               </>
