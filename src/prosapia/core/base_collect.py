@@ -341,7 +341,7 @@ def collect_from_args(
             path_col=path_column(leaf),
             parent_table=output_table.parent_table_name,
             parent_df=parent_df,
-            lookup=partial(dm.lookup, df),
+            lookup=partial(dm.lookup, df, table=table_name),
             creates_table=metadata.creates_table,
             default_input_column=metadata.default_input_column,
         )

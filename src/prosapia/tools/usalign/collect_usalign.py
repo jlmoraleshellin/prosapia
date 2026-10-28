@@ -68,7 +68,8 @@ def _resolve_prefix(args: USalignCollectArgs) -> str:
     if args.output_prefix is not None:
         return args.output_prefix
     if args.col_a is not None and args.col_b is not None:
-        return f"{args.col_a.replace('_path', '')}_vs_{args.col_b.replace('_path', '')}"
+        stem_b = args.col_b.replace("_path", "").replace(".", "_")
+        return f"{args.col_a.replace('_path', '')}_vs_{stem_b}"
     if args.col_a is not None and args.ref is not None:
         stem_b = Path(args.ref).stem.split(".")[0]
         return f"{args.col_a.replace('_path', '')}_vs_{stem_b}"

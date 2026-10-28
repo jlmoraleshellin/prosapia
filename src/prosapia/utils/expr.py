@@ -3,10 +3,11 @@
 ``resolve_expr`` evaluates a small whitelisted arithmetic language where bare
 identifiers are resolved as table columns via a lineage ``lookup``. Tools use
 it to let users write specs like ``hairpin_length - 1`` or ``{prebundle_length}``
-whose values are inherited per-design from the table.
+whose values are inherited per-design from the table. ``table.column`` reads one
+table of the lineage, e.g. ``{table1_hairpin.hairpin_length}``.
 
-Only integers, bare column names, and ``+ - * //`` are allowed; calls,
-attributes, and every other node type are rejected.
+Only integers, column names, ``table.column`` references, and ``+ - * //`` are
+allowed; calls, other attributes, and every other node type are rejected.
 """
 
 import ast
@@ -48,8 +49,8 @@ def _resolve_column(column: str, lookup: LookupFn, name: str) -> int:
 def _safe_eval(node: ast.AST, lookup: LookupFn, name: str, expr: str) -> int:
     """Evaluate a whitelisted integer-arithmetic AST.
 
-    Bare identifiers are resolved as table columns via ``lookup``; calls, attributes
-    and any other node type are rejected.
+    Bare identifiers and ``table.column`` references are resolved as table columns
+    via ``lookup``; calls, other attributes and any other node type are rejected.
     """
     if isinstance(node, ast.Expression):
         return _safe_eval(node.body, lookup, name, expr)
@@ -61,6 +62,8 @@ def _safe_eval(node: ast.AST, lookup: LookupFn, name: str, expr: str) -> int:
         return node.value
     if isinstance(node, ast.Name):
         return _resolve_column(node.id, lookup, name)
+    if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+        return _resolve_column(f"{node.value.id}.{node.attr}", lookup, name)
     if isinstance(node, ast.BinOp) and type(node.op) in _BIN_OPS:
         return _BIN_OPS[type(node.op)](
             _safe_eval(node.left, lookup, name, expr),
@@ -71,7 +74,7 @@ def _safe_eval(node: ast.AST, lookup: LookupFn, name: str, expr: str) -> int:
         return v if isinstance(node.op, ast.UAdd) else -v
     raise ValueError(
         f"design {name!r}: unsupported expression {expr!r} "
-        f"(only integers, column names, and + - * // are allowed)"
+        f"(only integers, column names, table.column, and + - * // are allowed)"
     )
 
 
@@ -79,7 +82,8 @@ def resolve_expr(expr: str, lookup: LookupFn, name: str) -> int:
     """Evaluate an integer arithmetic expression, resolving bare names as table columns.
 
     ``expr`` may be an integer literal, a bare table column name (resolved up the
-    lineage for ``name`` via ``lookup``), or any ``+ - * //`` combination thereof.
+    lineage for ``name`` via ``lookup``), a ``table.column`` reference (that one
+    table of the lineage), or any ``+ - * //`` combination thereof.
     """
     try:
         tree = ast.parse(expr.strip(), mode="eval")
@@ -94,7 +98,8 @@ def resolve_template(template: str, lookup: LookupFn, name: str) -> str:
     This is the shared, tool-agnostic expression layer: text outside braces is a
     tool's native/mini-language (RFdiffusion contigs, ProteinMPNN position lists,
     ...) and is left verbatim; each ``{expr}`` is resolved via ``resolve_expr``
-    (integers, bare table column names, and ``+ - * //`` up the lineage for ``name``).
+    (integers, bare table column names, ``table.column``, and ``+ - * //`` up the
+    lineage for ``name``).
     """
     return _PLACEHOLDER.sub(
         lambda m: str(resolve_expr(m.group(1), lookup, name)), template
