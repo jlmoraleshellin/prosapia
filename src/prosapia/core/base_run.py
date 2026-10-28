@@ -464,7 +464,7 @@ def run_from_args(
             leaf=leaf,
             submission_dir=submission_dir,
             tool_creates_table=tool.creates_table,
-            lookup=partial(dm.lookup, source_df),
+            lookup=partial(dm.lookup, source_df, table=src_table),
             write_meta=partial(write_run_meta, out_dir),
         )
         manifest_rows = build_manifest_fn(ctx)

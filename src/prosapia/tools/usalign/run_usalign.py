@@ -9,7 +9,9 @@ results back into the table.
 
 --col-b is resolved per design by lineage (the row's own value if set, else the
 nearest ancestor table's value), so a child table's structure can be compared against
-its parent's (e.g. boltz_path vs the parent's diffused_path).
+its parent's (e.g. boltz_path vs the parent's diffused_path). A ``<table>.<column>``
+--col-b reads that one ancestor table instead, for a column repeated across
+generations (e.g. this table's boltz_path vs the previous generation's).
 
 Usage:
     sapia run usalign outputs/20260420_123035_grow_hairpin \
@@ -20,6 +22,12 @@ Usage:
     sapia run usalign outputs/20260420_123035_grow_hairpin \
         --table table2_child \
         --col-a boltz_path --col-b diffused_path
+
+    # Compare each design's boltz_path against the previous generation's boltz_path:
+    sapia run usalign outputs/20260420_123035_grow_hairpin \
+        --table table3_child \
+        --col-a boltz_path --col-b table2_child.boltz_path \
+        --output-prefix boltz_vs_prev
 
     sapia run usalign outputs/20260420_123035_grow_hairpin \
         --table table1 \
@@ -61,7 +69,9 @@ def add_run_usalign_args(parser: ArgumentParser) -> None:
         help="Column containing the path to structure B. Resolved per design by "
         "lineage: the row's own value if set, otherwise the nearest ancestor table's "
         "value (matched by parent), so e.g. a child's boltz_path can be compared "
-        "against its parent's diffused_path.",
+        "against its parent's diffused_path. '<table>.<column>' reads that one "
+        "ancestor table instead (e.g. table2_child.boltz_path for the previous "
+        "generation's boltz_path).",
     )
     parser.add_argument(
         "--ref",
@@ -105,7 +115,7 @@ def _resolve_prefix(args: USalignArgs) -> str:
         stem_b = Path(args.ref).stem.split(".")[0]
     else:
         assert args.col_b is not None
-        stem_b = args.col_b.replace("_path", "")
+        stem_b = args.col_b.replace("_path", "").replace(".", "_")
     return f"{stem_a}_vs_{stem_b}"
 
 

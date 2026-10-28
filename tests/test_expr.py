@@ -5,7 +5,13 @@ import pytest
 from prosapia.utils import resolve_expr, resolve_template
 
 # Stub lineage lookup: (name, column) -> value.
-_COLUMNS = {"hairpin_length": 30, "prebundle_length": 12, "frac": 2.5, "empty": None}
+_COLUMNS = {
+    "hairpin_length": 30,
+    "prebundle_length": 12,
+    "frac": 2.5,
+    "empty": None,
+    "table0_x.hairpin_length": 7,
+}
 
 
 def _lookup(name, column):
@@ -27,7 +33,15 @@ def test_arithmetic_and_precedence():
     assert resolve_expr("-3", _lookup, "d") == -3
 
 
-@pytest.mark.parametrize("expr", ["foo()", "os.system", "1.5", "a and b", "1 == 1"])
+def test_table_qualified_column():
+    # ``table.column`` reaches lookup as one dotted name.
+    assert resolve_expr("table0_x.hairpin_length", _lookup, "d") == 7
+    assert resolve_template("{table0_x.hairpin_length - 1}", _lookup, "d") == "6"
+
+
+@pytest.mark.parametrize(
+    "expr", ["foo()", "os.path.join", "x.y()", "1.5", "a and b", "1 == 1"]
+)
 def test_rejects_non_whitelisted(expr):
     with pytest.raises(ValueError):
         resolve_expr(expr, _lookup, "d")

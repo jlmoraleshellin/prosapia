@@ -75,6 +75,24 @@ def test_lookup_local_inherited_and_missing(tmp_path):
     assert pd.isna(dm.lookup(df1, "S0_d0", "nope"))  # absent -> default
 
 
+def test_lookup_table_qualified(tmp_path):
+    dm = _build_chain(tmp_path)
+    df1 = dm.read_frame("table1_worms")
+    # the older copy of a repeated column
+    assert dm.lookup(df1, "S0_d0", "table0_worms.sequence") == "AAA"
+    # df's own table, named via ``table``
+    assert (
+        dm.lookup(df1, "S0_d0", "table1_worms.sequence", table="table1_worms")
+        == "BBB"
+    )
+    # pinned: no fall-through to the ancestor's value
+    assert pd.isna(
+        dm.lookup(df1, "S0_d0", "table1_worms.n_subunits", table="table1_worms")
+    )
+    # an unregistered prefix is a plain column name
+    assert pd.isna(dm.lookup(df1, "S0_d0", "table9_x.sequence"))
+
+
 # --- table catalog (registry) ----------------------------------------------
 
 

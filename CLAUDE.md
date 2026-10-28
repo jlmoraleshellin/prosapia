@@ -28,7 +28,7 @@ This project is a single Python package (`prosapia`), managed with `uv` (run tas
         - `DataManager` is a context manager that owns the run's tables and registry, both handled uniformly as DataFrames through a pluggable I/O backend (TSV default). It:
             - creates and modifies tables and the registry (`apply_updates` writes a whole `CollectResult` in one pass; `update` is the per-row variant the registry uses);
             - resolves cross-table lineage (linking child rows to a parent via `parent_name`/`parent_table`/`gen`);
-            - exposes a read-only `lookup` that walks the lineage chain to fetch ancestor values.
+            - exposes a read-only `lookup` that walks the lineage chain to fetch ancestor values (nearest wins; `<table>.<column>` pins one table in the lineage).
     - `cli.py` (`src/prosapia/cli/`): the `sapia` CLI entrypoint. Discovers tools (built-ins first, then `$PROSAPIA_TOOLS_DIR`) and builds a `run`/`collect` subcommand pair per tool. Generic verbs live beside it: `merge`, `delete`, `new_run`, `init`, `fork-tool`, `modal-shell`.
     - `sapia modal-shell` (`cli/modal_shell.py`) opens the Modal workstation (`core/executors/workstation.py`): a small prosapia container with the runs Volume mounted, where `sapia` runs so run_dirs live only on the Volume.
 - A tool is a composition of declarative metadata, two behavioral hooks, and scripts. It carries no orchestration logic of its own, the drivers supply that. Components:

@@ -289,7 +289,8 @@ class DataManager:
         ``parent_name`` -> the ancestor's index, then carries the ancestor's own
         ``parent_name`` forward as the next join key. Ancestor columns are merged
         under their plain names; a name already present in a closer frame is
-        suffixed with the ancestor table name (e.g. ``table0_grow_hairpin__parent_name``).
+        qualified with the ancestor table name (e.g. ``table0_grow_hairpin.parent_name``),
+        the same ``<table>.<column>`` form ``lookup`` accepts.
         Ancestor ``*_status`` columns are dropped; ``*_path`` columns are kept so
         ancestor structures stay viewable. A root table (no parent) is returned as-is.
         """
@@ -312,7 +313,7 @@ class DataManager:
                 if col.endswith("_status"):
                     continue
                 out_col = (
-                    f"{table.parent_table_name}__{col}"
+                    f"{table.parent_table_name}.{col}"
                     if col in joined.columns
                     else col
                 )
@@ -328,17 +329,50 @@ class DataManager:
 
         return joined
 
-    def lookup(self, df: pd.DataFrame, name: str, column: str, default=pd.NA):
-        """Read ``column`` for ``name``, resolving inherited values up the lineage (df-first)."""
-        cur_df, cur_name = df, name
+    def _split_table_ref(self, column: str) -> tuple[str | None, str]:
+        """Split a ``<table>.<column>`` reference; ``(None, column)`` if unqualified.
+
+        The prefix must be a registered table name (longest match wins), so a plain
+        column that happens to contain a dot is left as-is.
+        """
+        if "." not in column:
+            return None, column
+        tables = [
+            str(t)
+            for t in self.rm.get_registry().index
+            if column.startswith(f"{t}.")
+        ]
+        if not tables:
+            return None, column
+        table = max(tables, key=len)
+        return table, column[len(table) + 1 :]
+
+    def lookup(
+        self,
+        df: pd.DataFrame,
+        name: str,
+        column: str,
+        default=pd.NA,
+        table: str | None = None,
+    ):
+        """Read ``column`` for ``name``, resolving inherited values up the lineage (df-first).
+
+        The nearest table holding a value wins. A ``<table>.<column>`` reference reads
+        only that table of the design's lineage.
+        """
+        pinned, column = self._split_table_ref(column)
+        cur_df, cur_name, cur_table = df, name, table
         seen: set[tuple[str, str]] = set()
         while True:
-            if cur_name in cur_df.index and column in cur_df.columns:
-                val = cur_df.at[cur_name, column]
-                if isinstance(val, pd.Series):
-                    val = val.iloc[0]
-                if pd.notna(val):
-                    return val
+            if pinned is None or cur_table == pinned:
+                if cur_name in cur_df.index and column in cur_df.columns:
+                    val = cur_df.at[cur_name, column]
+                    if isinstance(val, pd.Series):
+                        val = val.iloc[0]
+                    if pd.notna(val):
+                        return val
+                if pinned is not None:
+                    return default
             if cur_name not in cur_df.index:
                 return default
             row = cur_df.loc[cur_name]
@@ -357,7 +391,7 @@ class DataManager:
             if key in seen:  # cycle guard
                 return default
             seen.add(key)
-            cur_df, cur_name = self.read_frame(str(parent_table)), str(parent_name)
+            cur_df, cur_name, cur_table = self.read_frame(key[0]), key[1], key[0]
 
 
 # Type alias for a lineage lookup function (row name + column -> value)

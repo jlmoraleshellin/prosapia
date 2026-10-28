@@ -58,3 +58,11 @@ sapia collect alphafold3  "$RUN_DIR" -t table1
 ## Inheriting values across generations: `lookup`
 
 Because every row records its `parent_table` / `parent_name` (and `gen`), a `lookup` function walks the lineage chain to inherit an ancestor's value. A downstream tool can read a property set generations earlier without copying it forward at every step — the lineage links are the single source of truth, and `DataManager` resolves them for you.
+
+The nearest table holding a value wins, so when a column repeats across generations (a tool run once per round, e.g. `boltz_path` on both `table2` and `table3`), a bare name reads the newest copy. Qualify it as `<table>.<column>` to read one table of the design's lineage instead. This works anywhere a column is resolved by lineage, such as usalign's `--col-b` and `{...}` islands in contigs/positions:
+
+```bash
+# this round's boltz_path vs the previous round's
+sapia run usalign "$RUN" --table table3 \
+    --col-a boltz_path --col-b table2.boltz_path --output-prefix boltz_vs_prev
+```
