@@ -52,14 +52,17 @@ def test_bad_clause_raises():
 # --- ManifestCtx.ready: resume skip for update and create tools ---------------
 
 
-def _ctx(df, target_df, out_dir, force=False):
+def _ctx(df, target_df, out_dir, force=False, creates_table=None):
     args = SimpleNamespace(input_column="pdb", force=force)
+    if creates_table is None:
+        creates_table = target_df is not df
     return ManifestCtx(
         source_df=df,
         target_df=target_df,
         args=args,
         submission_dir=out_dir,
         leaf=out_dir.name,
+        tool_creates_table=creates_table,
         lookup=lambda *a, **k: None,
         write_meta=lambda **k: None,
     )
@@ -106,6 +109,17 @@ def test_ready_create_ignores_other_leafs_status(tmp_path):
         index=pd.Index(["p1_d0"], name="name"),
     )
     ctx = _ctx(_parents(), children, tmp_path / "table1" / "rfdiffusion")
+    assert list(ctx.ready.index) == ["p1", "p2", "p3"]
+
+
+def test_ready_create_ignores_source_rows_it_produced(tmp_path):
+    # A proteinmpnn child table carries proteinmpnn_status == OK on every row it
+    # minted. Running proteinmpnn again on that table must not read that as done.
+    df = _parents()
+    df["proteinmpnn_status"] = ["OK", "OK", "OK", "OK"]
+    empty = pd.DataFrame()
+    empty.index.name = "name"
+    ctx = _ctx(df, empty, tmp_path / "table2" / "proteinmpnn", creates_table=True)
     assert list(ctx.ready.index) == ["p1", "p2", "p3"]
 
 

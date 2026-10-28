@@ -289,6 +289,7 @@ class ManifestCtx(Generic[ArgsT]):
     args: ArgsT
     submission_dir: Path
     leaf: str
+    tool_creates_table: bool
     lookup: LookupFn
     write_meta: Callable[..., None]
 
@@ -300,14 +301,19 @@ class ManifestCtx(Generic[ArgsT]):
         The already-OK skip is the framework's resume-on-rerun. An ``update`` tool
         annotates the source table, so a row is done when its own ``<leaf>_status``
         is ``"OK"``. A ``create`` tool writes children into ``target_df``, so a source
-        row is done once any child row naming it as ``parent_name`` is ``"OK"``.
+        row is done once any child row naming it as ``parent_name`` is ``"OK"``. A
+        create tool never reads ``<leaf>_status`` from the source table: there it marks
+        rows the tool *produced* (a proteinmpnn child table re-run through proteinmpnn),
+        not rows it already ran on.
         """
         ready = clean_ready(self.source_df, self.args.input_column)
         if self.args.force:
             return ready
         out_status = status_column(self.leaf)
-        if out_status in ready.columns:
-            return ready[ready[out_status] != "OK"]
+        if not self.tool_creates_table:
+            if out_status in ready.columns:
+                return ready[ready[out_status] != "OK"]
+            return ready
         target = self.target_df
         if out_status in target.columns and PARENT_NAME in target.columns:
             done = target.loc[target[out_status] == "OK", PARENT_NAME].dropna()
@@ -457,6 +463,7 @@ def run_from_args(
             args=args,
             leaf=leaf,
             submission_dir=submission_dir,
+            tool_creates_table=tool.creates_table,
             lookup=partial(dm.lookup, source_df),
             write_meta=partial(write_run_meta, out_dir),
         )
