@@ -2,7 +2,8 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 export type PlotType = 'scatter' | 'histogram' | 'box' | 'violin' | 'heatmap'
-export type Filter = { id: number; col: string; min?: number | null; max?: number | null; values?: string[]; text?: string }
+// Filters in the same group are ANDed; groups are ORed. `not` negates one filter.
+export type Filter = { id: number; col: string; group?: number; not?: boolean; min?: number | null; max?: number | null; values?: string[]; text?: string }
 export type Sort = { col: string | null; dir: 1 | -1 }
 export type View = {
   x?: string
@@ -12,7 +13,6 @@ export type View = {
   plotType: PlotType
   bins: number
   filters: Filter[]
-  filterMode: 'any' | 'all'
   sort: Sort
   search: string
   allCols: boolean
@@ -24,7 +24,6 @@ export const defaultView: View = {
   plotType: 'scatter',
   bins: 30,
   filters: [],
-  filterMode: 'all',
   sort: { col: null, dir: 1 },
   search: '',
   allCols: false,
