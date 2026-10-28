@@ -135,6 +135,7 @@ def test_tree_tables_and_edges(client):
     assert ("table1_a", "table2_x", "parent") in edges
     assert ("table1_a", "table1_merged", "merge") in edges
     assert ("table1_b", "table1_merged", "merge") in edges
+    assert ("table0", "table1_merged", "parent") not in edges
     merged = _node(tree, "table1_merged")
     assert merged["sources"] == ["table1_a", "table1_b"]
     assert merged["leaves"][0]["kind"] == "merge"

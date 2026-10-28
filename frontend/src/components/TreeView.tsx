@@ -18,8 +18,15 @@ export default function TreeView({ tree: t, table, leaf }: { tree: Tree; table?:
   const layout = useMemo(() => {
     const byName = new Map(t.tables.map((n) => [n.name, { node: n, children: [] as Datum[] }]))
     const roots: Datum[] = []
+    // A merged table hangs under its deepest source, one level past the tables it joins.
+    const depth = (n: TableNode): number => {
+      const up = n.sources.length ? n.sources : n.parent ? [n.parent] : []
+      return Math.max(-1, ...up.map((p) => byName.get(p)?.node).filter((p): p is TableNode => !!p).map(depth)) + 1
+    }
     for (const d of byName.values()) {
-      const parent = d.node!.parent ? byName.get(d.node!.parent) : undefined
+      const n = d.node!
+      const up = n.sources.length ? n.sources.slice().sort((a, b) => depth(byName.get(b)!.node!) - depth(byName.get(a)!.node!))[0] : n.parent
+      const parent = up ? byName.get(up) : undefined
       ;(parent ? parent.children : roots).push(d)
     }
     const maxH = Math.max(60, ...t.tables.map(nodeHeight))

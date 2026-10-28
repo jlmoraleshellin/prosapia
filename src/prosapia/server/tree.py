@@ -191,7 +191,7 @@ def build_tree(cache: RunCache, dm: DataManager) -> dict:
         for leaf in node.leaves:
             if leaf.kind == "merge":
                 node.sources = [s for s in (leaf.meta or {}).get("sources", []) if s in names]
-        if node.parent in names:
+        if node.parent in names and not node.sources:
             edges.append({"from": node.parent, "to": node.name, "kind": "parent"})
         for src in node.sources:
             edges.append({"from": src, "to": node.name, "kind": "merge"})
