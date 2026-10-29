@@ -1049,30 +1049,33 @@ dependencies = [
     { name = "pyyaml" },
 ]
 
+[package.optional-dependencies]
+modal = [
+    { name = "modal" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
     { name = "ruff" },
-]
-modal = [
-    { name = "modal" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "argcomplete", specifier = ">=3.7.2" },
     { name = "gemmi", specifier = ">=0.7.5,<0.8" },
+    { name = "modal", marker = "extra == 'modal'", specifier = ">=1.0" },
     { name = "pandas", specifier = ">=3.0.2,<4" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
     { name = "pyyaml", specifier = ">=6.0.3" },
 ]
+provides-extras = ["modal"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.16.4" },
 ]
-modal = [{ name = "modal", specifier = ">=1.0" }]
 
 [[package]]
 name = "protobuf"

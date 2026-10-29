@@ -13,12 +13,14 @@ dependencies = [
 license = "MIT"
 license-files = ["LICENSE"]
 
+[project.optional-dependencies]
+modal = ["modal>=1.0"]
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
     "ruff>=0.16.4",
 ]
-modal = ["modal>=1.0"]
 
 [project.scripts]
 sapia = "prosapia.cli.cli:main"
