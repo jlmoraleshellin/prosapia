@@ -19,12 +19,16 @@ def apply_filter(df: DataFrame) -> DataFrame:
     return df
 ```
 
-- **Input:** the source table as a pandas `DataFrame` — one row per design,   keyed by the design `name`, with each tool's outputs as columns.
-- **Output:** a `DataFrame`, typically a subset of the rows. Anything you can do   with pandas (and anything importable) is fair game.
+- **Input:** the source table as a pandas `DataFrame`: one row per design, keyed by the design `name`, with each tool's outputs as columns, plus the columns of every ancestor table (see below).
+- **Output:** a `DataFrame` whose rows are the designs to run, in the order to run them. Anything you can do with pandas (and anything importable) is fair game.
+
+### Ancestor columns
+
+Each row carries its ancestors' values, matched through `parent_name`, so a filter on a proteinmpnn child table can threshold on its backbone's `rfd3_*` metrics. An ancestor column keeps its plain name unless a closer table already has that name; then it appears as `<table>.<column>`, e.g. `df["table2_child.boltz_plddt"]` for the previous round's boltz score. The lineage columns themselves (`parent_name`, `gen`, ...) always collide, so ancestors' copies are always qualified. Ancestor `*_status` columns are not included. `--where` sees the same frame.
 
 ## When it runs
 
-The filter runs at **submit time, in the `sapia` driver** (not on the cluster), and **before the manifest is computed**. So the framework's own filtering — the `--input-column` presence check and the resume skip (`<leaf>_status == "OK"`) applies *on top of* the frame you return. It sees the full source table. (For a root `create` run with no `-t`, there's no source table, so the frame is empty.)
+The filter runs at **submit time, in the `sapia` driver** (not on the cluster), and **before the manifest is computed**. So the framework's own filtering — the `--input-column` presence check and the resume skip (`<leaf>_status == "OK"`) applies *on top of* the frame you return. It sees the full source table and its ancestors. (For a root `create` run with no `-t`, there's no source table, so the frame is empty.)
 
 If your filter returns an empty frame, the run prints `No designs to submit.` and exits without submitting anything.
 

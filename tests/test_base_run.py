@@ -16,7 +16,8 @@ from prosapia.core.base_run import (
     run_from_args,
     write_run_meta,
 )
-from prosapia.core.naming import PARENT_NAME
+from prosapia.core import DataManager, Table
+from prosapia.core.naming import PARENT_NAME, PARENT_TABLE
 from prosapia.core.tool import ToolMetadata
 
 
@@ -187,3 +188,76 @@ def test_run_writes_tool_flags_to_the_sidecar(tmp_path, monkeypatch):
     meta = read_run_meta(tmp_path / "t0" / "t")
     assert meta["args"] == {"alpha": 3, "pdb_in": "x.pdb"}
     assert meta["input_column"] == "pdb"
+
+
+# --- --filter / --where see the ancestors' columns ----------------------------
+
+
+def _lineage(tmp_path):
+    """Root t0 (one backbone per row, scored) -> child t1 (one design per backbone).
+    ``seq`` is on both tables, so t0's copy is joined in as ``t0.seq``."""
+    dm = DataManager(tmp_path)
+    tables = [
+        (
+            Table("t0", 0, "", None, "rfd"),
+            {
+                "b0": {"score": "good", "seq": "A"},
+                "b1": {"score": "bad", "seq": "B"},
+                "b2": {"score": "good", "seq": "C"},
+            },
+        ),
+        (
+            Table("t1", 1, "", "t0", "mpnn"),
+            {
+                f"d{i}": {
+                    PARENT_NAME: f"b{i}",
+                    PARENT_TABLE: "t0",
+                    "pdb": f"d{i}.pdb",
+                    "seq": s,
+                }
+                for i, s in enumerate("XYZ")
+            },
+        ),
+    ]
+    for table, rows in tables:
+        dm.rm.register_table(table)
+        df = dm.read_frame(table.table_name)
+        for name, data in rows.items():
+            df = dm.update(df, name, data)
+        dm.write_frame(table.table_name, df)
+
+
+def _submitted(tmp_path, monkeypatch, *flags):
+    """The source frame a run on t1 hands to build_manifest_fn."""
+    monkeypatch.setattr(
+        "prosapia.core.base_run.get_executor", lambda name: lambda ctx: None
+    )
+    metadata = ToolMetadata("t", "update")
+    args = build_run_parser(metadata, "t.sh", "pdb").parse_args(
+        [str(tmp_path), "-t", "t1", *flags]
+    )
+    seen = []
+    run_from_args(metadata, lambda ctx: seen.append(ctx.source_df) or [("row",)], args)
+    return seen[0]
+
+
+def test_where_on_an_ancestor_column(tmp_path, monkeypatch):
+    _lineage(tmp_path)
+    df = _submitted(tmp_path, monkeypatch, "-w", "score=good")
+    assert list(df.index) == ["d0", "d2"]
+    # the tool still gets the plain source table
+    assert "score" not in df.columns
+    assert list(df["seq"]) == ["X", "Z"]
+
+
+def test_filter_sees_qualified_ancestor_columns_and_keeps_its_order(
+    tmp_path, monkeypatch
+):
+    _lineage(tmp_path)
+    module = tmp_path / "keep.py"
+    module.write_text(
+        "def apply_filter(df):\n"
+        "    return df[df['t0.seq'] != 'B'].iloc[::-1]\n"
+    )
+    df = _submitted(tmp_path, monkeypatch, "-f", str(module))
+    assert list(df.index) == ["d2", "d0"]

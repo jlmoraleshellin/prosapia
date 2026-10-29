@@ -115,7 +115,9 @@ def _add_submit_args(
         type=Path,
         default=None,
         help="Path to a Python module defining an apply_filter(df) -> df function, "
-        "applied to the DataFrame before the manifest is built.",
+        "applied before the manifest is built. It sees the source table with its "
+        "ancestors' columns joined in (an ancestor column whose name is already "
+        "taken appears as <table>.<column>); the rows it returns are the rows run.",
     )
     parser.add_argument(
         "-w",
@@ -124,8 +126,9 @@ def _add_submit_args(
         default=None,
         metavar="COL=VALUE",
         help="Keep only rows whose COL equals VALUE (string compare). Repeatable; "
-        "applied after --filter. E.g. -w merge_source=table1_a for a per-fork run "
-        "on a merged table.",
+        "applied after --filter. COL may be an ancestor table's column, like "
+        "--filter. E.g. -w merge_source=table1_a for a per-fork run on a merged "
+        "table.",
     )
     parser.add_argument(
         "-C",
@@ -436,12 +439,17 @@ def run_from_args(
             read_frame(output_table.table_name) if tool.creates_table else source_df
         )
 
-        # Filter
-        if args.filter:
-            apply_filter = _get_filter_fn_from_module(args.filter)
-            source_df = apply_filter(source_df)
-        if args.where:
-            source_df = apply_where(source_df, args.where)
+        # Filter on the source rows joined with their ancestors' columns, then keep
+        # only the selected rows (in the filter's order) of the plain source frame.
+        if args.filter or args.where:
+            frame = dm.join_lineage(src_table) if src_table else source_df
+            if args.filter:
+                frame = _get_filter_fn_from_module(args.filter)(frame)
+            if args.where:
+                frame = apply_where(frame, args.where)
+            source_df = source_df.loc[
+                frame.index.intersection(source_df.index, sort=False)
+            ]
 
         # Manifest
         manifest_dir = args.run_dir / ".manifests"
