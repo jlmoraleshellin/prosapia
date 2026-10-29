@@ -53,12 +53,10 @@ def collect_diffusion(ctx: CollectCtx[CollectArgs]) -> CollectEach:
         parent_dir = ctx.out_dir / d.name
 
         if not (parent_dir / MARKER_FILENAME).exists():
-            print(f"{d.name}: no {MARKER_FILENAME}, skipping")
             return
 
         pdbs = _find_diffused_pdbs(parent_dir, d.name)
         if not pdbs:
-            print(f"{d.name}: marker present but no PDBs found")
             return
 
         for i, pdb_path in pdbs:
@@ -71,6 +69,5 @@ def collect_diffusion(ctx: CollectCtx[CollectArgs]) -> CollectEach:
                     "length": "/".join(map(str, polymer_chain_lengths(pdb_path))),
                 },
             )
-        print(f"{d.name}: OK ({len(pdbs)} iteration(s))")
 
     return one
