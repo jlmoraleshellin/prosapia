@@ -1053,6 +1053,11 @@ dependencies = [
 modal = [
     { name = "modal" },
 ]
+server = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "uvicorn" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -1063,13 +1068,16 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "argcomplete", specifier = ">=3.7.2" },
+    { name = "fastapi", marker = "extra == 'server'", specifier = ">=0.115" },
     { name = "gemmi", specifier = ">=0.7.5,<0.8" },
+    { name = "httpx", marker = "extra == 'server'", specifier = ">=0.27" },
     { name = "modal", marker = "extra == 'modal'", specifier = ">=1.0" },
     { name = "pandas", specifier = ">=3.0.2,<4" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
     { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "uvicorn", marker = "extra == 'server'", specifier = ">=0.30" },
 ]
-provides-extras = ["modal"]
+provides-extras = ["modal", "server"]
 
 [package.metadata.requires-dev]
 dev = [
