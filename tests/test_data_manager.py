@@ -93,6 +93,52 @@ def test_lookup_table_qualified(tmp_path):
     assert pd.isna(dm.lookup(df1, "S0_d0", "table9_x.sequence"))
 
 
+def _count_reads(dm):
+    """Wrap ``dm.read_frame`` so the test can count how often a table is parsed."""
+    reads: list[str] = []
+    inner = dm.read_frame
+
+    def counting(table_name):
+        reads.append(table_name)
+        return inner(table_name)
+
+    dm.read_frame = counting
+    return reads
+
+
+def test_lookup_parses_each_ancestor_table_once(tmp_path):
+    dm = _build_chain(tmp_path)
+    df1 = dm.read_frame("table1_worms")
+    reads = _count_reads(dm)
+    for _ in range(50):
+        assert dm.lookup(df1, "S0_d0", "n_subunits") == 11
+        assert dm.lookup(df1, "S0_d0", "table0_worms.sequence") == "AAA"
+    # one parse of table0 and one of the registry (for the qualified reference)
+    assert sorted(reads) == ["_registry", "table0_worms"]
+
+
+def test_lookup_cache_is_dropped_when_a_table_is_written(tmp_path):
+    dm = _build_chain(tmp_path)
+    df1 = dm.read_frame("table1_worms")
+    assert dm.lookup(df1, "S0_d0", "n_subunits") == 11
+    root = dm.read_frame("table0_worms")
+    root.at["S0", "n_subunits"] = 99
+    dm.write_frame("table0_worms", root)
+    assert dm.lookup(df1, "S0_d0", "n_subunits") == 99
+
+
+def test_read_frame_stays_uncached(tmp_path):
+    # Callers mutate the frames read_frame returns; the lookup cache must not leak
+    # into them.
+    dm = _build_chain(tmp_path)
+    df1 = dm.read_frame("table1_worms")
+    dm.lookup(df1, "S0_d0", "n_subunits")
+    a = dm.read_frame("table0_worms")
+    a.at["S0", "n_subunits"] = -1
+    assert dm.read_frame("table0_worms").at["S0", "n_subunits"] == 11
+    assert dm.lookup(df1, "S0_d0", "n_subunits") == 11
+
+
 # --- table catalog (registry) ----------------------------------------------
 
 

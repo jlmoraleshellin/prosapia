@@ -196,8 +196,32 @@ class DataManager:
         run_dir: Path,
         build_backend: Callable[..., Backend] = build_tsv_backend,
     ):
-        self.read_frame, self.write_frame = build_backend(run_dir)
+        self.read_frame, backend_write = build_backend(run_dir)
+        # Frames ``lookup`` reads while walking the lineage (see ``_lineage_frame``).
+        self._lineage_cache: dict[str, pd.DataFrame] = {}
+
+        def write_frame(table_name: str, df: pd.DataFrame) -> None:
+            self._lineage_cache.pop(table_name, None)
+            backend_write(table_name, df)
+
+        self.write_frame = write_frame
         self.rm = RegistryManager(self)
+
+    def _lineage_frame(self, table_name: str) -> pd.DataFrame:
+        """``read_frame`` memoised for ``lookup``, dropped when the table is written.
+
+        A manifest builder or collector calls ``lookup`` once per row and per
+        placeholder, and every call walks up the lineage; without this each hop
+        re-parses a whole ancestor TSV (minutes for thousands of rows on a deep, wide
+        lineage). Only ``lookup`` reads through here and it never mutates what it
+        gets, so the shared frame is safe; the public ``read_frame`` stays uncached
+        because its callers mutate the frames they receive. The cache lives as long
+        as the ``DataManager`` (one command) and ``write_frame`` invalidates it.
+        """
+        frame = self._lineage_cache.get(table_name)
+        if frame is None:
+            frame = self._lineage_cache[table_name] = self.read_frame(table_name)
+        return frame
 
     def __enter__(
         self,
@@ -339,7 +363,7 @@ class DataManager:
             return None, column
         tables = [
             str(t)
-            for t in self.rm.get_registry().index
+            for t in self._lineage_frame(REGISTRY_TABLE).index
             if column.startswith(f"{t}.")
         ]
         if not tables:
@@ -391,7 +415,7 @@ class DataManager:
             if key in seen:  # cycle guard
                 return default
             seen.add(key)
-            cur_df, cur_name, cur_table = self.read_frame(key[0]), key[1], key[0]
+            cur_df, cur_name, cur_table = self._lineage_frame(key[0]), key[1], key[0]
 
 
 # Type alias for a lineage lookup function (row name + column -> value)
