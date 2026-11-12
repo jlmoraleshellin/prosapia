@@ -256,8 +256,7 @@ def test_filter_sees_qualified_ancestor_columns_and_keeps_its_order(
     _lineage(tmp_path)
     module = tmp_path / "keep.py"
     module.write_text(
-        "def apply_filter(df):\n"
-        "    return df[df['t0.seq'] != 'B'].iloc[::-1]\n"
+        "def apply_filter(df):\n    return df[df['t0.seq'] != 'B'].iloc[::-1]\n"
     )
     df = _submitted(tmp_path, monkeypatch, "-f", str(module))
     assert list(df.index) == ["d2", "d0"]

@@ -2,6 +2,8 @@
 
 `sapia delete` removes a tool run as a unit: the leaf dir on disk and what that run wrote to the table. [`sapia collect`](collecting-a-tool.md) only reads: it marks a design `missing` when its output is gone but never removes anything. Delete is the repair step, and the way to rerun a tool from scratch or recreate a child table cleanly instead of `--force`-ing a `create` tool.
 
+To remove some rows rather than a whole leaf or table, for example to free the designs a campaign no longer needs, use [`sapia clean`](cleaning-a-run.md).
+
 ## The shape
 
 ```bash
