@@ -5,6 +5,8 @@ from pathlib import Path
 
 import gemmi
 
+CACHE_DIRNAME = ".cif_to_pdb"
+
 
 def ensure_pdb(src: Path, run_dir: Path) -> Path:
     """Return *src* as-is if already PDB, otherwise convert CIF -> PDB.
@@ -17,7 +19,7 @@ def ensure_pdb(src: Path, run_dir: Path) -> Path:
     if src.suffix.lower() == ".pdb":
         return src
 
-    cache_dir = run_dir / ".cif_to_pdb"
+    cache_dir = run_dir / CACHE_DIRNAME
     digest = hashlib.sha1(str(src.resolve()).encode()).hexdigest()[:8]
     dst = cache_dir / f"{src.stem}.{digest}.pdb"
     src_record = dst.with_suffix(".src")

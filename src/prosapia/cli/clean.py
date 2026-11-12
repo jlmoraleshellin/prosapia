@@ -122,7 +122,7 @@ def build_clean_parser() -> ArgumentParser:
 
 def _is(frame: pd.DataFrame, names: list[str]) -> pd.Series:
     """Mask of ``frame``'s rows named in ``names`` (compared as strings)."""
-    return frame.index.astype(str).isin(names)
+    return frame.index.astype(str).isin(names) # type: ignore
 
 
 def _blank(df: pd.DataFrame, rows: list[str], cols: list[str]) -> pd.DataFrame:
