@@ -88,6 +88,8 @@ def _campaign(tmp_path):
             PARENT_TABLE: "table0",
             GEN: 1,
             "score": score,
+            # a multi-chain sequence: '/'-joined, each chain longer than a file name
+            "mpnn_seq": "/".join(["CVNYLPYGVALAKLLEIL" * 20] * 3),
             "mpnn_status": "OK",
             "mpnn_path": _file(mpnn / "grp_0" / "seqs" / f"{parent}.fa"),
             "af3_status": "OK",

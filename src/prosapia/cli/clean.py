@@ -122,7 +122,7 @@ def build_clean_parser() -> ArgumentParser:
 
 def _is(frame: pd.DataFrame, names: list[str]) -> pd.Series:
     """Mask of ``frame``'s rows named in ``names`` (compared as strings)."""
-    return frame.index.astype(str).isin(names) # type: ignore
+    return frame.index.astype(str).isin(names)  # type: ignore
 
 
 def _blank(df: pd.DataFrame, rows: list[str], cols: list[str]) -> pd.DataFrame:
@@ -192,11 +192,16 @@ def _orphaned(
 
 
 def _as_path(value: object) -> Path | None:
-    """A cell value naming an existing file or dir, in the runs-mount form."""
+    """A cell value naming an existing file or dir, in the runs-mount form. Other
+    strings with a ``/`` (a multi-chain sequence ``A/B``) name nothing, even when
+    the OS can't stat them (a chain longer than a file name)."""
     if not isinstance(value, str) or "/" not in value:
         return None
     p = volume_path(value)
-    return p if p.exists() or p.is_symlink() else None
+    try:
+        return p if p.exists() or p.is_symlink() else None
+    except OSError:
+        return None
 
 
 def _refs(frame: pd.DataFrame, cache: Path) -> dict[Path, set[str]]:
