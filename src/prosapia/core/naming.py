@@ -45,6 +45,12 @@ def status_column(leaf: str) -> str:
     return f"{leaf}_status"
 
 
+# The status ``sapia clean`` gives a design whose files it removed. Final: a row with
+# any ``*_status`` cleaned is out of every ready set (run, collect, ``--force``, any
+# downstream tool) and no collect writes over it.
+CLEANED = "cleaned"
+
+
 def path_column(leaf: str) -> str:
     """The ``<leaf>_path`` column a tool writes/reads for a design's output path."""
     return f"{leaf}_path"

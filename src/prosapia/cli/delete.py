@@ -87,7 +87,7 @@ def descendants(reg: pd.DataFrame, table: str) -> list[str]:
     return out
 
 
-def is_create_leaf(leaf_dir: Path, table_tool: str | None) -> bool:
+def _is_create_leaf(leaf_dir: Path, table_tool: str | None) -> bool:
     """Whether ``leaf_dir`` is the run that created its table: the sidecar names the
     registry tool, or (no sidecar) the leaf is named after it."""
     if table_tool is None:
@@ -127,7 +127,7 @@ def plan_delete(
     if not leaf_dir.is_dir():
         raise SystemExit(f"No leaf {leaf!r} under table {table!r}: {leaf_dir}")
 
-    if is_create_leaf(leaf_dir, registry.get_table(table).tool_name):
+    if _is_create_leaf(leaf_dir, registry.get_table(table).tool_name):
         below = descendants(registry.get_registry(), table)
         if below and not recursive:
             raise SystemExit(

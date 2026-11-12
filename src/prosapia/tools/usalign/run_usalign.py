@@ -41,7 +41,7 @@ from typing import cast
 
 import pandas as pd
 
-from prosapia.core import CommonArgs, ManifestCtx
+from prosapia.core import CommonArgs, ManifestCtx, clean_ready
 from prosapia.core.executors import volume_path
 from prosapia.utils import ensure_pdb
 
@@ -132,7 +132,7 @@ def build_usalign_manifest(ctx: ManifestCtx[USalignArgs]) -> list[tuple[str, ...
 
     # USalign selects by --col-a (not --input-column), so it filters the frame
     # itself rather than using ctx.ready; the resume skip mirrors ctx.ready.
-    ready = ctx.source_df[ctx.source_df[col_a].notna() & (ctx.source_df[col_a] != "")]
+    ready = clean_ready(ctx.source_df, col_a)
 
     # collect writes this under the tool leaf (the driver leaf-prefixes data),
     # so match that here: <leaf>_<prefix>_status.

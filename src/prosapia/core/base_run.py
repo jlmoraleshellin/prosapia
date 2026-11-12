@@ -27,6 +27,7 @@ from .base_parser import base_parser
 from .data_manager import DataManager, LookupFn, clean_ready
 from .executors import EXECUTORS, SubmitCtx, get_executor
 from .naming import (
+    CLEANED,
     PARENT_NAME,
     RUN_META_FILENAME,
     SUBMISSIONS_DIRNAME,
@@ -327,10 +328,12 @@ class ManifestCtx(Generic[ArgsT]):
         The already-OK skip is the framework's resume-on-rerun. An ``update`` tool
         annotates the source table, so a row is done when its own ``<leaf>_status``
         is ``"OK"``. A ``create`` tool writes children into ``target_df``, so a source
-        row is done once any child row naming it as ``parent_name`` is ``"OK"``. A
+        row is done once any child row naming it as ``parent_name`` is ``"OK"`` or
+        ``cleaned`` (a parent whose children ``sapia clean`` retired isn't re-run). A
         create tool never reads ``<leaf>_status`` from the source table: there it marks
         rows the tool *produced* (a proteinmpnn child table re-run through proteinmpnn),
-        not rows it already ran on.
+        not rows it already ran on. Rows ``sapia clean`` retired are never ready, even
+        with ``--force`` (see ``clean_ready``).
         """
         ready = clean_ready(self.source_df, self.args.input_column)
         if self.args.force:
@@ -342,7 +345,8 @@ class ManifestCtx(Generic[ArgsT]):
             return ready
         target = self.target_df
         if out_status in target.columns and PARENT_NAME in target.columns:
-            done = target.loc[target[out_status] == "OK", PARENT_NAME].dropna()
+            finished = target[out_status].isin(["OK", CLEANED])
+            done = target.loc[finished, PARENT_NAME].dropna()
             return ready[~ready.index.astype(str).isin(done.astype(str))]
         return ready
 
