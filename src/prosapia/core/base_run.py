@@ -24,8 +24,8 @@ from dotenv import load_dotenv
 from pandas import DataFrame
 
 from .base_parser import base_parser
-from .executors import EXECUTORS, SubmitCtx, get_executor
 from .data_manager import DataManager, LookupFn, clean_ready
+from .executors import EXECUTORS, SubmitCtx, get_executor
 from .naming import (
     PARENT_NAME,
     RUN_META_FILENAME,
@@ -242,7 +242,7 @@ def build_run_parser(
 FilterFn = Callable[[DataFrame], DataFrame]
 
 
-def _get_filter_fn_from_module(module_path: Path) -> FilterFn:
+def load_filter_fn(module_path: Path) -> FilterFn:
     spec = importlib.util.spec_from_file_location("filter_module", module_path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not load module from {module_path}")
@@ -267,6 +267,29 @@ def apply_where(df: DataFrame, clauses: Sequence[str]) -> DataFrame:
             raise KeyError(f"--where column {col!r} not in table columns")
         df = df[df[col].astype(str) == value]
     return df
+
+
+def filter_rows(
+    dm: DataManager,
+    table: str | None,
+    frame: DataFrame,
+    filter_module: Path | None,
+    where: Sequence[str] | None,
+) -> DataFrame:
+    """The rows of ``frame`` that ``--filter`` / ``--where`` keep, in the filter's order.
+
+    Both run on ``table`` joined with its ancestors' columns (``join_lineage``), so
+    they can select by a parent's values; ``frame`` keeps its own columns. Without
+    either, ``frame`` is returned as-is. Shared by ``sapia run`` and ``sapia clean``.
+    """
+    if not filter_module and not where:
+        return frame
+    joined = dm.join_lineage(table) if table else frame
+    if filter_module:
+        joined = load_filter_fn(filter_module)(joined)
+    if where:
+        joined = apply_where(joined, where)
+    return frame.loc[joined.index.intersection(frame.index, sort=False)]
 
 
 ## MANIFEST BUILDING AND SUBMISSION
@@ -439,17 +462,7 @@ def run_from_args(
             read_frame(output_table.table_name) if tool.creates_table else source_df
         )
 
-        # Filter on the source rows joined with their ancestors' columns, then keep
-        # only the selected rows (in the filter's order) of the plain source frame.
-        if args.filter or args.where:
-            frame = dm.join_lineage(src_table) if src_table else source_df
-            if args.filter:
-                frame = _get_filter_fn_from_module(args.filter)(frame)
-            if args.where:
-                frame = apply_where(frame, args.where)
-            source_df = source_df.loc[
-                frame.index.intersection(source_df.index, sort=False)
-            ]
+        source_df = filter_rows(dm, src_table, source_df, args.filter, args.where)
 
         # Manifest
         manifest_dir = args.run_dir / ".manifests"

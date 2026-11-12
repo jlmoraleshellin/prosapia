@@ -21,6 +21,7 @@ from ..core.base_collect import build_collect_parser
 from ..core.base_run import build_run_parser
 from ..core.tool import Tool, collect_tool, run_tool
 from ..core.tool_registry import discover, BUILTIN_TOOLS_DIR
+from .clean import build_clean_parser, clean_from_args
 from .delete import build_delete_parser, delete_from_args
 from .fork_tool import build_fork_parser, fork_from_args
 from .merge import build_merge_parser, merge_from_args
@@ -75,6 +76,14 @@ def _build_parser(tools: dict[str, Tool]) -> ArgumentParser:
         help="Remove a tool run: its leaf dir and the columns (or table) it produced.",
     )
     delete_p.set_defaults(_dispatch=delete_from_args)
+
+    clean_p = verbs.add_parser(
+        "clean",
+        parents=[build_clean_parser()],
+        help="Free the rows a filter doesn't keep: drop them (or blank one leaf's "
+        "results) and remove their files.",
+    )
+    clean_p.set_defaults(_dispatch=clean_from_args)
 
     modal_shell_p = verbs.add_parser(
         "modal-shell",

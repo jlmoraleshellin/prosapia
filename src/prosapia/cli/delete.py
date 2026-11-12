@@ -87,7 +87,7 @@ def descendants(reg: pd.DataFrame, table: str) -> list[str]:
     return out
 
 
-def _is_create_leaf(leaf_dir: Path, table_tool: str | None) -> bool:
+def is_create_leaf(leaf_dir: Path, table_tool: str | None) -> bool:
     """Whether ``leaf_dir`` is the run that created its table: the sidecar names the
     registry tool, or (no sidecar) the leaf is named after it."""
     if table_tool is None:
@@ -97,6 +97,22 @@ def _is_create_leaf(leaf_dir: Path, table_tool: str | None) -> bool:
         return tool == table_tool
     leaf = leaf_dir.name
     return leaf == table_tool or leaf.startswith(f"{table_tool}_")
+
+
+def leaf_columns(df: pd.DataFrame, leaf_dir: Path) -> list[str]:
+    """An update leaf's columns: ``<leaf>_*``, except those of a longer sibling leaf
+    (``proteinmpnn`` must not take ``proteinmpnn_seed2_status``)."""
+    leaf = leaf_dir.name
+    siblings = [
+        d.name
+        for d in leaf_dir.parent.iterdir()
+        if d.is_dir() and d.name != leaf and d.name.startswith(f"{leaf}_")
+    ]
+    return [
+        c
+        for c in df.columns
+        if c.startswith(f"{leaf}_") and not any(c.startswith(f"{s}_") for s in siblings)
+    ]
 
 
 def plan_delete(
@@ -111,7 +127,7 @@ def plan_delete(
     if not leaf_dir.is_dir():
         raise SystemExit(f"No leaf {leaf!r} under table {table!r}: {leaf_dir}")
 
-    if _is_create_leaf(leaf_dir, registry.get_table(table).tool_name):
+    if is_create_leaf(leaf_dir, registry.get_table(table).tool_name):
         below = descendants(registry.get_registry(), table)
         if below and not recursive:
             raise SystemExit(
@@ -124,19 +140,7 @@ def plan_delete(
             tables=tables,
         )
 
-    # Update leaf: its columns are ``<leaf>_*``, except those of a longer sibling
-    # leaf (deleting ``proteinmpnn`` must keep ``proteinmpnn_seed2_status``).
-    siblings = [
-        d.name
-        for d in leaf_dir.parent.iterdir()
-        if d.is_dir() and d.name != leaf and d.name.startswith(f"{leaf}_")
-    ]
-    df = registry.dm.read_frame(table)
-    cols = [
-        c
-        for c in df.columns
-        if c.startswith(f"{leaf}_") and not any(c.startswith(f"{s}_") for s in siblings)
-    ]
+    cols = leaf_columns(registry.dm.read_frame(table), leaf_dir)
     return DeletePlan(dirs=[leaf_dir], columns={table: cols} if cols else {})
 
 
