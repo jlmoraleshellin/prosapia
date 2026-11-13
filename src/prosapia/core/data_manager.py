@@ -5,7 +5,7 @@ from typing import Any, Callable
 
 import pandas as pd
 
-from .naming import GEN, PARENT_TABLE, PARENT_NAME, ROOT_PARENT
+from .naming import CLEANED, GEN, PARENT_TABLE, PARENT_NAME, ROOT_PARENT
 
 # The table catalog ("registry") is just another frame -- a TSV read/written
 # through the same DataManager backend as every data table. Its index ("name") holds
@@ -424,15 +424,26 @@ LookupFn = Callable[[str, str], Any]
 
 
 # FILTERING FUNCTIONS
-def clean_ready(df: pd.DataFrame, input_column: str) -> pd.DataFrame:
-    """Rows whose ``input_column`` is present (non-null, non-empty) -- the inputs a
-    run/collect should act on.
+def cleaned_rows(df: pd.DataFrame) -> pd.Index:
+    """Names of the rows ``sapia clean`` retired: any ``*_status`` is ``cleaned``."""
+    cols = [c for c in df.columns if str(c).endswith("_status")]
+    if not cols:
+        return df.index[:0]
+    return df.index[(df[cols] == CLEANED).any(axis=1)]
 
-    Defensive: an empty frame or a missing ``input_column`` yields ``df`` unchanged,
-    so root tools (empty source table) and tools that key off a different column never
-    crash on this shared filter.
+
+def clean_ready(df: pd.DataFrame, input_column: str) -> pd.DataFrame:
+    """Rows whose ``input_column`` is present (non-null, non-empty) and that ``sapia
+    clean`` hasn't retired -- the inputs a run/collect should act on.
+
+    Defensive: an empty frame or a missing ``input_column`` keeps every row that isn't
+    retired, so root tools (empty source table) and tools that key off a different
+    column never crash on this shared filter.
     """
-    if df.empty or input_column not in df.columns:
+    if df.empty:
+        return df
+    df = df[~df.index.isin(cleaned_rows(df))]
+    if input_column not in df.columns:
         return df
     col = df[input_column]
     return df[col.notna() & (col != "")]

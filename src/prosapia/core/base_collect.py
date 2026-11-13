@@ -21,7 +21,7 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from .base_parser import base_parser
-from .data_manager import Table, DataManager, LookupFn, clean_ready
+from .data_manager import Table, DataManager, LookupFn, clean_ready, cleaned_rows
 from .naming import (
     GEN,
     PARENT_TABLE,
@@ -346,6 +346,10 @@ def collect_from_args(
             default_input_column=metadata.default_input_column,
         )
         updates = by_design(collect_fn)(ctx)
+        # A row ``sapia clean`` retired is final: no collect writes over it (a create
+        # would re-mint a cleaned child from a file its kept siblings share).
+        retired = set(cleaned_rows(df).astype(str))
+        updates = {n: row for n, row in updates.items() if str(n) not in retired}
 
         if metadata.creates_table:
             _finalize_create(updates, output_table, parent_df)

@@ -260,3 +260,23 @@ def test_filter_sees_qualified_ancestor_columns_and_keeps_its_order(
     )
     df = _submitted(tmp_path, monkeypatch, "-f", str(module))
     assert list(df.index) == ["d2", "d0"]
+
+
+# --- rows sapia clean retired are final ----------------------------------------
+
+
+def test_ready_never_includes_cleaned_rows_even_with_force(tmp_path):
+    df = _parents()
+    df["af3_status"] = [None, "cleaned", None, None]
+    for force in (False, True):
+        ctx = _ctx(df, df, tmp_path / "table1" / "boltz", force=force)
+        assert list(ctx.ready.index) == ["p1", "p3"]
+
+
+def test_ready_create_counts_a_cleaned_child_as_done(tmp_path):
+    children = pd.DataFrame(
+        {PARENT_NAME: ["p1", "p2"], "rfdiffusion_status": ["cleaned", "failed"]},
+        index=pd.Index(["p1_d0", "p2_d0"], name="name"),
+    )
+    ctx = _ctx(_parents(), children, tmp_path / "table1" / "rfdiffusion")
+    assert list(ctx.ready.index) == ["p2", "p3"]

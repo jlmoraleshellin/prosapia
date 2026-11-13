@@ -586,3 +586,50 @@ def test_force_recollect_takes_newest_submission(tmp_path, monkeypatch):
         DataManager(tmp_path).read_frame("table0").at["r1", "alphafold3_src"]
         == "second"
     )
+
+
+# --- rows sapia clean retired are never collected again -----------------------
+
+
+def test_update_collect_leaves_cleaned_rows_alone(tmp_path, monkeypatch):
+    _update_table(tmp_path, ["r1", "r2"])
+    _, (s0,) = _make_submissions(tmp_path, "table0", UPDATE.name, 1)
+    (s0 / "r1.out").write_text("x")  # r2's output was cleaned
+    dm = DataManager(tmp_path)
+    dm.write_frame(
+        "table0",
+        dm.update(dm.read_frame("table0"), "r2", {"alphafold3_status": "cleaned"}),
+    )
+
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-t", "table0"])
+    collect(metadata=UPDATE, collect_fn=_marker_collector())
+
+    df = DataManager(tmp_path).read_frame("table0")
+    assert df.at["r1", "alphafold3_status"] == "OK"
+    assert df.at["r2", "alphafold3_status"] == "cleaned"  # not marked missing
+
+
+def test_create_collect_never_remints_a_cleaned_child(tmp_path, monkeypatch):
+    """A child cleaned while its siblings were kept comes back out of the file they
+    share (proteinmpnn's fasta); collect must not write over it."""
+    child = _reserve_child(tmp_path)
+    dm = DataManager(tmp_path)
+    df = dm.read_frame(child)
+    for i, status in enumerate(["OK", "cleaned"]):
+        df = dm.update(
+            df, f"S0_d{i}", {PARENT_NAME: "S0", f"{CREATE.name}_status": status}
+        )
+    dm.write_frame(child, df)
+
+    def collect_fn(ctx: CollectCtx):
+        def one(d: DesignCtx):
+            for i in range(3):
+                yield Collected(name=f"{d.name}_d{i}", parent=d.name)
+
+        return one
+
+    monkeypatch.setattr(sys, "argv", ["prog", str(tmp_path), "-t", child])
+    collect(metadata=CREATE, collect_fn=collect_fn)
+
+    statuses = DataManager(tmp_path).read_frame(child)[f"{CREATE.name}_status"]
+    assert statuses.to_dict() == {"S0_d0": "OK", "S0_d1": "cleaned", "S0_d2": "OK"}

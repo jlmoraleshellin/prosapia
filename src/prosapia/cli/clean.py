@@ -1,40 +1,43 @@
-"""``sapia clean`` -- free the rows a campaign no longer needs.
+"""``sapia clean`` -- retire the designs a campaign no longer needs and free their files.
 
 ``--filter`` / ``--where`` select the rows of a table to keep (the same meaning as on
-``sapia run``) and every other row is cleaned: dropped from the table, with every
-file under the table's leaves that belongs to it. ``--leaf`` narrows that to one
-update leaf: the rows stay, the leaf's ``<leaf>_*`` cells are blanked and its files
-for them go. ``--descendants`` also cleans the rows whose lineage runs through a
-cleaned row (refused without it), ``--ancestors`` the parents a clean took the last
-child of.
+``sapia run``) and every other row is cleaned: its files under the table's leaves go,
+every ``*_status`` of the row becomes ``cleaned`` and the cells naming a removed file
+are emptied. The row, its lineage and its metrics stay, so the table remains the
+record of what was cleaned. ``cleaned`` is final: run, collect and every downstream
+tool skip the row from then on (see ``clean_ready``). ``--leaf`` frees only that
+leaf's files and sets only its status; the row is retired all the same.
+``--descendants`` also cleans the live rows whose lineage runs through a cleaned row
+(refused without it), ``--ancestors`` the parents left with no live child.
 
 A file belongs to the designs its name points to (a row's name, or a parent's name
 for all of its children) and to the rows whose cells name it; it goes once all of
-them are cleaned. Clean is final: it appends what it removed to
-``run_dir/.clean_log.jsonl``, which nothing reads back.
+them are cleaned.
 
     sapia clean RUN_DIR -t table1 -w af3_pass=True --ancestors --dry-run
     sapia clean RUN_DIR -t table1 --leaf af3 -f keep_confident.py
 """
 
-import json
 import shutil
 from argparse import ArgumentParser, Namespace
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
 
 from ..core.base_run import filter_rows
-from ..core.data_manager import DataManager, RegistryManager
+from ..core.data_manager import DataManager, RegistryManager, cleaned_rows
 from ..core.executors import volume_path
-from ..core.naming import PARENT_NAME, PARENT_TABLE, submission_dirs
+from ..core.naming import (
+    CLEANED,
+    PARENT_NAME,
+    PARENT_TABLE,
+    status_column,
+    submission_dirs,
+)
 from ..utils.cif_to_pdb import CACHE_DIRNAME
-from .delete import is_create_leaf, leaf_columns
-
-CLEAN_LOG = ".clean_log.jsonl"
+from .delete import leaf_columns
 
 # Characters that may follow a design's name in a file named after it.
 _BOUNDARY = "._-"
@@ -53,15 +56,16 @@ class CleanArgs(Namespace):
 
 @dataclass
 class CleanPlan:
-    """What a clean removes: rows dropped per table (``parents`` holds those
-    ``--ancestors`` adds), cells blanked per table (``--leaf``), and files."""
+    """What a clean does, per table: the rows it marks ``cleaned`` (``parents`` holds
+    those ``--ancestors`` adds) and in which status columns, the ``(row, column)``
+    cells it empties because the file they name goes; and the files it removes."""
 
     kept: tuple[int, int]  # (rows kept, rows in the table)
     rows: dict[str, list[str]] = field(default_factory=dict)
     parents: dict[str, list[str]] = field(default_factory=dict)
-    cells: dict[str, tuple[list[str], list[str]]] = field(default_factory=dict)
+    status: dict[str, list[str]] = field(default_factory=dict)
+    blank: dict[str, list[tuple[str, str]]] = field(default_factory=dict)
     paths: list[Path] = field(default_factory=list)
-    record: dict | None = None
 
 
 def build_clean_parser() -> ArgumentParser:
@@ -79,8 +83,8 @@ def build_clean_parser() -> ArgumentParser:
         "--leaf",
         type=str,
         default=None,
-        help="Only clean this update leaf's results (e.g. af3): the rows stay, its "
-        "<leaf>_* cells are blanked and its files for them removed.",
+        help="Only free this leaf's files and set only its status (e.g. af3); the "
+        "rows are retired all the same.",
     )
     parser.add_argument(
         "-f",
@@ -103,35 +107,25 @@ def build_clean_parser() -> ArgumentParser:
     parser.add_argument(
         "--descendants",
         action="store_true",
-        help="Also clean the rows of other tables whose lineage runs through a "
+        help="Also clean the live rows of other tables whose lineage runs through a "
         "cleaned row (refused without it).",
     )
     parser.add_argument(
         "--ancestors",
         action="store_true",
-        help="Also clean every parent row this clean took the last child of, up the "
-        "lineage.",
+        help="Also clean every parent row left with no live child, up the lineage.",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Print what would be removed and exit.",
+        help="Print what would be cleaned and exit.",
     )
     return parser
 
 
-def _is(frame: pd.DataFrame, names: list[str]) -> pd.Series:
+def _is(frame: pd.DataFrame, names) -> pd.Series:
     """Mask of ``frame``'s rows named in ``names`` (compared as strings)."""
-    return frame.index.astype(str).isin(names)  # type: ignore
-
-
-def _blank(df: pd.DataFrame, rows: list[str], cols: list[str]) -> pd.DataFrame:
-    """``df`` with ``cols`` emptied for ``rows`` (object dtype, so any column can
-    hold NA; the TSV backend re-infers on read)."""
-    df = df.copy()
-    df[cols] = df[cols].astype(object)
-    df.loc[_is(df, rows), cols] = pd.NA
-    return df
+    return frame.index.astype(str).isin(list(names))  # type: ignore
 
 
 def _links(frame: pd.DataFrame) -> list[tuple[str, str, str]]:
@@ -146,36 +140,43 @@ def _links(frame: pd.DataFrame) -> list[tuple[str, str, str]]:
 
 
 def _below(
-    frames: dict[str, pd.DataFrame], gone: set[tuple[str, str]]
+    frames: dict[str, pd.DataFrame],
+    start: set[tuple[str, str]],
+    retired: dict[str, set[str]],
 ) -> dict[str, list[str]]:
-    """Rows of any table whose lineage runs through a ``(table, name)`` in ``gone``,
-    per table. Adds them to ``gone``."""
+    """The live rows of any table whose lineage runs through a ``(table, name)`` of
+    ``start``, per table. Rows already retired are walked through, not returned."""
     found: dict[str, list[str]] = defaultdict(list)
-    frontier = set(gone)
+    seen = set(start)
+    frontier = set(start)
     while frontier:
         step = {
             (t, n)
             for t, frame in frames.items()
             for n, pt, pn in _links(frame)
-            if (pt, pn) in frontier and (t, n) not in gone
+            if (pt, pn) in frontier and (t, n) not in seen
         }
         for t, n in sorted(step):
-            found[t].append(n)
-        gone |= step
+            if n not in retired[t]:
+                found[t].append(n)
+        seen |= step
         frontier = step
     return dict(found)
 
 
 def _orphaned(
-    frames: dict[str, pd.DataFrame], gone: set[tuple[str, str]]
+    frames: dict[str, pd.DataFrame],
+    start: set[tuple[str, str]],
+    retired: dict[str, set[str]],
 ) -> dict[str, list[str]]:
-    """Parent rows that ``gone`` takes the last child of (children in any table),
-    then theirs, up the lineage, per table. A parent outside the registered tables
-    (a root's) is never one. Adds them to ``gone``."""
+    """The live parent rows left with no live child (in any table) once ``start`` is
+    retired, then theirs, up the lineage, per table. A parent outside the registered
+    tables (a root's) is never one."""
     links = [(t, n, pt, pn) for t, f in frames.items() for n, pt, pn in _links(f)]
     names = {t: set(f.index.astype(str)) for t, f in frames.items()}
+    gone = {(t, n) for t, ns in retired.items() for n in ns} | start
     found: dict[str, list[str]] = defaultdict(list)
-    frontier = set(gone)
+    frontier = set(start)
     while frontier:
         parents = {
             (pt, pn)
@@ -283,21 +284,20 @@ def _sweep(
 def _files(
     run_dir: Path,
     frame: pd.DataFrame,
-    names: list[str],
+    gone: set[str],
     leaves: list[Path],
     cols: list[str] | None = None,
 ) -> list[Path]:
-    """The files and dirs to remove when ``names`` leave ``frame``: dropped rows,
-    or with ``cols`` only those cells blanked. Swept over ``leaves``' submission
-    dirs, plus the cached conversions the cleaned cells name. Anything a remaining
-    cell still names is kept."""
+    """The files and dirs that belong only to the ``gone`` rows of ``frame`` (with
+    ``cols``, only through those columns' cells): swept over ``leaves``' submission
+    dirs, plus the cached conversions their cells name. Anything a live row's cell
+    still names, or with ``cols`` any other column's, is kept."""
     cache = volume_path(run_dir / CACHE_DIRNAME)
-    owned = frame if cols is None else frame[cols]
-    after = frame[~_is(frame, names)] if cols is None else _blank(frame, names, cols)
-    refs = _refs(owned, cache)
-    protected = set(_refs(after, cache))
+    refs = _refs(frame if cols is None else frame[cols], cache)
+    protected = set(_refs(frame[~_is(frame, gone)], cache))
+    if cols is not None:
+        protected |= set(_refs(frame.drop(columns=cols), cache))
     keys = _keys(frame, refs)
-    gone = set(names)
 
     out = []
     for p, rows in refs.items():
@@ -320,7 +320,7 @@ def plan_clean(
     ancestors: bool = False,
 ) -> CleanPlan:
     """Decide what keeping only the rows ``filter_module`` / ``where`` select of
-    ``table`` removes. Pure; touches nothing."""
+    ``table`` cleans. Pure; touches nothing."""
     if not filter_module and not where:
         raise SystemExit("clean needs --filter or --where: the rows to keep.")
     dm = registry.dm
@@ -328,98 +328,114 @@ def plan_clean(
     if table not in frames:
         raise SystemExit(f"No table {table!r} in {run_dir}.")
     leaf_dir = run_dir / table / leaf if leaf is not None else None
-    if leaf_dir is not None:
-        if not leaf_dir.is_dir():
-            raise SystemExit(f"No leaf {leaf!r} under table {table!r}: {leaf_dir}")
-        if is_create_leaf(leaf_dir, registry.get_table(table).tool_name):
-            raise SystemExit(
-                f"Leaf {leaf!r} created table {table!r}: to clean its rows, omit --leaf."
-            )
-        if descendants or ancestors:
-            raise SystemExit(
-                "--leaf keeps the rows, so --descendants / --ancestors don't apply."
-            )
+    if leaf_dir is not None and not leaf_dir.is_dir():
+        raise SystemExit(f"No leaf {leaf!r} under table {table!r}: {leaf_dir}")
 
+    retired = {t: set(cleaned_rows(f).astype(str)) for t, f in frames.items()}
     df = frames[table]
     kept = filter_rows(dm, table, df, filter_module, where)
-    names = [str(n) for n in df.index[~df.index.isin(kept.index)]]
+    names = [
+        str(n)
+        for n in df.index[~df.index.isin(kept.index)]
+        if str(n) not in retired[table]
+    ]
     plan = CleanPlan(kept=(len(kept), len(df)))
     if not names:
         return plan
 
-    if leaf_dir is not None:
-        cols = leaf_columns(df, leaf_dir)
-        if cols:
-            plan.cells = {table: (names, cols)}
-        plan.paths = _files(run_dir, df, names, [leaf_dir], cols)
-        removed = {table: names}
-    else:
-        gone = {(table, n) for n in names}
-        below = _below(frames, gone)
-        if below and not descendants:
-            raise SystemExit(
-                f"Cleaning {len(names)} row(s) of {table!r} would orphan rows in "
-                f"{', '.join(below)}. Pass --descendants to clean them too."
-            )
-        plan.rows = {table: names, **below}
-        if ancestors:
-            plan.parents = _orphaned(frames, gone)
-        removed = {**plan.rows, **plan.parents}
-        for t, rows in removed.items():
-            t_dir = run_dir / t
-            leaves = sorted(d for d in t_dir.glob("*") if d.is_dir())
-            plan.paths += _files(run_dir, frames[t], rows, leaves)
+    start = {(table, n) for n in names}
+    below = _below(frames, start, retired)
+    if below and not descendants:
+        raise SystemExit(
+            f"Cleaning {len(names)} row(s) of {table!r} would leave live rows below "
+            f"them in {', '.join(below)}. Pass --descendants to clean them too."
+        )
+    plan.rows = {table: names, **below}
+    if ancestors:
+        start |= {(t, n) for t, ns in below.items() for n in ns}
+        plan.parents = _orphaned(frames, start, retired)
+
+    for t, rows in [*plan.rows.items(), *plan.parents.items()]:
+        frame, gone = frames[t], set(rows) | retired[t]
+        if t == table and leaf_dir is not None:
+            cols = leaf_columns(frame, leaf_dir)
+            status = [c for c in cols if c.endswith("_status")]
+            plan.status[t] = status or [status_column(leaf_dir.name)]
+            plan.paths += _files(run_dir, frame, gone, [leaf_dir], cols)
+        else:
+            status = [c for c in frame.columns if str(c).endswith("_status")]
+            tool = registry.get_table(t).tool_name or "clean"
+            plan.status[t] = status or [status_column(tool)]
+            leaves = sorted(d for d in (run_dir / t).glob("*") if d.is_dir())
+            plan.paths += _files(run_dir, frame, gone, leaves)
 
     dirs = {p for p in plan.paths if p.is_dir() and not p.is_symlink()}
     plan.paths = sorted(
         {p for p in plan.paths if not any(d in dirs for d in p.parents)}
     )
-    plan.record = {
-        "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "table": table,
-        "leaf": leaf,
-        "filter": str(filter_module) if filter_module else None,
-        "where": where,
-        "kept": len(kept),
-        "removed": removed,
-        "files": len(plan.paths),
-    }
+    removed = set(plan.paths)
+    for t, rows in [*plan.rows.items(), *plan.parents.items()]:
+        frame = frames[t]
+        cells = [
+            (str(n), str(c))
+            for n, row in frame[_is(frame, set(rows) | retired[t])].iterrows()
+            for c, v in row.items()
+            if (p := _as_path(v)) is not None
+            and (p in removed or not removed.isdisjoint(p.parents))
+        ]
+        if cells:
+            plan.blank[t] = cells
     return plan
 
 
 def describe(plan: CleanPlan, table: str) -> list[str]:
-    """One line per thing the plan removes."""
+    """One line per thing the plan does."""
     n_kept, n_rows = plan.kept
     lines = [f"keep {n_kept} of {n_rows} row(s) of {table}"]
-    if plan.record is None:
+    if not plan.rows:
         return lines + ["nothing to clean"]
-    lines += [f"drop {len(n)} row(s) from {t}" for t, n in plan.rows.items()]
-    lines += [
-        f"drop {len(n)} row(s) from {t} (left without children)"
-        for t, n in plan.parents.items()
-    ]
-    for t, (names, cols) in plan.cells.items():
+    for t, names in plan.rows.items():
+        cols = ", ".join(plan.status[t])
+        lines.append(f"mark {len(names)} row(s) of {t} {CLEANED} ({cols})")
+    for t, names in plan.parents.items():
+        cols = ", ".join(plan.status[t])
         lines.append(
-            f"blank {len(cols)} column(s) for {len(names)} row(s) of {t}: "
-            f"{', '.join(cols)}"
+            f"mark {len(names)} row(s) of {t} {CLEANED}, left without children ({cols})"
         )
+    if n_cells := sum(len(c) for c in plan.blank.values()):
+        lines.append(f"empty {n_cells} cell(s) naming a removed file")
     if plan.paths:
         lines.append(f"remove {len(plan.paths)} file(s)/dir(s)")
-    lines.append(f"log to {CLEAN_LOG}")
     return lines
 
 
-def apply(plan: CleanPlan, dm: DataManager, run_dir: Path) -> None:
-    """Carry out ``plan``: table edits first, then the log, files last, so an
-    interrupted clean never leaves cells pointing at removed files."""
+def _mark(
+    frame: pd.DataFrame,
+    names: list[str],
+    status: list[str],
+    blank: list[tuple[str, str]],
+) -> pd.DataFrame:
+    """``frame`` with ``status`` set to ``cleaned`` for ``names`` and the ``blank``
+    cells emptied (object dtype, so any column can hold either; the TSV backend
+    re-infers on read)."""
+    frame = frame.copy()
+    by_col: dict[str, list[str]] = defaultdict(list)
+    for n, c in blank:
+        by_col[c].append(n)
+    for c in [*status, *by_col]:
+        frame[c] = frame[c].astype(object) if c in frame.columns else pd.NA
+    frame.loc[_is(frame, names), status] = CLEANED
+    for c, rows in by_col.items():
+        frame.loc[_is(frame, rows), c] = pd.NA
+    return frame
+
+
+def apply(plan: CleanPlan, dm: DataManager) -> None:
+    """Carry out ``plan``: table edits first, files last, so an interrupted clean
+    never leaves cells pointing at removed files."""
     for t, names in [*plan.rows.items(), *plan.parents.items()]:
-        frame = dm.read_frame(t)
-        dm.write_frame(t, frame[~_is(frame, names)])
-    for t, (names, cols) in plan.cells.items():
-        dm.write_frame(t, _blank(dm.read_frame(t), names, cols))
-    if plan.record is not None:
-        with (run_dir / CLEAN_LOG).open("a") as log:
-            log.write(json.dumps(plan.record) + "\n")
+        frame = _mark(dm.read_frame(t), names, plan.status[t], plan.blank.get(t, []))
+        dm.write_frame(t, frame)
     for p in plan.paths:
         if p.is_dir() and not p.is_symlink():
             shutil.rmtree(p)
@@ -444,4 +460,4 @@ def clean_from_args(args: CleanArgs) -> None:
         for line in describe(plan, args.table):
             print(prefix + line)
         if not args.dry_run:
-            apply(plan, dm, args.run_dir)
+            apply(plan, dm)
